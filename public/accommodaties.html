@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accommodatie — Vakantieplanner</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="postcard-header">
+    <div>
+      <div class="eyebrow">Vakantieplanner</div>
+      <h1>Waar slapen we?</h1>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="/index.html">Overzicht</a>
+    <a href="/activiteiten.html">Activiteiten</a>
+    <a href="/kalender.html">Kalender</a>
+    <a href="/agenda.html">Agenda</a>
+    <a href="/accommodaties.html" class="active">Accommodatie</a>
+  </nav>
+
+  <div class="card">
+    <div class="card-title">Zoek op de grote sites</div>
+    <label for="destination">Bestemming</label>
+    <input type="text" id="destination" placeholder="Bijv. Lissabon, Portugal" style="width:100%;padding:8px;margin:6px 0 14px;border:1px solid var(--line);border-radius:4px;">
+    <div class="meta" id="period-note" style="margin-bottom:12px;"></div>
+    <div class="actions-row" style="margin-top:0;">
+      <a class="btn btn-outline" id="link-booking" target="_blank" rel="noopener">Booking.com →</a>
+      <a class="btn btn-outline" id="link-airbnb" target="_blank" rel="noopener">Airbnb →</a>
+      <a class="btn btn-outline" id="link-tripadvisor" target="_blank" rel="noopener">TripAdvisor →</a>
+    </div>
+    <div class="meta" style="margin-top:12px;">Deze knoppen openen een zoekopdracht op de site zelf — er is geen live prijzen-API gekoppeld.</div>
+  </div>
+
+  <div class="actions-row" style="margin-bottom:20px;">
+    <a class="btn btn-primary" href="/accommodatie-nieuw.html">+ Voorstel toevoegen</a>
+  </div>
+
+  <div id="list"></div>
+
+</div>
+
+<script src="/js/common.js"></script>
+<script src="/js/accommodaties.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Periode vaststellen — Vakantieplanner</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <a class="back-link" href="/kalender.html">← Terug naar kalender</a>
+
+  <div class="postcard-header">
+    <div>
+      <div class="eyebrow">Vakantieplanner</div>
+      <h1>Periode vaststellen</h1>
+    </div>
+  </div>
+
+  <div class="card">
+    <p>Kijk op de kalender wanneer de meeste mensen kunnen, en zet die periode hier vast voor de hele groep. Dit overschrijft de vorige keuze.</p>
+  </div>
+
+  <form class="page-form" id="form">
+    <label for="period_start">Startdatum</label>
+    <input type="date" id="period_start" required>
+
+    <label for="period_end">Einddatum</label>
+    <input type="date" id="period_end" required>
+
+    <div class="actions-row">
+      <button type="submit" class="btn btn-primary">Periode vaststellen</button>
+      <a class="btn btn-outline" href="/index.html">Annuleren</a>
+    </div>
+    <div class="error-msg" id="error"></div>
+  </form>
+
+</div>
+
+<script src="/js/common.js"></script>
+<script src="/js/periode.js"></script>
+</body>
+</html>

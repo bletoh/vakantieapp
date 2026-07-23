@@ -1,0 +1,13 @@
+{
+  "name": "vakantieplanner",
+  "version": "2.0.0",
+  "description": "Vakantieplanner - activiteiten, beschikbaarheid en dagplanning voor de vriendengroep",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2"
+  }
+}

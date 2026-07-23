@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kalender — Vakantieplanner</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="postcard-header">
+    <div>
+      <div class="eyebrow">Vakantieplanner</div>
+      <h1>Wanneer kan iedereen?</h1>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="/index.html">Overzicht</a>
+    <a href="/activiteiten.html">Activiteiten</a>
+    <a href="/kalender.html" class="active">Kalender</a>
+    <a href="/agenda.html">Agenda</a>
+    <a href="/accommodaties.html">Accommodatie</a>
+  </nav>
+
+  <div class="card">
+    <div class="card-title">Jouw beschikbaarheid</div>
+    <label class="meta" for="name-input">Naam</label>
+    <input type="text" id="name-input" style="width:100%;padding:8px;margin:6px 0 14px;border:1px solid var(--line);border-radius:4px;">
+
+    <div id="month-nav" class="actions-row" style="margin-top:0;"></div>
+    <div id="cal"></div>
+    <div class="actions-row">
+      <button class="btn btn-primary" id="save-btn">Beschikbaarheid opslaan</button>
+    </div>
+    <div class="error-msg" id="error"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Overzicht van iedereen</div>
+    <div id="summary"></div>
+    <div class="actions-row">
+      <a class="btn btn-outline" href="/periode.html">Periode vaststellen →</a>
+    </div>
+  </div>
+
+</div>
+
+<script src="/js/common.js"></script>
+<script src="/js/kalender.js"></script>
+</body>
+</html>

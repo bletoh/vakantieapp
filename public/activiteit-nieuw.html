@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nieuw idee — Vakantieplanner</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <a class="back-link" href="/activiteiten.html">← Terug naar activiteiten</a>
+
+  <div class="postcard-header">
+    <div>
+      <div class="eyebrow">Vakantieplanner</div>
+      <h1>Nieuw idee</h1>
+    </div>
+  </div>
+
+  <form class="page-form" id="form">
+    <label for="added_by">Je naam</label>
+    <input type="text" id="added_by" required>
+
+    <label for="title">Titel van de activiteit</label>
+    <input type="text" id="title" required placeholder="Bijv. Kajakken op het meer">
+
+    <label for="description">Omschrijving (optioneel)</label>
+    <textarea id="description" placeholder="Waarom is dit een goed idee?"></textarea>
+
+    <div class="actions-row">
+      <button type="submit" class="btn btn-primary">Idee toevoegen</button>
+      <a class="btn btn-outline" href="/activiteiten.html">Annuleren</a>
+    </div>
+    <div class="error-msg" id="error"></div>
+  </form>
+
+</div>
+
+<script src="/js/common.js"></script>
+<script src="/js/activiteit-nieuw.js"></script>
+</body>
+</html>

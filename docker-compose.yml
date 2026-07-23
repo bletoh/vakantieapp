@@ -1,0 +1,16 @@
+services:
+  vakantieplanner:
+    build: .
+    container_name: vakantieplanner
+    restart: unless-stopped
+    volumes:
+      - vakantie_data:/app/data
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
+
+volumes:
+  vakantie_data:
