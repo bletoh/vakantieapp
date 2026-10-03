@@ -3,17 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#f3eee4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#171511" media="(prefers-color-scheme: dark)">
   <title>Onze vakantie</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <header class="topbar">
     <h1 class="brand" id="brand"></h1>
-    <button type="button" class="icon-btn" data-action="edit-site" aria-label="Titel aanpassen">✎</button>
+    <button type="button" class="text-btn" data-action="edit-site">Titel wijzigen</button>
   </header>
 
   <nav class="tabs" id="tabs" aria-label="Onderdelen"></nav>
@@ -53,8 +55,9 @@
           <label>Minpunten <small>(één per regel)</small><textarea name="cons" rows="3"></textarea></label>
         </div>
         <label>Link<input name="link" type="url" inputmode="url" placeholder="https://…"></label>
+        <label id="locationField">Locatie <small>(pin op de kaart)</small><select name="location_id"></select></label>
         <label>Je naam <small>(optioneel)</small><input name="added_by" maxlength="40" autocomplete="given-name"></label>
-        <label class="check"><input type="checkbox" name="is_best"> 🏆 Dit is de beste keuze</label>
+        <label class="check"><input type="checkbox" name="is_best"> Dit is de beste keuze</label>
       </div>
       <div class="sheet-foot">
         <button type="button" class="btn ghost danger" id="itemDelete">Verwijderen</button>
@@ -62,6 +65,18 @@
         <button type="submit" class="btn primary">Opslaan</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Koppelen aan pin -->
+  <dialog class="sheet small" id="linkDialog">
+    <div class="sheet-head">
+      <h2 id="linkDialogTitle">Koppelen</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="link-list" id="linkList"></div>
+      <button type="button" class="btn block" id="linkNew">＋ Nieuwe toevoegen</button>
+    </div>
   </dialog>
 
   <!-- Reis -->
@@ -98,7 +113,15 @@
           <label>Naam<input name="title" required maxlength="40"></label>
         </div>
         <label>Introductie <small>(optioneel)</small><textarea name="intro" rows="3"></textarea></label>
-        <label class="check"><input type="checkbox" name="show_price"> 💶 Prijs tonen</label>
+        <label>Soort tab
+          <select name="kind">
+            <option value="">Lijst met suggesties</option>
+            <option value="map">Kaart met pinnen</option>
+            <option value="flight">Vluchten (te koppelen aan een pin)</option>
+            <option value="stay">Overnachtingen (te koppelen aan een pin)</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="show_price"> Prijs tonen</label>
         <div id="sectionExtra" class="section-extra">
           <div class="row-2">
             <button type="button" class="btn" id="sectionLeft">← Naar links</button>
@@ -151,6 +174,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

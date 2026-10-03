@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 4000;
 app.use(express.json({ limit: '15mb' }));
 
 app.use('/api', apiRouter);
+app.use('/vendor/leaflet', express.static(path.dirname(require.resolve('leaflet')), { maxAge: '7d' }));
 app.use('/uploads', express.static(db.UPLOAD_DIR, { maxAge: '30d', immutable: true }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 

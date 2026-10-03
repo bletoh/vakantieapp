@@ -10,8 +10,9 @@ const SETTING_KEYS = [
   'site_title', 'site_subtitle', 'destination', 'date_text',
   'hero_image', 'footer_text',
 ];
-const SECTION_FIELDS = ['title', 'icon', 'intro', 'show_price'];
-const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons', 'added_by'];
+const SECTION_FIELDS = ['title', 'icon', 'intro', 'show_price', 'kind'];
+const SECTION_KINDS = ['', 'map', 'flight', 'stay'];
+const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons', 'added_by', 'lat', 'lng', 'location_id'];
 
 function pick(body, fields) {
   const out = {};
@@ -23,6 +24,16 @@ function normalizeItem(data) {
   if ('rating' in data) {
     const r = parseInt(data.rating, 10);
     data.rating = r >= 1 && r <= 5 ? r : null;
+  }
+  for (const k of ['lat', 'lng']) {
+    if (k in data) {
+      const n = parseFloat(data[k]);
+      data[k] = Number.isFinite(n) ? n : null;
+    }
+  }
+  if ('location_id' in data) {
+    const id = parseInt(data.location_id, 10);
+    data.location_id = id && db.prepare('SELECT 1 FROM items WHERE id = ?').get(id) ? id : null;
   }
   for (const k of Object.keys(data)) {
     if (typeof data[k] === 'string') data[k] = data[k].trim();
@@ -71,10 +82,11 @@ router.put('/settings', (req, res) => {
 router.post('/sections', (req, res) => {
   const { title = 'Nieuwe tab', icon = '⭐', intro = '' } = req.body;
   const showPrice = req.body.show_price ? 1 : 0;
+  const kind = SECTION_KINDS.includes(req.body.kind) ? req.body.kind : '';
   const pos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM sections').get().p;
   const { lastInsertRowid } = db
-    .prepare('INSERT INTO sections (title, icon, intro, position, show_price) VALUES (?, ?, ?, ?, ?)')
-    .run(String(title).trim() || 'Nieuwe tab', icon, intro, pos, showPrice);
+    .prepare('INSERT INTO sections (title, icon, intro, position, show_price, kind) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(String(title).trim() || 'Nieuwe tab', icon, intro, pos, showPrice, kind);
   res.json({ id: lastInsertRowid });
 });
 
@@ -88,6 +100,7 @@ router.put('/sections/reorder', (req, res) => {
 router.put('/sections/:id', (req, res) => {
   const data = pick(req.body, SECTION_FIELDS);
   if ('show_price' in data) data.show_price = data.show_price ? 1 : 0;
+  if ('kind' in data && !SECTION_KINDS.includes(data.kind)) data.kind = '';
   if (data.title !== undefined && !String(data.title).trim()) {
     return res.status(400).json({ error: 'Titel mag niet leeg zijn' });
   }

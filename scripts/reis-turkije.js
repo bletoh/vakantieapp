@@ -23,6 +23,8 @@ const SUGGESTIONS = {
     pros: 'Veel all-inclusive hotels aan het strand\nZon en warme zee in het seizoen\nDirecte vluchten vanaf Amsterdam',
     cons: 'Transfer van ongeveer een uur vanaf het vliegveld\nIn de zomer druk en heet',
     rating: 4,
+    lat: 36.7673,
+    lng: 31.389,
   },
   Vlucht: {
     title: 'Corendon · Amsterdam → Antalya',
@@ -65,12 +67,13 @@ function run() {
   const findSection = db.prepare('SELECT id FROM sections WHERE title = ?');
   const nextPos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM items WHERE section_id = ?');
   const insertItem = db.prepare(`
-    INSERT INTO items (section_id, title, subtitle, body, price, rating, pros, cons, link, position)
-    VALUES (@section_id, @title, @subtitle, @body, @price, @rating, @pros, @cons, @link, @position)
+    INSERT INTO items (section_id, title, subtitle, body, price, rating, pros, cons, link, position, lat, lng, location_id)
+    VALUES (@section_id, @title, @subtitle, @body, @price, @rating, @pros, @cons, @link, @position, @lat, @lng, @location_id)
   `);
 
   db.transaction(() => {
     const itemIds = [];
+    let locationId = null; // vlucht en hotel worden aan de pin van de locatie gekoppeld
     for (const [sectionTitle, s] of Object.entries(SUGGESTIONS)) {
       const section = findSection.get(sectionTitle);
       if (!section) {
@@ -88,7 +91,11 @@ function run() {
         cons: s.cons || '',
         link: s.link || '',
         position: nextPos.get(section.id).p,
+        lat: s.lat ?? null,
+        lng: s.lng ?? null,
+        location_id: sectionTitle === 'Locatie' ? null : locationId,
       });
+      if (sectionTitle === 'Locatie') locationId = lastInsertRowid;
       itemIds.push(lastInsertRowid);
       console.log(`Toegevoegd aan ${sectionTitle}: ${s.title}`);
     }

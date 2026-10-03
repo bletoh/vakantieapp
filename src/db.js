@@ -62,15 +62,28 @@ CREATE TABLE IF NOT EXISTS trip_picks (
 // Prijs tonen we alleen bij tabs met dingen die je koopt.
 const PRICED_TABS = ['Vlucht', 'Overnachting'];
 
+// Soort tab: 'map' toont een kaart met pinnen, 'flight' en 'stay' kun je aan een pin koppelen.
+const TAB_KINDS = { Locatie: 'map', Vlucht: 'flight', Overnachting: 'stay' };
+
 // Kolommen die later zijn toegevoegd aan bestaande databases.
 const itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
 if (!itemCols.includes('added_by')) db.exec('ALTER TABLE items ADD COLUMN added_by TEXT');
+if (!itemCols.includes('lat')) db.exec('ALTER TABLE items ADD COLUMN lat REAL');
+if (!itemCols.includes('lng')) db.exec('ALTER TABLE items ADD COLUMN lng REAL');
+if (!itemCols.includes('location_id')) {
+  db.exec('ALTER TABLE items ADD COLUMN location_id INTEGER REFERENCES items(id) ON DELETE SET NULL');
+}
 
 const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
 if (!sectionCols.includes('show_price')) {
   db.exec('ALTER TABLE sections ADD COLUMN show_price INTEGER NOT NULL DEFAULT 0');
   db.prepare(`UPDATE sections SET show_price = 1 WHERE title IN (${PRICED_TABS.map(() => '?').join(', ')})`)
     .run(...PRICED_TABS);
+}
+if (!sectionCols.includes('kind')) {
+  db.exec("ALTER TABLE sections ADD COLUMN kind TEXT NOT NULL DEFAULT ''");
+  const setKind = db.prepare('UPDATE sections SET kind = ? WHERE title = ?');
+  for (const [title, kind] of Object.entries(TAB_KINDS)) setKind.run(kind, title);
 }
 
 // Eerste keer opstarten: alleen lege tabs aanmaken, alle tekst vul je zelf in.
@@ -86,9 +99,11 @@ function seed() {
     ['Eten & drinken', '🍽️'],
     ['Budget', '💶'],
   ];
-  const insert = db.prepare('INSERT INTO sections (title, icon, intro, position, show_price) VALUES (?, ?, \'\', ?, ?)');
+  const insert = db.prepare(`
+    INSERT INTO sections (title, icon, intro, position, show_price, kind) VALUES (?, ?, '', ?, ?, ?)
+  `);
   db.transaction(() => tabs.forEach(([title, icon], i) => (
-    insert.run(title, icon, i, PRICED_TABS.includes(title) ? 1 : 0)
+    insert.run(title, icon, i, PRICED_TABS.includes(title) ? 1 : 0, TAB_KINDS[title] || '')
   )))();
 }
 

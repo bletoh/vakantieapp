@@ -78,6 +78,11 @@
     }
     return null;
   };
+  const sectionsOfKind = (kind) => state.sections.filter((s) => s.kind === kind);
+  const linkedTo = (locId) => state.sections
+    .filter((s) => s.kind !== 'map')
+    .flatMap((s) => s.items.filter((i) => i.location_id === locId).map((it) => ({ s, it })));
+  const locations = () => sectionsOfKind('map').flatMap((s) => sortedItems(s));
   const sortedItems = (s) => [...s.items].sort((a, b) => a.position - b.position || a.id - b.id);
 
   async function reload() {
@@ -129,11 +134,10 @@
     const nav = $('#tabs');
     nav.innerHTML = state.sections.map((s) => {
       const active = route === s.id;
-      return `<a class="tab${active ? ' active' : ''}" href="#tab-${s.id}"${active ? ' aria-current="page"' : ''}>`
-        + `<span aria-hidden="true">${esc(s.icon)}</span>${esc(s.title)}</a>`;
+      return `<a class="tab${active ? ' active' : ''}" href="#tab-${s.id}"${active ? ' aria-current="page"' : ''}>${esc(s.title)}</a>`;
     }).join('')
       + `<a class="tab trips-tab${route === 'reizen' ? ' active' : ''}" href="#reizen"${route === 'reizen' ? ' aria-current="page"' : ''}>`
-      + '<span aria-hidden="true">🧳</span>Reizen</a>'
+      + 'Reizen</a>'
       + '<button type="button" class="tab add" data-action="add-section" aria-label="Tab toevoegen">＋</button>';
     const active = $('.tab.active', nav);
     if (active) {
@@ -144,13 +148,15 @@
 
   function renderPanel() {
     const route = currentRoute();
-    if (route === 'reizen') { $('#panel').innerHTML = tripsHtml(); return; }
+    if (route === 'reizen') { unmountMap(); $('#panel').innerHTML = tripsHtml(); return; }
     const s = findSection(route);
+    unmountMap();
     $('#panel').innerHTML = s ? sectionHtml(s) : `
       <div class="empty">
         <p>Er zijn nog geen tabs.</p>
         <button type="button" class="btn primary" data-action="add-section">＋ Tab toevoegen</button>
       </div>`;
+    if (s && s.kind === 'map') mountMap(s);
   }
 
   function sectionHtml(s) {
@@ -162,10 +168,15 @@
       <div class="section-head">
         <h2>
           <span aria-hidden="true">${esc(s.icon)}</span>${esc(s.title)}
-          <button type="button" class="icon-btn section-edit" data-action="edit-section" data-id="${s.id}" aria-label="Tab aanpassen">⚙️</button>
+          <button type="button" class="text-btn" data-action="edit-section" data-id="${s.id}">Tab bewerken</button>
         </h2>
         ${s.intro ? `<p class="section-intro">${esc(s.intro)}</p>` : ''}
       </div>
+      ${s.kind === 'map' ? `
+        <div class="map-wrap">
+          <div id="map" class="map" aria-label="Kaart"></div>
+          <div class="map-hint">Tik op de kaart om een pin te prikken</div>
+        </div>` : ''}
       <button type="button" class="add-cta" data-action="add-item" data-id="${s.id}">
         <span class="add-cta-plus" aria-hidden="true">＋</span>
         <span>${esc(addLabel(s))}</span>
@@ -175,6 +186,20 @@
         <div class="label">${best ? 'Andere opties' : 'Opties'}</div>
         <div class="grid">${others.map((i) => cardHtml(i, s, false)).join('')}</div>` : ''}
       ${!items.length ? '<div class="empty"><p>Nog niets toegevoegd. Wees de eerste!</p></div>' : ''}`;
+  }
+
+  // Koppelingen tussen een locatie (pin) en vluchten/overnachtingen, als kleine chips.
+  function linkChipsHtml(it, s) {
+    if (s.kind === 'map') {
+      const links = linkedTo(it.id);
+      const pin = it.lat != null ? '<span class="chip">Op de kaart</span>' : '';
+      if (!links.length && !pin) return '';
+      return `<div class="chips">${pin}${links.map(({ s: ls, it: li }) =>
+        `<a class="chip" href="#tab-${ls.id}">${esc(ls.icon)} ${esc(li.title)}</a>`).join('')}</div>`;
+    }
+    const loc = it.location_id && findItem(it.location_id);
+    if (!loc) return '';
+    return `<div class="chips"><a class="chip" href="#tab-${loc.section_id}">📍 ${esc(loc.title)}</a></div>`;
   }
 
   function cardHtml(it, s, feature) {
@@ -188,11 +213,12 @@
       <article class="card${it.is_best ? ' best' : ''}${feature && img ? ' feature' : ''}" data-item="${it.id}" tabindex="0" aria-label="${esc(it.title)} aanpassen">
         ${img ? `<div class="card-media"><img src="${esc(img)}" alt="" loading="lazy"></div>` : ''}
         <div class="card-body">
-          <span class="card-hint" aria-hidden="true">✎</span>
-          ${it.is_best ? '<span class="badge-best">🏆 Beste keuze</span>' : ''}
+          <span class="card-hint" aria-hidden="true">Aanpassen</span>
+          ${it.is_best ? '<span class="badge-best">Beste keuze</span>' : ''}
           ${it.subtitle ? `<div class="card-sub">${esc(it.subtitle)}</div>` : ''}
           <h3 class="card-title">${esc(it.title)}</h3>
           ${it.added_by ? `<div class="added-by">Voorgesteld door ${esc(it.added_by)}</div>` : ''}
+          ${linkChipsHtml(it, s)}
           ${(price || it.rating) ? `
             <div class="card-meta">
               ${price ? `<span class="price">${esc(it.price)}</span>` : ''}
@@ -212,14 +238,14 @@
   function likeBtn(kind, id, likes) {
     const on = liked.has(kind === 'trip' ? 't' + id : id);
     return `<button type="button" class="like${on ? ' on' : ''}" data-action="like" data-kind="${kind}" data-id="${id}" aria-pressed="${on}" aria-label="Vind ik leuk">`
-      + `<span class="heart">❤️</span><span class="count">${likes || 0}</span></button>`;
+      + `<span class="heart">${on ? '♥' : '♡'}</span><span class="count">${likes || 0}</span></button>`;
   }
 
   function tripsHtml() {
     const trips = [...state.trips].sort((a, b) => b.likes - a.likes || a.id - b.id);
     return `
       <div class="section-head">
-        <h2><span aria-hidden="true">🧳</span>Reizen</h2>
+        <h2>Reizen</h2>
         <p class="section-intro">Combineer suggesties uit de andere tabs, zoals een locatie, vlucht en overnachting, tot één reis.</p>
       </div>
       <button type="button" class="add-cta" data-action="add-trip">
@@ -238,7 +264,7 @@
     return `
       <article class="card trip" data-trip="${t.id}" tabindex="0" aria-label="${esc(t.title)} aanpassen">
         <div class="card-body">
-          <span class="card-hint" aria-hidden="true">✎</span>
+          <span class="card-hint" aria-hidden="true">Aanpassen</span>
           <h3 class="card-title">${esc(t.title)}</h3>
           ${t.added_by ? `<div class="added-by">Voorgesteld door ${esc(t.added_by)}</div>` : ''}
           ${picks.length ? `<ul class="trip-picks">${picks.map(({ s, it }) => `
@@ -262,6 +288,7 @@
       const on = liked.toggle(isTrip ? 't' + id : id);
       btn.classList.toggle('on', on);
       btn.setAttribute('aria-pressed', String(on));
+      $('.heart', btn).textContent = on ? '♥' : '♡';
       const { likes } = await api(`/${isTrip ? 'trips' : 'items'}/${id}/like`, 'POST', { delta: on ? 1 : -1 });
       (isTrip ? state.trips.find((t) => t.id === id) : findItem(id)).likes = likes;
       $('.count', btn).textContent = likes;
@@ -271,6 +298,8 @@
     'add-section': () => openSectionDialog(null),
     'edit-section': (btn) => openSectionDialog(findSection(+btn.dataset.id)),
     'edit-site': () => openSiteDialog(),
+    'edit-item': (btn) => openItemDialog(findItem(+btn.dataset.id)),
+    'link-item': (btn) => openLinkDialog(findItem(+btn.dataset.loc), findSection(+btn.dataset.section)),
   };
 
   document.addEventListener('click', async (e) => {
@@ -321,12 +350,14 @@
     $('#itemImageField').innerHTML = imageFieldHtml(itemCtx.image, s ? s.icon : '📷');
   }
 
-  function openItemDialog(item, sectionId) {
+  function openItemDialog(item, sectionId, preset = {}) {
     itemCtx = {
       id: item ? item.id : null,
       sectionId: item ? item.section_id : sectionId,
       image: item ? item.image : '',
       wasBest: !!(item && item.is_best),
+      lat: item ? item.lat : preset.lat ?? null,
+      lng: item ? item.lng : preset.lng ?? null,
     };
     const section = findSection(itemCtx.sectionId);
     $('#itemDialogTitle').textContent = item ? 'Aanpassen' : addLabel(section);
@@ -337,6 +368,12 @@
     itemForm.elements.is_best.checked = itemCtx.wasBest;
     $('#itemDelete').hidden = !item;
     $('#priceField').hidden = !(section && section.show_price);
+    const locs = section && section.kind !== 'map' ? locations() : [];
+    const locId = item ? item.location_id : preset.location_id;
+    $('#locationField').hidden = !locs.length;
+    itemForm.elements.location_id.innerHTML = '<option value="">Geen</option>'
+      + locs.map((l) => `<option value="${l.id}"${l.id === locId ? ' selected' : ''}>${esc(l.title)}</option>`).join('');
+    if (!item && preset.title) itemForm.elements.title.value = preset.title;
     renderItemImage();
     itemDialog.showModal();
     if (!item) setTimeout(() => itemForm.elements.title.focus(), 50);
@@ -353,6 +390,9 @@
     const wantBest = itemForm.elements.is_best.checked;
     delete data.is_best;
     data.image = itemCtx.image || '';
+    data.lat = itemCtx.lat;
+    data.lng = itemCtx.lng;
+    if ($('#locationField').hidden) delete data.location_id;
     if (data.added_by) store.set('name', data.added_by.trim());
     try {
       const isNew = !itemCtx.id;
@@ -376,6 +416,242 @@
       toast('Verwijderd');
     } catch (err) { toast(err.message, true); }
   });
+
+  // Vlucht of overnachting aan een pin koppelen
+  const linkDialog = $('#linkDialog');
+  let linkCtx = null;
+
+  function openLinkDialog(loc, section) {
+    if (!loc || !section) return;
+    linkCtx = { loc, section };
+    $('#linkDialogTitle').textContent = `${section.icon} ${section.title} koppelen aan ${loc.title}`;
+    const items = sortedItems(section);
+    $('#linkList').innerHTML = items.length ? items.map((it) => {
+      const on = it.location_id === loc.id;
+      const other = !on && it.location_id && findItem(it.location_id);
+      return `<button type="button" class="link-option${on ? ' on' : ''}" data-link="${it.id}">
+          <span><strong>${esc(it.title)}</strong>${other ? `<small>nu gekoppeld aan ${esc(other.title)}</small>` : ''}</span>
+          ${section.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}
+          <span class="link-check" aria-hidden="true">${on ? '✓' : ''}</span>
+        </button>`;
+    }).join('') : '<p class="hint">Er staat nog niets in deze tab.</p>';
+    $('#linkNew').textContent = `＋ Nieuwe ${section.title.toLowerCase()} toevoegen`;
+    linkDialog.showModal();
+  }
+
+  $('#linkList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-link]');
+    if (!btn) return;
+    const it = findItem(+btn.dataset.link);
+    const unlink = it.location_id === linkCtx.loc.id;
+    try {
+      await api(`/items/${it.id}`, 'PUT', { location_id: unlink ? null : linkCtx.loc.id });
+      linkDialog.close();
+      await reload();
+      toast(unlink ? 'Ontkoppeld' : 'Gekoppeld ✓');
+      if (!unlink && linkCtx.section.kind === 'flight') flyTo(linkCtx.loc.id);
+    } catch (err) { toast(err.message, true); }
+  });
+
+  $('#linkNew').addEventListener('click', () => {
+    linkDialog.close();
+    openItemDialog(null, linkCtx.section.id, { location_id: linkCtx.loc.id });
+  });
+
+  /* ---------- kaart ---------- */
+
+  const HOME = [52.3105, 4.7683]; // Schiphol
+  let map = null;
+  let markers = {};
+  let flightLayers = [];
+
+  function unmountMap() {
+    if (map) { map.remove(); map = null; }
+    markers = {};
+    flightLayers = [];
+  }
+
+  function pinIcon(item) {
+    return L.divIcon({
+      className: 'pin-icon',
+      html: `<div class="pin${item.is_best ? ' best' : ''}"><span></span></div>`,
+      iconSize: [30, 40],
+      iconAnchor: [15, 40],
+      tooltipAnchor: [0, -38],
+      popupAnchor: [0, -38],
+    });
+  }
+
+  function mountMap(section) {
+    const el = $('#map');
+    if (!el) return;
+    if (!window.L) {
+      el.innerHTML = '<div class="map-error">De kaart kon niet geladen worden.</div>';
+      return;
+    }
+    map = L.map(el, { worldCopyJump: true, zoomSnap: 0.5 });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 18,
+    }).addTo(map);
+
+    L.circleMarker(HOME, { radius: 6, color: '#fff', weight: 2, fillColor: '#f97316', fillOpacity: 1 })
+      .addTo(map).bindTooltip('🇳🇱 Nederland', { direction: 'top', offset: [0, -6] });
+
+    const pins = sortedItems(section).filter((it) => it.lat != null && it.lng != null);
+    for (const it of pins) {
+      const m = L.marker([it.lat, it.lng], { icon: pinIcon(it), draggable: true, autoPan: true })
+        .addTo(map)
+        .bindTooltip(esc(it.title), { permanent: true, interactive: true, direction: 'top', className: 'pin-label' })
+        .bindPopup(() => pinPopupHtml(it.id), { minWidth: 220, maxWidth: 280 });
+      m.on('click', () => flyTo(it.id));
+      m.on('dragend', async () => {
+        const { lat, lng } = m.getLatLng();
+        try {
+          await api(`/items/${it.id}`, 'PUT', { lat, lng });
+          it.lat = lat; it.lng = lng;
+          drawFlights(false);
+          toast('Pin verplaatst ✓');
+        } catch (err) { toast(err.message, true); }
+      });
+      markers[it.id] = m;
+    }
+
+    if (pins.length) {
+      map.fitBounds(L.latLngBounds([HOME, ...pins.map((p) => [p.lat, p.lng])]), { padding: [40, 40], maxZoom: 7 });
+    } else {
+      map.setView([45, 12], 3.5);
+    }
+
+    // Een tik die alleen een open pinvenster sluit, prikt geen nieuwe pin.
+    let popupClosedAt = 0;
+    map.on('popupclose', () => { popupClosedAt = Date.now(); });
+    map.on('click', (e) => {
+      if (Date.now() - popupClosedAt < 400) return;
+      addPinAt(section, e.latlng);
+    });
+    // Na het tekenen (en als de kaart zichtbaar is) de vluchten laten vliegen.
+    setTimeout(() => { if (map) { map.invalidateSize(); drawFlights(true); } }, 150);
+  }
+
+  function pinPopupHtml(locId) {
+    const loc = findItem(locId);
+    if (!loc) return '';
+    const links = linkedTo(locId);
+    const linkable = state.sections.filter((s) => s.kind === 'flight' || s.kind === 'stay');
+    return `
+      <div class="pin-popup">
+        <strong class="pin-popup-title">${esc(loc.title)}</strong>
+        ${links.length ? `<ul class="pin-links">${links.map(({ s, it }) => `
+          <li><button type="button" data-action="edit-item" data-id="${it.id}">
+            <span>${esc(s.icon)}</span><span>${esc(it.title)}</span>
+            ${s.show_price && it.price ? `<small>${esc(it.price)}</small>` : ''}
+          </button></li>`).join('')}</ul>` : '<p class="hint">Nog niets gekoppeld.</p>'}
+        <div class="pin-actions">
+          ${linkable.map((s) => `<button type="button" class="btn sm" data-action="link-item" data-loc="${loc.id}" data-section="${s.id}">＋ ${esc(s.icon)} ${esc(s.title)}</button>`).join('')}
+          <button type="button" class="btn sm ghost" data-action="edit-item" data-id="${loc.id}">✎ Aanpassen</button>
+        </div>
+      </div>`;
+  }
+
+  async function addPinAt(section, latlng) {
+    const preset = { lat: latlng.lat, lng: latlng.lng };
+    openItemDialog(null, section.id, preset);
+    const name = await placeName(latlng.lat, latlng.lng);
+    if (name && itemDialog.open && !itemCtx.id && !itemForm.elements.title.value) {
+      itemForm.elements.title.value = name;
+    }
+  }
+
+  // Plaatsnaam opzoeken bij de aangeklikte plek (OpenStreetMap Nominatim).
+  async function placeName(lat, lng) {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=nl&lat=${lat}&lon=${lng}`);
+      if (!res.ok) return '';
+      const a = (await res.json()).address || {};
+      const place = a.city || a.town || a.village || a.municipality || a.county || a.state || '';
+      return [place, a.country].filter(Boolean).join(', ');
+    } catch { return ''; }
+  }
+
+  // Gebogen route van Nederland naar een pin.
+  function arcPoints(from, to, n = 64) {
+    const [lat1, lng1] = from;
+    const [lat2, lng2] = to;
+    const dx = lng2 - lng1;
+    const dy = lat2 - lat1;
+    const cx = (lng1 + lng2) / 2 - dy * 0.2;
+    const cy = (lat1 + lat2) / 2 + dx * 0.2;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const u = 1 - t;
+      pts.push([u * u * lat1 + 2 * u * t * cy + t * t * lat2, u * u * lng1 + 2 * u * t * cx + t * t * lng2]);
+    }
+    return pts;
+  }
+
+  const PLANE_SVG = '<svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>';
+
+  function flightLocations() {
+    const ids = new Set(sectionsOfKind('flight').flatMap((s) => s.items.map((i) => i.location_id)).filter(Boolean));
+    return [...ids].map(findItem).filter((l) => l && l.lat != null && markers[l.id]);
+  }
+
+  function drawFlights(animate) {
+    if (!map) return;
+    flightLayers.forEach((l) => l.remove());
+    flightLayers = [];
+    flightLocations().forEach((loc, i) => {
+      const line = L.polyline(arcPoints(HOME, [loc.lat, loc.lng]), { className: 'flight-line', weight: 2.5, interactive: false }).addTo(map);
+      line._locId = loc.id;
+      flightLayers.push(line);
+      if (animate) setTimeout(() => flyTo(loc.id), i * 600);
+    });
+  }
+
+  function flyTo(locId) {
+    if (!map) return;
+    const loc = findItem(locId);
+    const hasFlight = sectionsOfKind('flight').some((s) => s.items.some((i) => i.location_id === locId));
+    if (!loc || loc.lat == null || !hasFlight) return;
+    const pts = arcPoints(HOME, [loc.lat, loc.lng]);
+    const plane = L.marker(pts[0], {
+      icon: L.divIcon({ className: 'plane-icon', html: `<div class="plane">${PLANE_SVG}</div>`, iconSize: [26, 26], iconAnchor: [13, 13] }),
+      interactive: false,
+      keyboard: false,
+    }).addTo(map);
+    const trail = L.polyline([], { className: 'flight-trail', weight: 3, interactive: false }).addTo(map);
+    const duration = 2200;
+    const start = performance.now();
+    const step = (now) => {
+      if (!map) return;
+      const t = Math.min(1, (now - start) / duration);
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const idx = Math.min(pts.length - 1, Math.floor(eased * (pts.length - 1)));
+      const next = pts[Math.min(pts.length - 1, idx + 1)];
+      plane.setLatLng(pts[idx]);
+      trail.setLatLngs(pts.slice(0, idx + 1));
+      const a = map.latLngToLayerPoint(pts[idx]);
+      const b = map.latLngToLayerPoint(next);
+      if (a.distanceTo(b) > 0.5) {
+        const angle = Math.atan2(b.x - a.x, a.y - b.y) * 180 / Math.PI;
+        const el = plane.getElement() && plane.getElement().firstChild;
+        if (el) el.style.transform = `rotate(${angle}deg)`;
+      }
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        setTimeout(() => { plane.remove(); trail.remove(); }, 400);
+        const m = markers[locId];
+        if (m && m.getElement()) {
+          m.getElement().classList.add('landed');
+          setTimeout(() => m.getElement() && m.getElement().classList.remove('landed'), 700);
+        }
+      }
+    };
+    requestAnimationFrame(step);
+  }
 
   // Reis
   const tripDialog = $('#tripDialog');
@@ -444,6 +720,7 @@
     sectionForm.elements.title.value = section ? section.title : '';
     sectionForm.elements.intro.value = section ? section.intro || '' : '';
     sectionForm.elements.show_price.checked = !!(section && section.show_price);
+    sectionForm.elements.kind.value = section ? section.kind || '' : '';
     $('#sectionExtra').hidden = !section;
     if (section) {
       const idx = state.sections.indexOf(section);
@@ -461,6 +738,7 @@
       title: sectionForm.elements.title.value.trim(),
       intro: sectionForm.elements.intro.value.trim(),
       show_price: sectionForm.elements.show_price.checked,
+      kind: sectionForm.elements.kind.value,
     };
     try {
       let id = sectionCtx && sectionCtx.id;
