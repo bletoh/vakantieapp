@@ -562,12 +562,28 @@
     setTimeout(() => { if (map) { map.invalidateSize(); drawFlights(true); } }, 150);
   }
 
+  // Tik op de kaart: pin direct opslaan en meteen vluchten en hotels tonen.
+  // De plaatsnaam wordt op de achtergrond opgezocht en daarna ingevuld.
+  let pinning = false;
   async function addPinAt(section, latlng) {
-    const preset = { lat: latlng.lat, lng: latlng.lng };
-    openItemDialog(null, section.id, preset);
-    const name = await placeName(latlng.lat, latlng.lng);
-    if (name && itemDialog.open && !itemCtx.id && !itemForm.elements.title.value) {
-      itemForm.elements.title.value = name;
+    if (pinning) return;
+    pinning = true;
+    const { lat, lng } = latlng;
+    try {
+      const { id } = await api(`/sections/${section.id}/items`, 'POST', {
+        title: 'Nieuwe plek', lat, lng, added_by: store.get('name'),
+      });
+      await reload();
+      openPinSheet(findItem(id));
+      const name = await placeName(lat, lng);
+      if (name && findItem(id) && findItem(id).title === 'Nieuwe plek') {
+        await api(`/items/${id}`, 'PUT', { title: name });
+        await reload();
+      }
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      pinning = false;
     }
   }
 
@@ -849,6 +865,17 @@
         <p class="fineprint">Hotelgegevens: © OpenStreetMap-bijdragers.</p>
       </section>`}`;
   }
+
+  $('#pinDelete').addEventListener('click', async () => {
+    const loc = findItem(pinCtx.locId);
+    if (!loc || !confirm(`Pin "${loc.title}" verwijderen?`)) return;
+    try {
+      await api(`/items/${loc.id}`, 'DELETE');
+      pinDialog.close();
+      await reload();
+      toast('Pin verwijderd');
+    } catch (err) { toast(err.message, true); }
+  });
 
   $('#pinEdit').addEventListener('click', () => {
     const loc = findItem(pinCtx.locId);

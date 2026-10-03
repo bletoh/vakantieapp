@@ -313,6 +313,8 @@ button.chip { border: none; cursor: pointer; font: inherit; font-size: .8125rem;
 button.chip:hover { background: var(--navy-soft); }
 
 /* pinpaneel */
+#pinDialog[open] { display: flex; flex-direction: column; }
+#pinTitle:focus { outline: none; }
 .sheet-head-actions { display: flex; align-items: center; gap: 12px; }
 .pin-body { gap: 22px; }
 .pin-body section { display: grid; gap: 8px; }
@@ -388,7 +390,7 @@ button.chip:hover { background: var(--navy-soft); }
   font-size: .9375rem; font-weight: 500; color: var(--ink);
 }
 .sheet label.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--red); flex-shrink: 0; }
-#itemDelete, #tripDelete { margin-right: auto; }
+#itemDelete, #tripDelete, #pinDelete { margin-right: auto; }
 .row-2 { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
 .row-icon { display: grid; gap: 14px; grid-template-columns: 76px 1fr; }
 .icon-input { text-align: center; font-size: 1.25rem !important; }
