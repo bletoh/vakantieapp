@@ -23,3 +23,13 @@ npm start          # http://localhost:4000
 Of met Docker: `docker compose up -d --build`.
 
 De data (SQLite-database en geüploade foto's) staat in `data/`, of in de map die je met de variabele `DATA_DIR` opgeeft.
+
+## Voorbeeldreis Turkije
+
+`scripts/reis-turkije.js` zet een complete all-inclusive reis naar Side (Turkije) in de database: een locatie, een vlucht (Corendon AMS → AYT), een hotel (Side Crown Palace) en een reis die ze bundelt. Prijzen zijn opgezocht op 3 oktober 2026.
+
+```bash
+docker compose exec vakantieplanner node scripts/reis-turkije.js
+```
+
+Je kunt het script veilig vaker draaien; bestaat de reis al, dan wordt er niets toegevoegd.
