@@ -9,6 +9,7 @@ const router = express.Router();
 const SETTING_KEYS = [
   'site_title', 'site_subtitle', 'destination', 'date_text',
   'hero_image', 'footer_text',
+  'poll_start', 'poll_end', 'trip_days',
 ];
 const SECTION_FIELDS = ['title', 'icon', 'intro', 'show_price', 'kind'];
 const SECTION_KINDS = ['', 'map', 'flight', 'stay'];
@@ -57,7 +58,8 @@ function getContent() {
   const trips = db.prepare('SELECT * FROM trips ORDER BY id').all();
   const picks = db.prepare('SELECT trip_id, item_id FROM trip_picks').all();
   for (const t of trips) t.item_ids = picks.filter((p) => p.trip_id === t.id).map((p) => p.item_id);
-  return { settings, sections, trips };
+  const availability = db.prepare('SELECT name, date FROM available_days ORDER BY name, date').all();
+  return { settings, sections, trips, availability };
 }
 
 router.get('/content', (req, res) => {
@@ -179,22 +181,27 @@ function saveTrip(id, body) {
   }
   const note = String(body.note || '').trim();
   const addedBy = String(body.added_by || '').trim();
+  let start = /^\d{4}-\d{2}-\d{2}$/.test(body.start_date || '') ? body.start_date : null;
+  let end = /^\d{4}-\d{2}-\d{2}$/.test(body.end_date || '') ? body.end_date : null;
+  if (start && !end) end = start;
+  if (end && !start) start = end;
+  if (start && end && end < start) [start, end] = [end, start];
   const itemIds = (Array.isArray(body.item_ids) ? body.item_ids : [])
     .map((n) => parseInt(n, 10))
     .filter((n) => db.prepare('SELECT 1 FROM items WHERE id = ?').get(n));
 
   return db.transaction(() => {
     if (id) {
-      const res = db.prepare('UPDATE trips SET title = ?, note = ?, added_by = ? WHERE id = ?')
-        .run(title, note, addedBy, id);
+      const res = db.prepare('UPDATE trips SET title = ?, note = ?, added_by = ?, start_date = ?, end_date = ? WHERE id = ?')
+        .run(title, note, addedBy, start, end, id);
       if (!res.changes) {
         const err = new Error('Reis niet gevonden');
         err.status = 404;
         throw err;
       }
     } else {
-      id = db.prepare('INSERT INTO trips (title, note, added_by) VALUES (?, ?, ?)')
-        .run(title, note, addedBy).lastInsertRowid;
+      id = db.prepare('INSERT INTO trips (title, note, added_by, start_date, end_date) VALUES (?, ?, ?, ?, ?)')
+        .run(title, note, addedBy, start, end).lastInsertRowid;
     }
     db.prepare('DELETE FROM trip_picks WHERE trip_id = ?').run(id);
     const insert = db.prepare('INSERT OR IGNORE INTO trip_picks (trip_id, item_id) VALUES (?, ?)');
@@ -221,6 +228,29 @@ router.post('/trips/:id/like', (req, res) => {
 
 router.delete('/trips/:id', (req, res) => {
   db.prepare('DELETE FROM trips WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+/* ---------- datumprikker ---------- */
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Zet één of meer dagen aan of uit voor een persoon.
+router.put('/availability', (req, res) => {
+  const name = String(req.body.name || '').trim().slice(0, 40);
+  if (!name) return res.status(400).json({ error: 'Vul eerst je naam in' });
+  const dates = (Array.isArray(req.body.dates) ? req.body.dates : [req.body.date])
+    .filter((d) => ISO_DATE.test(String(d)));
+  const add = db.prepare('INSERT OR IGNORE INTO available_days (name, date) VALUES (?, ?)');
+  const remove = db.prepare('DELETE FROM available_days WHERE name = ? AND date = ?');
+  db.transaction(() => {
+    for (const d of dates) (req.body.available ? add : remove).run(name, d);
+  })();
+  res.json({ ok: true });
+});
+
+router.delete('/availability/:name', (req, res) => {
+  db.prepare('DELETE FROM available_days WHERE name = ?').run(req.params.name);
   res.json({ ok: true });
 });
 

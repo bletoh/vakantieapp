@@ -333,6 +333,85 @@ button.chip:hover { background: var(--navy-soft); }
 .btn.done { color: var(--good); border-color: transparent; background: none; opacity: 1; }
 .fineprint { margin: 0; font-size: .75rem; color: var(--muted); }
 
+/* ---------- datumprikker ---------- */
+
+.poll-name { display: grid; gap: 6px; max-width: 320px; font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.poll-name input {
+  font: inherit; font-size: 16px; color: var(--ink); padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.poll-name input:focus { outline: 2px solid var(--navy); outline-offset: -1px; border-color: transparent; }
+
+.best-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.best-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.best-row.top { border-color: var(--ink); }
+.best-row.top strong::before { content: 'Beste keuze'; display: block; font: 600 .65rem var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--red); margin-bottom: 2px; }
+.best-main { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.best-main strong { font-family: var(--serif); font-size: 1.15rem; font-weight: 600; }
+.best-main small { color: var(--muted); }
+.chip.ok { background: color-mix(in srgb, var(--good) 18%, var(--surface)); }
+.chip.part { background: var(--surface-2); color: var(--muted); }
+.chip.no { background: none; color: var(--muted); text-decoration: line-through; }
+
+.months { display: grid; gap: 22px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.month-title { margin: 0 0 8px; font-family: var(--serif); font-weight: 600; font-size: 1.1rem; text-transform: capitalize; }
+.cal { display: grid; grid-template-columns: 28px repeat(7, 1fr); gap: 4px; }
+.dow { font: 600 .6875rem var(--mono); text-transform: uppercase; color: var(--muted); text-align: center; padding-bottom: 2px; }
+.wk {
+  border: none; background: none; padding: 0; font: .6875rem var(--mono); color: var(--muted);
+  text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px;
+}
+.wk:disabled { visibility: hidden; }
+.day {
+  position: relative; aspect-ratio: 1; min-height: 38px;
+  display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: color-mix(in srgb, var(--navy) calc(var(--heat) * 55%), var(--surface));
+  color: var(--ink); font-size: .875rem; font-variant-numeric: tabular-nums;
+}
+.day.out { border: none; background: none; }
+.day.off { opacity: .35; cursor: default; }
+.day .dcount {
+  position: absolute; right: 3px; bottom: 1px; font: 600 .625rem var(--mono); color: var(--muted);
+}
+.day.mine { border: 2px solid var(--ink); font-weight: 700; }
+.day.mine::after {
+  content: '✓'; position: absolute; left: 3px; top: 0; font-size: .625rem; font-weight: 700; color: var(--ink);
+}
+.day.trip-ok { box-shadow: inset 0 -3px 0 var(--good); }
+.day.trip-conflict { box-shadow: inset 0 -3px 0 var(--red); }
+@media (prefers-color-scheme: dark) {
+  .day { background: color-mix(in srgb, var(--navy) calc(var(--heat) * 45%), var(--surface)); }
+}
+
+.planned { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.planned-row {
+  display: grid; gap: 2px; padding: 12px 14px; cursor: pointer;
+  border: 1px solid var(--line); border-left: 4px solid var(--good); border-radius: var(--radius); background: var(--surface);
+}
+.planned-row span { color: var(--muted); font-size: .875rem; }
+.planned-row small { color: var(--good); }
+.planned-row.conflict { border-left-color: var(--red); background: var(--red-soft); }
+.planned-row.conflict small { color: var(--red); }
+
+.people { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.people li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.people li span { flex: 1; font-weight: 500; }
+.people li small { color: var(--muted); font-family: var(--mono); font-size: .75rem; }
+
+/* reis valt op dagen dat iemand niet kan */
+.trip-dates { font-family: var(--mono); font-size: .8125rem; color: var(--ink); }
+.conflict-note, .date-warn.conflict {
+  font-size: .875rem; color: var(--red); background: var(--red-soft);
+  padding: 8px 10px; border-radius: var(--radius); border-left: 3px solid var(--red);
+}
+.ok-note, .date-warn.ok { font-size: .875rem; color: var(--good); }
+.date-warn { margin: 0; }
+.card.trip.conflict { border-color: var(--red); border-width: 2px; }
+
 /* ---------- knoppen ---------- */
 
 .btn {
