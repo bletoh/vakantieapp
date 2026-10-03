@@ -10,7 +10,7 @@ const SETTING_KEYS = [
   'site_title', 'site_subtitle', 'destination', 'date_text',
   'hero_image', 'footer_text',
 ];
-const SECTION_FIELDS = ['title', 'icon', 'intro'];
+const SECTION_FIELDS = ['title', 'icon', 'intro', 'show_price'];
 const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons', 'added_by'];
 
 function pick(body, fields) {
@@ -43,7 +43,10 @@ function getContent() {
   const sections = db.prepare('SELECT * FROM sections ORDER BY position, id').all();
   const items = db.prepare('SELECT * FROM items ORDER BY position, id').all();
   for (const s of sections) s.items = items.filter((i) => i.section_id === s.id);
-  return { settings, sections };
+  const trips = db.prepare('SELECT * FROM trips ORDER BY id').all();
+  const picks = db.prepare('SELECT trip_id, item_id FROM trip_picks').all();
+  for (const t of trips) t.item_ids = picks.filter((p) => p.trip_id === t.id).map((p) => p.item_id);
+  return { settings, sections, trips };
 }
 
 router.get('/content', (req, res) => {
@@ -67,10 +70,11 @@ router.put('/settings', (req, res) => {
 
 router.post('/sections', (req, res) => {
   const { title = 'Nieuwe tab', icon = '⭐', intro = '' } = req.body;
+  const showPrice = req.body.show_price ? 1 : 0;
   const pos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM sections').get().p;
   const { lastInsertRowid } = db
-    .prepare('INSERT INTO sections (title, icon, intro, position) VALUES (?, ?, ?, ?)')
-    .run(title, icon, intro, pos);
+    .prepare('INSERT INTO sections (title, icon, intro, position, show_price) VALUES (?, ?, ?, ?, ?)')
+    .run(String(title).trim() || 'Nieuwe tab', icon, intro, pos, showPrice);
   res.json({ id: lastInsertRowid });
 });
 
@@ -83,6 +87,7 @@ router.put('/sections/reorder', (req, res) => {
 
 router.put('/sections/:id', (req, res) => {
   const data = pick(req.body, SECTION_FIELDS);
+  if ('show_price' in data) data.show_price = data.show_price ? 1 : 0;
   if (data.title !== undefined && !String(data.title).trim()) {
     return res.status(400).json({ error: 'Titel mag niet leeg zijn' });
   }
@@ -147,6 +152,62 @@ router.post('/items/:id/like', (req, res) => {
 
 router.delete('/items/:id', (req, res) => {
   db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+/* ---------- trips ---------- */
+
+function saveTrip(id, body) {
+  const title = String(body.title || '').trim();
+  if (!title) {
+    const err = new Error('Geef de reis een naam');
+    err.status = 400;
+    throw err;
+  }
+  const note = String(body.note || '').trim();
+  const addedBy = String(body.added_by || '').trim();
+  const itemIds = (Array.isArray(body.item_ids) ? body.item_ids : [])
+    .map((n) => parseInt(n, 10))
+    .filter((n) => db.prepare('SELECT 1 FROM items WHERE id = ?').get(n));
+
+  return db.transaction(() => {
+    if (id) {
+      const res = db.prepare('UPDATE trips SET title = ?, note = ?, added_by = ? WHERE id = ?')
+        .run(title, note, addedBy, id);
+      if (!res.changes) {
+        const err = new Error('Reis niet gevonden');
+        err.status = 404;
+        throw err;
+      }
+    } else {
+      id = db.prepare('INSERT INTO trips (title, note, added_by) VALUES (?, ?, ?)')
+        .run(title, note, addedBy).lastInsertRowid;
+    }
+    db.prepare('DELETE FROM trip_picks WHERE trip_id = ?').run(id);
+    const insert = db.prepare('INSERT OR IGNORE INTO trip_picks (trip_id, item_id) VALUES (?, ?)');
+    for (const itemId of itemIds) insert.run(id, itemId);
+    return id;
+  })();
+}
+
+router.post('/trips', (req, res) => {
+  res.json({ id: saveTrip(null, req.body) });
+});
+
+router.put('/trips/:id', (req, res) => {
+  saveTrip(parseInt(req.params.id, 10), req.body);
+  res.json({ ok: true });
+});
+
+router.post('/trips/:id/like', (req, res) => {
+  const delta = req.body.delta === -1 ? -1 : 1;
+  db.prepare('UPDATE trips SET likes = MAX(0, likes + ?) WHERE id = ?').run(delta, req.params.id);
+  const row = db.prepare('SELECT likes FROM trips WHERE id = ?').get(req.params.id);
+  res.json({ likes: row ? row.likes : 0 });
+});
+
+router.delete('/trips/:id', (req, res) => {
+  db.prepare('DELETE FROM trips WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 

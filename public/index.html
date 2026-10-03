@@ -12,13 +12,9 @@
 </head>
 <body>
   <header class="topbar">
-    <a href="#" class="brand" id="brand"></a>
-    <button class="edit-toggle" id="editToggle" type="button" aria-pressed="false">
-      <span class="edit-toggle-icon">✎</span><span class="edit-toggle-label">Bewerken</span>
-    </button>
+    <h1 class="brand" id="brand"></h1>
+    <button type="button" class="icon-btn" data-action="edit-site" aria-label="Titel aanpassen">✎</button>
   </header>
-
-  <section class="hero" id="hero"></section>
 
   <nav class="tabs" id="tabs" aria-label="Onderdelen"></nav>
 
@@ -26,12 +22,6 @@
     <div class="loading">Laden…</div>
   </main>
 
-  <footer class="footer" id="footer"></footer>
-
-  <div class="edit-banner" id="editBanner">
-    <span>Bewerkmodus — tik op tekst om aan te passen</span>
-    <button type="button" id="editDone">Klaar</button>
-  </div>
 
   <!-- Item bewerken -->
   <dialog class="sheet" id="itemDialog">
@@ -45,7 +35,7 @@
         <label>Titel<input name="title" required maxlength="120"></label>
         <label>Ondertitel<input name="subtitle" maxlength="160"></label>
         <div class="row-2">
-          <label>Prijs<input name="price" maxlength="60"></label>
+          <label id="priceField">Prijs<input name="price" maxlength="60"></label>
           <label>Score
             <select name="rating">
               <option value="">Geen</option>
@@ -64,6 +54,75 @@
         </div>
         <label>Link<input name="link" type="url" inputmode="url" placeholder="https://…"></label>
         <label>Je naam <small>(optioneel)</small><input name="added_by" maxlength="40" autocomplete="given-name"></label>
+        <label class="check"><input type="checkbox" name="is_best"> 🏆 Dit is de beste keuze</label>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost danger" id="itemDelete">Verwijderen</button>
+        <button type="button" class="btn ghost" data-close>Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Reis -->
+  <dialog class="sheet" id="tripDialog">
+    <form method="dialog" id="tripForm">
+      <div class="sheet-head">
+        <h2 id="tripDialogTitle">Stel een reis voor</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="sheet-body">
+        <label>Naam van de reis<input name="title" required maxlength="80"></label>
+        <div class="trip-picks-form" id="tripPicks"></div>
+        <label>Toelichting <small>(optioneel)</small><textarea name="note" rows="3"></textarea></label>
+        <label>Je naam <small>(optioneel)</small><input name="added_by" maxlength="40" autocomplete="given-name"></label>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost danger" id="tripDelete">Verwijderen</button>
+        <button type="button" class="btn ghost" data-close>Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Tab aanpassen -->
+  <dialog class="sheet small" id="sectionDialog">
+    <form method="dialog" id="sectionForm">
+      <div class="sheet-head">
+        <h2 id="sectionDialogTitle">Tab aanpassen</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="row-icon">
+          <label>Icoon<input name="icon" maxlength="8" class="icon-input"></label>
+          <label>Naam<input name="title" required maxlength="40"></label>
+        </div>
+        <label>Introductie <small>(optioneel)</small><textarea name="intro" rows="3"></textarea></label>
+        <label class="check"><input type="checkbox" name="show_price"> 💶 Prijs tonen</label>
+        <div id="sectionExtra" class="section-extra">
+          <div class="row-2">
+            <button type="button" class="btn" id="sectionLeft">← Naar links</button>
+            <button type="button" class="btn" id="sectionRight">Naar rechts →</button>
+          </div>
+          <button type="button" class="btn ghost danger block" id="sectionDelete">Tab verwijderen</button>
+        </div>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost" data-close>Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Titel -->
+  <dialog class="sheet small" id="siteDialog">
+    <form method="dialog" id="siteForm">
+      <div class="sheet-head">
+        <h2>Titel</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="sheet-body">
+        <label>Titel van de site<input name="site_title" maxlength="80"></label>
       </div>
       <div class="sheet-foot">
         <button type="button" class="btn ghost" data-close>Annuleren</button>
