@@ -180,7 +180,7 @@
       ${s.kind === 'map' ? `
         <div class="map-wrap">
           <div id="map" class="map" aria-label="Kaart"></div>
-          <div class="map-hint">Tik op de kaart om een pin te prikken</div>
+          <div class="map-hint">Tik op de kaart om een pin te prikken, tik op een pin voor vluchten en hotels</div>
         </div>` : ''}
       <button type="button" class="add-cta" data-action="add-item" data-id="${s.id}">
         <span class="add-cta-plus" aria-hidden="true">＋</span>
@@ -424,6 +424,9 @@
       itemDialog.close();
       await reload();
       toast(isNew ? 'Toegevoegd, bedankt! ✓' : 'Opgeslagen ✓');
+      // Nieuwe pin op de kaart: meteen vluchten en hotels in de buurt tonen.
+      const saved = findItem(id);
+      if (isNew && saved && saved.lat != null && findSection(saved.section_id).kind === 'map') openPinSheet(saved);
     } catch (err) { toast(err.message, true); }
   });
 
@@ -706,7 +709,7 @@
         const t = el.tags || {};
         const pos = elPos(el);
         return {
-          iata: String(t.iata).toUpperCase().slice(0, 3),
+          iata: String(t.iata || '').trim().toUpperCase(),
           name: t['name:nl'] || t['name:en'] || t.name || t.iata,
           international: /international/i.test([t['aerodrome:type'], t.aerodrome, t.name, t['name:en']].join(' ')),
           pos,
@@ -741,6 +744,7 @@
           km: distanceKm([loc.lat, loc.lng], pos),
         };
       })
+      .filter((h) => h.name)
       .sort((a, b) => (b.stars || 0) - (a.stars || 0) || a.km - b.km)
       .slice(0, 30);
   }
