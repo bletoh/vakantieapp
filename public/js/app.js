@@ -4,7 +4,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-  const state = { settings: {}, sections: [], editing: false };
+  const state = { settings: {}, sections: [], trips: [] };
 
   /* ---------- helpers ---------- */
 
@@ -48,14 +48,23 @@
     toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
   }
 
+  const store = {
+    get(key, fallback = '') {
+      try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(key, value); } catch { /* ignore */ }
+    },
+  };
+
   const liked = (() => {
     let set;
-    try { set = new Set(JSON.parse(localStorage.getItem('liked') || '[]')); } catch { set = new Set(); }
+    try { set = new Set(JSON.parse(store.get('liked', '[]'))); } catch { set = new Set(); }
     return {
       has: (id) => set.has(id),
       toggle(id) {
         set.has(id) ? set.delete(id) : set.add(id);
-        try { localStorage.setItem('liked', JSON.stringify([...set])); } catch { /* ignore */ }
+        store.set('liked', JSON.stringify([...set]));
         return set.has(id);
       },
     };
@@ -71,19 +80,18 @@
   };
   const sortedItems = (s) => [...s.items].sort((a, b) => a.position - b.position || a.id - b.id);
 
-  let pendingSave = Promise.resolve();
-
   async function reload() {
-    await pendingSave;
     const data = await api('/content');
     state.settings = data.settings;
     state.sections = data.sections;
+    state.trips = data.trips || [];
     render();
   }
 
   /* ---------- routing ---------- */
 
   function currentRoute() {
+    if (location.hash === '#reizen') return 'reizen';
     const m = /^#tab-(\d+)$/.exec(location.hash);
     if (m && findSection(+m[1])) return +m[1];
     return state.sections.length ? state.sections[0].id : null;
@@ -92,76 +100,41 @@
   window.addEventListener('hashchange', () => {
     renderTabs();
     renderPanel();
-    const tabsTop = $('#tabs').getBoundingClientRect().top + window.scrollY - $('.topbar').offsetHeight;
+    const tabsTop = $('#tabs').getBoundingClientRect().top + window.scrollY;
     if (window.scrollY > tabsTop) window.scrollTo({ top: tabsTop, behavior: 'smooth' });
   });
 
-  /* ---------- editable markup ---------- */
-
-  // Een bewerkbaar tekstveld. path = "settings.key" | "section.id.field" | "item.id.field"
-  function ed(path, value, { tag = 'span', cls = '', single = true, placeholder = '' } = {}) {
-    const ce = state.editing ? ` contenteditable="true" spellcheck="true"` : '';
-    return `<${tag} class="${cls}" data-edit="${path}"${single ? ' data-single' : ''}`
-      + ` data-placeholder="${esc(placeholder)}"${ce}>${esc(value)}</${tag}>`;
-  }
-
-  function imgEditBtn(path, label = 'Foto wijzigen') {
-    return `<button type="button" class="img-edit edit-only" data-image="${path}">📷 ${label}</button>`;
-  }
+  /* ---------- rendering ---------- */
 
   function stars(n) {
     if (!n) return '';
     return `<span class="stars" aria-label="${n} van 5">${'★'.repeat(n)}<span class="off">${'★'.repeat(5 - n)}</span></span>`;
   }
 
-  /* ---------- rendering ---------- */
+  function addLabel(s) {
+    const t = ((s && s.title) || '').trim();
+    return 'Voeg ' + (t ? t.charAt(0).toLowerCase() + t.slice(1) : 'iets') + ' toe';
+  }
 
   function render() {
-    document.body.classList.toggle('editing', state.editing);
-    const t = $('#editToggle');
-    t.setAttribute('aria-pressed', String(state.editing));
-    $('.edit-toggle-label', t).textContent = state.editing ? 'Klaar' : 'Bewerken';
-    renderChrome();
-    renderHero();
+    const title = state.settings.site_title || 'Vakantie';
+    document.title = title;
+    $('#brand').textContent = title;
     renderTabs();
     renderPanel();
   }
 
-  function renderChrome() {
-    const title = state.settings.site_title || 'Vakantie';
-    document.title = title;
-    $('#brand').textContent = title;
-    $('#footer').innerHTML = ed('settings.footer_text', state.settings.footer_text, {
-      single: false, placeholder: 'Voettekst…',
-    });
-  }
-
-  function renderHero() {
-    const s = state.settings;
-    const img = safeUrl(s.hero_image);
-    const chip = (key, icon, ph) => (s[key] || state.editing)
-      ? `<span class="chip-glass">${icon} ${ed('settings.' + key, s[key], { placeholder: ph })}</span>` : '';
-    $('#hero').innerHTML = `
-      ${img ? `<img class="hero-img" src="${esc(img)}" alt="">` : ''}
-      ${imgEditBtn('settings.hero_image', 'Omslagfoto')}
-      <div class="hero-content">
-        <div class="hero-meta">
-          ${chip('destination', '📍', 'Bestemming')}
-          ${chip('date_text', '🗓️', 'Datum')}
-        </div>
-        ${ed('settings.site_title', s.site_title, { tag: 'h1', placeholder: 'Titel' })}
-        ${ed('settings.site_subtitle', s.site_subtitle, { tag: 'p', single: false, placeholder: 'Ondertitel' })}
-      </div>`;
-  }
-
   function renderTabs() {
     const route = currentRoute();
-    const tab = (href, icon, title, active) =>
-      `<a class="tab${active ? ' active' : ''}" href="${href}"${active ? ' aria-current="page"' : ''}>`
-      + `<span aria-hidden="true">${esc(icon)}</span>${esc(title)}</a>`;
     const nav = $('#tabs');
-    nav.innerHTML = state.sections.map((s) => tab('#tab-' + s.id, s.icon, s.title, route === s.id)).join('')
-      + (state.editing ? '<button type="button" class="tab add" data-action="add-section">＋ Tab</button>' : '');
+    nav.innerHTML = state.sections.map((s) => {
+      const active = route === s.id;
+      return `<a class="tab${active ? ' active' : ''}" href="#tab-${s.id}"${active ? ' aria-current="page"' : ''}>`
+        + `<span aria-hidden="true">${esc(s.icon)}</span>${esc(s.title)}</a>`;
+    }).join('')
+      + `<a class="tab trips-tab${route === 'reizen' ? ' active' : ''}" href="#reizen"${route === 'reizen' ? ' aria-current="page"' : ''}>`
+      + '<span aria-hidden="true">🧳</span>Reizen</a>'
+      + '<button type="button" class="tab add" data-action="add-section" aria-label="Tab toevoegen">＋</button>';
     const active = $('.tab.active', nav);
     if (active) {
       const left = active.offsetLeft - nav.clientWidth / 2 + active.clientWidth / 2;
@@ -171,13 +144,12 @@
 
   function renderPanel() {
     const route = currentRoute();
-    const panel = $('#panel');
+    if (route === 'reizen') { $('#panel').innerHTML = tripsHtml(); return; }
     const s = findSection(route);
-    panel.innerHTML = s ? sectionHtml(s) : `
+    $('#panel').innerHTML = s ? sectionHtml(s) : `
       <div class="empty">
         <p>Er zijn nog geen tabs.</p>
-        <p class="view-only">Zet de bewerkmodus aan om een tab toe te voegen.</p>
-        <button type="button" class="btn primary edit-only" style="margin:0 auto" data-action="add-section">＋ Tab toevoegen</button>
+        <button type="button" class="btn primary" data-action="add-section">＋ Tab toevoegen</button>
       </div>`;
   }
 
@@ -185,241 +157,144 @@
     const items = sortedItems(s);
     const best = items.find((i) => i.is_best);
     const others = items.filter((i) => i !== best);
-    const idx = state.sections.indexOf(s);
 
     return `
       <div class="section-head">
-        <h2>${ed(`section.${s.id}.icon`, s.icon, { placeholder: '⭐' })}${ed(`section.${s.id}.title`, s.title, { placeholder: 'Tabnaam' })}</h2>
-        ${(s.intro || state.editing) ? ed(`section.${s.id}.intro`, s.intro, {
-          tag: 'p', cls: 'section-intro', single: false, placeholder: 'Korte introductie van dit onderdeel…',
-        }) : ''}
-        <div class="section-tools edit-only">
-          <button type="button" class="btn sm" data-action="move-section" data-id="${s.id}" data-dir="-1" ${idx === 0 ? 'disabled' : ''}>← Tab</button>
-          <button type="button" class="btn sm" data-action="move-section" data-id="${s.id}" data-dir="1" ${idx === state.sections.length - 1 ? 'disabled' : ''}>Tab →</button>
-          <button type="button" class="btn sm ghost danger" data-action="delete-section" data-id="${s.id}">Tab verwijderen</button>
-        </div>
+        <h2>
+          <span aria-hidden="true">${esc(s.icon)}</span>${esc(s.title)}
+          <button type="button" class="icon-btn section-edit" data-action="edit-section" data-id="${s.id}" aria-label="Tab aanpassen">⚙️</button>
+        </h2>
+        ${s.intro ? `<p class="section-intro">${esc(s.intro)}</p>` : ''}
       </div>
       <button type="button" class="add-cta" data-action="add-item" data-id="${s.id}">
         <span class="add-cta-plus" aria-hidden="true">＋</span>
         <span>${esc(addLabel(s))}</span>
       </button>
-      ${best ? cardHtml(best, s, items, true) : ''}
+      ${best ? cardHtml(best, s, true) : ''}
       ${others.length ? `
         <div class="label">${best ? 'Andere opties' : 'Opties'}</div>
-        <div class="grid">${others.map((i) => cardHtml(i, s, items, false)).join('')}</div>` : ''}
-      ${!items.length ? `
-        <div class="empty">
-          <p>Nog niets toegevoegd. Wees de eerste!</p>
-        </div>` : ''}`;
+        <div class="grid">${others.map((i) => cardHtml(i, s, false)).join('')}</div>` : ''}
+      ${!items.length ? '<div class="empty"><p>Nog niets toegevoegd. Wees de eerste!</p></div>' : ''}`;
   }
 
-  function addLabel(s) {
-    const t = (s.title || '').trim();
-    return 'Voeg ' + (t ? t.charAt(0).toLowerCase() + t.slice(1) : 'iets') + ' toe';
-  }
-
-  function cardHtml(it, s, items, feature) {
+  function cardHtml(it, s, feature) {
     const img = safeUrl(it.image);
     const link = safeUrl(it.link);
     const pros = lines(it.pros);
     const cons = lines(it.cons);
-    const pos = items.indexOf(it);
-    const isLiked = liked.has(it.id);
-    const p = `item.${it.id}`;
+    const price = s.show_price && it.price;
 
     return `
-      <article class="card${it.is_best ? ' best' : ''}${feature ? ' feature' : ''}" id="item-${it.id}">
-        ${it.is_best ? '<span class="badge-best">🏆 Beste keuze</span>' : ''}
-        <div class="card-media">
-          ${img ? `<img src="${esc(img)}" alt="${esc(it.title)}" loading="lazy">` : `<div class="placeholder">${esc(s.icon)}</div>`}
-          ${imgEditBtn(p + '.image')}
-        </div>
+      <article class="card${it.is_best ? ' best' : ''}${feature && img ? ' feature' : ''}" data-item="${it.id}" tabindex="0" aria-label="${esc(it.title)} aanpassen">
+        ${img ? `<div class="card-media"><img src="${esc(img)}" alt="" loading="lazy"></div>` : ''}
         <div class="card-body">
-          ${(it.subtitle || state.editing) ? ed(p + '.subtitle', it.subtitle, { cls: 'card-sub', placeholder: 'Ondertitel' }) : ''}
-          ${ed(p + '.title', it.title, { tag: 'h3', cls: 'card-title', placeholder: 'Titel' })}
+          <span class="card-hint" aria-hidden="true">✎</span>
+          ${it.is_best ? '<span class="badge-best">🏆 Beste keuze</span>' : ''}
+          ${it.subtitle ? `<div class="card-sub">${esc(it.subtitle)}</div>` : ''}
+          <h3 class="card-title">${esc(it.title)}</h3>
           ${it.added_by ? `<div class="added-by">Voorgesteld door ${esc(it.added_by)}</div>` : ''}
-          ${(it.price || it.rating || state.editing) ? `
+          ${(price || it.rating) ? `
             <div class="card-meta">
-              ${(it.price || state.editing) ? ed(p + '.price', it.price, { cls: 'price', placeholder: 'Prijs' }) : ''}
+              ${price ? `<span class="price">${esc(it.price)}</span>` : ''}
               ${stars(it.rating)}
             </div>` : ''}
-          ${(it.body || state.editing) ? ed(p + '.body', it.body, { tag: 'p', cls: 'card-text', single: false, placeholder: 'Beschrijving…' }) : ''}
+          ${it.body ? `<p class="card-text">${esc(it.body)}</p>` : ''}
           ${pros.length ? `<ul class="pc pros">${pros.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
           ${cons.length ? `<ul class="pc cons">${cons.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
           <div class="card-foot">
-            <button type="button" class="like${isLiked ? ' on' : ''}" data-action="like" data-id="${it.id}" aria-pressed="${isLiked}" aria-label="Vind ik leuk">
-              <span class="heart">❤️</span><span class="count">${it.likes || 0}</span>
-            </button>
+            ${likeBtn('item', it.id, it.likes)}
             ${link ? `<a class="link-btn" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Bekijk ↗</a>` : ''}
           </div>
-        </div>
-        <div class="card-tools edit-only">
-          <button type="button" class="btn sm${it.is_best ? ' on' : ''}" data-action="best" data-id="${it.id}">🏆 ${it.is_best ? 'Beste keuze' : 'Maak beste'}</button>
-          <button type="button" class="btn sm" data-action="edit-item" data-id="${it.id}">✎ Alles bewerken</button>
-          <button type="button" class="btn sm" data-action="move-item" data-id="${it.id}" data-dir="-1" ${pos === 0 ? 'disabled' : ''} aria-label="Omhoog">↑</button>
-          <button type="button" class="btn sm" data-action="move-item" data-id="${it.id}" data-dir="1" ${pos === items.length - 1 ? 'disabled' : ''} aria-label="Omlaag">↓</button>
-          <button type="button" class="btn sm ghost danger" data-action="delete-item" data-id="${it.id}" aria-label="Verwijderen">🗑</button>
         </div>
       </article>`;
   }
 
-  /* ---------- saving ---------- */
-
-  async function saveField(path, value) {
-    const [kind, a, b] = path.split('.');
-    if (kind === 'settings') {
-      await api('/settings', 'PUT', { [a]: value });
-      state.settings[a] = value;
-    } else if (kind === 'section') {
-      await api(`/sections/${a}`, 'PUT', { [b]: value });
-      findSection(+a)[b] = value;
-    } else if (kind === 'item') {
-      await api(`/items/${a}`, 'PUT', { [b]: value });
-      findItem(+a)[b] = value;
-    }
+  function likeBtn(kind, id, likes) {
+    const on = liked.has(kind === 'trip' ? 't' + id : id);
+    return `<button type="button" class="like${on ? ' on' : ''}" data-action="like" data-kind="${kind}" data-id="${id}" aria-pressed="${on}" aria-label="Vind ik leuk">`
+      + `<span class="heart">❤️</span><span class="count">${likes || 0}</span></button>`;
   }
 
-  // Inline tekst bewerken
-  const panelRoots = document.body;
-  panelRoots.addEventListener('focusin', (e) => {
-    const el = e.target.closest('[data-edit]');
-    if (el) el.dataset.original = el.innerText.trim();
-  });
+  function tripsHtml() {
+    const trips = [...state.trips].sort((a, b) => b.likes - a.likes || a.id - b.id);
+    return `
+      <div class="section-head">
+        <h2><span aria-hidden="true">🧳</span>Reizen</h2>
+        <p class="section-intro">Combineer suggesties uit de andere tabs, zoals een locatie, vlucht en overnachting, tot één reis.</p>
+      </div>
+      <button type="button" class="add-cta" data-action="add-trip">
+        <span class="add-cta-plus" aria-hidden="true">＋</span>
+        <span>Stel een reis voor</span>
+      </button>
+      ${trips.length ? `<div class="grid">${trips.map(tripCardHtml).join('')}</div>`
+        : '<div class="empty"><p>Nog geen reizen voorgesteld. Wees de eerste!</p></div>'}`;
+  }
 
-  panelRoots.addEventListener('focusout', async (e) => {
-    const el = e.target.closest('[data-edit]');
-    if (!el || !state.editing) return;
-    const path = el.dataset.edit;
-    const value = el.innerText.replace(/ /g, ' ').trim();
-    if (value === el.dataset.original) return;
-    const required = /\.(title)$/.test(path) && !path.startsWith('settings');
-    if (required && !value) {
-      el.innerText = el.dataset.original;
-      toast('Titel mag niet leeg zijn', true);
-      return;
+  function tripCardHtml(t) {
+    const picks = [];
+    for (const s of state.sections) {
+      for (const it of s.items) if (t.item_ids.includes(it.id)) picks.push({ s, it });
     }
-    try {
-      pendingSave = saveField(path, value);
-      await pendingSave;
-      el.dataset.original = value;
-      if (!value) el.innerHTML = '';
-      toast('Opgeslagen ✓');
-      if (path.startsWith('section.') || path === 'settings.site_title') {
-        renderChrome();
-        renderTabs();
-      }
-    } catch (err) {
-      pendingSave = Promise.resolve();
-      toast(err.message, true);
-    }
-  });
-
-  panelRoots.addEventListener('keydown', (e) => {
-    const el = e.target.closest('[data-edit]');
-    if (!el) return;
-    if (e.key === 'Enter' && el.hasAttribute('data-single')) { e.preventDefault(); el.blur(); }
-    if (e.key === 'Escape') { el.innerText = el.dataset.original || ''; el.blur(); }
-  });
-
-  panelRoots.addEventListener('paste', (e) => {
-    const el = e.target.closest('[data-edit]');
-    if (!el) return;
-    e.preventDefault();
-    let text = (e.clipboardData || window.clipboardData).getData('text/plain');
-    if (el.hasAttribute('data-single')) text = text.replace(/\s*\n\s*/g, ' ');
-    document.execCommand('insertText', false, text);
-  });
+    return `
+      <article class="card trip" data-trip="${t.id}" tabindex="0" aria-label="${esc(t.title)} aanpassen">
+        <div class="card-body">
+          <span class="card-hint" aria-hidden="true">✎</span>
+          <h3 class="card-title">${esc(t.title)}</h3>
+          ${t.added_by ? `<div class="added-by">Voorgesteld door ${esc(t.added_by)}</div>` : ''}
+          ${picks.length ? `<ul class="trip-picks">${picks.map(({ s, it }) => `
+            <li><a class="trip-pick" href="#tab-${s.id}">
+              <span class="trip-pick-icon" aria-hidden="true">${esc(s.icon)}</span>
+              <span class="trip-pick-text"><small>${esc(s.title)}</small>${esc(it.title)}</span>
+              ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}
+            </a></li>`).join('')}</ul>` : ''}
+          ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
+          <div class="card-foot">${likeBtn('trip', t.id, t.likes)}</div>
+        </div>
+      </article>`;
+  }
 
   /* ---------- actions ---------- */
 
   const actions = {
     async like(btn) {
       const id = +btn.dataset.id;
-      const on = liked.toggle(id);
+      const isTrip = btn.dataset.kind === 'trip';
+      const on = liked.toggle(isTrip ? 't' + id : id);
       btn.classList.toggle('on', on);
       btn.setAttribute('aria-pressed', String(on));
-      try {
-        const { likes } = await api(`/items/${id}/like`, 'POST', { delta: on ? 1 : -1 });
-        findItem(id).likes = likes;
-        $('.count', btn).textContent = likes;
-      } catch (err) { toast(err.message, true); }
+      const { likes } = await api(`/${isTrip ? 'trips' : 'items'}/${id}/like`, 'POST', { delta: on ? 1 : -1 });
+      (isTrip ? state.trips.find((t) => t.id === id) : findItem(id)).likes = likes;
+      $('.count', btn).textContent = likes;
     },
-
-    async 'add-section'() {
-      const { id } = await api('/sections', 'POST', { title: 'Nieuwe tab', icon: '⭐' });
-      await reload();
-      location.hash = '#tab-' + id;
-      setTimeout(() => {
-        const t = $(`[data-edit="section.${id}.title"]`);
-        if (t) { t.focus(); document.getSelection().selectAllChildren(t); }
-      }, 50);
-    },
-
-    async 'move-section'(btn) {
-      const ids = state.sections.map((s) => s.id);
-      const i = ids.indexOf(+btn.dataset.id);
-      const j = i + +btn.dataset.dir;
-      if (j < 0 || j >= ids.length) return;
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-      await api('/sections/reorder', 'PUT', { ids });
-      await reload();
-    },
-
-    async 'delete-section'(btn) {
-      const s = findSection(+btn.dataset.id);
-      if (!confirm(`Tab "${s.title}" en alle ${s.items.length} opties verwijderen?`)) return;
-      await api(`/sections/${s.id}`, 'DELETE');
-      location.hash = '';
-      await reload();
-      toast('Tab verwijderd');
-    },
-
-    'add-item'(btn) { openItemDialog(null, +btn.dataset.id); },
-    'edit-item'(btn) { openItemDialog(findItem(+btn.dataset.id)); },
-
-    async best(btn) {
-      await api(`/items/${btn.dataset.id}/best`, 'PUT');
-      await reload();
-    },
-
-    async 'move-item'(btn) {
-      const it = findItem(+btn.dataset.id);
-      const ids = sortedItems(findSection(it.section_id)).map((i) => i.id);
-      const i = ids.indexOf(it.id);
-      const j = i + +btn.dataset.dir;
-      if (j < 0 || j >= ids.length) return;
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-      await api(`/sections/${it.section_id}/items/reorder`, 'PUT', { ids });
-      await reload();
-    },
-
-    async 'delete-item'(btn) {
-      const it = findItem(+btn.dataset.id);
-      if (!confirm(`"${it.title}" verwijderen?`)) return;
-      await api(`/items/${it.id}`, 'DELETE');
-      await reload();
-      toast('Verwijderd');
-    },
+    'add-trip': () => openTripDialog(null),
+    'add-item': (btn) => openItemDialog(null, +btn.dataset.id),
+    'add-section': () => openSectionDialog(null),
+    'edit-section': (btn) => openSectionDialog(findSection(+btn.dataset.id)),
+    'edit-site': () => openSiteDialog(),
   };
 
   document.addEventListener('click', async (e) => {
-    const imgBtn = e.target.closest('[data-image]');
-    if (imgBtn) { openImageDialog(imgBtn.dataset.image); return; }
     const btn = e.target.closest('[data-action]');
-    if (!btn || !actions[btn.dataset.action]) return;
-    btn.disabled = true;
-    try { await actions[btn.dataset.action](btn); } catch (err) { toast(err.message, true); }
-    if (btn.isConnected) btn.disabled = false;
+    if (btn && actions[btn.dataset.action]) {
+      btn.disabled = true;
+      try { await actions[btn.dataset.action](btn); } catch (err) { toast(err.message, true); }
+      if (btn.isConnected) btn.disabled = false;
+      return;
+    }
+    // Tik op een kaart om hem aan te passen.
+    if (e.target.closest('a, button, dialog')) return;
+    openCard(e.target.closest('[data-item], [data-trip]'));
   });
 
-  function setEditing(on) {
-    if (document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
-    state.editing = on;
-    try { localStorage.setItem('editing', on ? '1' : ''); } catch { /* ignore */ }
-    render();
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-item], [data-trip]')) openCard(e.target);
+  });
+
+  function openCard(card) {
+    if (!card) return;
+    if (card.dataset.item) openItemDialog(findItem(+card.dataset.item));
+    else openTripDialog(state.trips.find((t) => t.id === +card.dataset.trip));
   }
-  $('#editToggle').addEventListener('click', () => setEditing(!state.editing));
-  $('#editDone').addEventListener('click', () => setEditing(false));
 
   /* ---------- dialogs ---------- */
 
@@ -429,70 +304,238 @@
     });
   });
 
-  // Item dialog
+  function imageFieldHtml(url, fallbackIcon) {
+    const img = safeUrl(url);
+    return `
+      ${img ? `<img src="${esc(img)}" alt="">` : `<div class="placeholder">${esc(fallbackIcon)}</div>`}
+      <button type="button" class="img-edit" data-pick-image>📷 ${img ? 'Wijzigen' : 'Foto toevoegen'}</button>`;
+  }
+
+  // Item
   const itemDialog = $('#itemDialog');
   const itemForm = $('#itemForm');
-  let itemCtx = null; // { id, sectionId, image }
+  let itemCtx = null; // { id, sectionId, image, wasBest }
 
-  function renderFormImage() {
-    const img = safeUrl(itemCtx.image);
+  function renderItemImage() {
     const s = findSection(itemCtx.sectionId);
-    $('#itemImageField').innerHTML = `
-      ${img ? `<img src="${esc(img)}" alt="">` : `<div class="placeholder">${esc(s ? s.icon : '📷')}</div>`}
-      <button type="button" class="img-edit" data-image="form">📷 ${img ? 'Wijzigen' : 'Foto toevoegen'}</button>`;
+    $('#itemImageField').innerHTML = imageFieldHtml(itemCtx.image, s ? s.icon : '📷');
   }
 
   function openItemDialog(item, sectionId) {
-    itemCtx = { id: item ? item.id : null, sectionId: item ? item.section_id : sectionId, image: item ? item.image : '' };
+    itemCtx = {
+      id: item ? item.id : null,
+      sectionId: item ? item.section_id : sectionId,
+      image: item ? item.image : '',
+      wasBest: !!(item && item.is_best),
+    };
     const section = findSection(itemCtx.sectionId);
-    $('#itemDialogTitle').textContent = item ? 'Bewerken' : addLabel(section);
+    $('#itemDialogTitle').textContent = item ? 'Aanpassen' : addLabel(section);
     for (const f of ['title', 'subtitle', 'price', 'rating', 'body', 'pros', 'cons', 'link', 'added_by']) {
       itemForm.elements[f].value = item ? (item[f] ?? '') : '';
     }
-    if (!item) {
-      try { itemForm.elements.added_by.value = localStorage.getItem('name') || ''; } catch { /* ignore */ }
-    }
-    renderFormImage();
+    if (!item) itemForm.elements.added_by.value = store.get('name');
+    itemForm.elements.is_best.checked = itemCtx.wasBest;
+    $('#itemDelete').hidden = !item;
+    $('#priceField').hidden = !(section && section.show_price);
+    renderItemImage();
     itemDialog.showModal();
     if (!item) setTimeout(() => itemForm.elements.title.focus(), 50);
   }
 
+  $('#itemImageField').addEventListener('click', (e) => {
+    if (!e.target.closest('[data-pick-image]')) return;
+    openImageDialog((url) => { itemCtx.image = url; renderItemImage(); });
+  });
+
   itemForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd = new FormData(itemForm);
-    const data = Object.fromEntries(fd.entries());
+    const data = Object.fromEntries(new FormData(itemForm).entries());
+    const wantBest = itemForm.elements.is_best.checked;
+    delete data.is_best;
     data.image = itemCtx.image || '';
-    try { if (data.added_by) localStorage.setItem('name', data.added_by.trim()); } catch { /* ignore */ }
+    if (data.added_by) store.set('name', data.added_by.trim());
     try {
-      if (itemCtx.id) await api(`/items/${itemCtx.id}`, 'PUT', data);
-      else await api(`/sections/${itemCtx.sectionId}/items`, 'POST', data);
       const isNew = !itemCtx.id;
+      const id = isNew
+        ? (await api(`/sections/${itemCtx.sectionId}/items`, 'POST', data)).id
+        : (await api(`/items/${itemCtx.id}`, 'PUT', data), itemCtx.id);
+      if (wantBest !== itemCtx.wasBest) await api(`/items/${id}/best`, 'PUT');
       itemDialog.close();
       await reload();
       toast(isNew ? 'Toegevoegd, bedankt! ✓' : 'Opgeslagen ✓');
     } catch (err) { toast(err.message, true); }
   });
 
-  // Image dialog
-  const imageDialog = $('#imageDialog');
-  let imageTarget = null;
+  $('#itemDelete').addEventListener('click', async () => {
+    const it = findItem(itemCtx.id);
+    if (!it || !confirm(`"${it.title}" verwijderen?`)) return;
+    try {
+      await api(`/items/${it.id}`, 'DELETE');
+      itemDialog.close();
+      await reload();
+      toast('Verwijderd');
+    } catch (err) { toast(err.message, true); }
+  });
 
-  function openImageDialog(target) {
-    imageTarget = target;
+  // Reis
+  const tripDialog = $('#tripDialog');
+  const tripForm = $('#tripForm');
+  let tripCtx = null;
+
+  function openTripDialog(trip) {
+    tripCtx = trip;
+    $('#tripDialogTitle').textContent = trip ? 'Reis aanpassen' : 'Stel een reis voor';
+    tripForm.elements.title.value = trip ? trip.title : '';
+    tripForm.elements.note.value = trip ? trip.note || '' : '';
+    tripForm.elements.added_by.value = trip ? trip.added_by || '' : store.get('name');
+    const chosen = trip ? trip.item_ids : [];
+    const sections = state.sections.filter((s) => s.items.length);
+    $('#tripPicks').innerHTML = sections.length ? sections.map((s) => `
+      <label>${esc(s.icon)} ${esc(s.title)}
+        <select data-pick>
+          <option value="">Geen</option>
+          ${sortedItems(s).map((it) => `<option value="${it.id}"${chosen.includes(it.id) ? ' selected' : ''}>${esc(it.title)}${s.show_price && it.price ? ` (${esc(it.price)})` : ''}</option>`).join('')}
+        </select>
+      </label>`).join('')
+      : '<p class="hint">Voeg eerst suggesties toe in de andere tabs, dan kun je ze hier combineren.</p>';
+    $('#tripDelete').hidden = !trip;
+    tripDialog.showModal();
+    if (!trip) setTimeout(() => tripForm.elements.title.focus(), 50);
+  }
+
+  tripForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+      title: tripForm.elements.title.value.trim(),
+      note: tripForm.elements.note.value.trim(),
+      added_by: tripForm.elements.added_by.value.trim(),
+      item_ids: $$('[data-pick]', tripForm).map((el) => +el.value).filter(Boolean),
+    };
+    if (data.added_by) store.set('name', data.added_by);
+    try {
+      if (tripCtx) await api(`/trips/${tripCtx.id}`, 'PUT', data);
+      else await api('/trips', 'POST', data);
+      const isNew = !tripCtx;
+      tripDialog.close();
+      await reload();
+      toast(isNew ? 'Reis voorgesteld, bedankt! ✓' : 'Opgeslagen ✓');
+    } catch (err) { toast(err.message, true); }
+  });
+
+  $('#tripDelete').addEventListener('click', async () => {
+    if (!tripCtx || !confirm(`Reis "${tripCtx.title}" verwijderen?`)) return;
+    try {
+      await api(`/trips/${tripCtx.id}`, 'DELETE');
+      tripDialog.close();
+      await reload();
+      toast('Verwijderd');
+    } catch (err) { toast(err.message, true); }
+  });
+
+  // Tab
+  const sectionDialog = $('#sectionDialog');
+  const sectionForm = $('#sectionForm');
+  let sectionCtx = null;
+
+  function openSectionDialog(section) {
+    sectionCtx = section;
+    $('#sectionDialogTitle').textContent = section ? 'Tab aanpassen' : 'Nieuwe tab';
+    sectionForm.elements.icon.value = section ? section.icon || '' : '';
+    sectionForm.elements.title.value = section ? section.title : '';
+    sectionForm.elements.intro.value = section ? section.intro || '' : '';
+    sectionForm.elements.show_price.checked = !!(section && section.show_price);
+    $('#sectionExtra').hidden = !section;
+    if (section) {
+      const idx = state.sections.indexOf(section);
+      $('#sectionLeft').disabled = idx === 0;
+      $('#sectionRight').disabled = idx === state.sections.length - 1;
+    }
+    sectionDialog.showModal();
+    if (!section) setTimeout(() => sectionForm.elements.title.focus(), 50);
+  }
+
+  sectionForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+      icon: sectionForm.elements.icon.value.trim() || '⭐',
+      title: sectionForm.elements.title.value.trim(),
+      intro: sectionForm.elements.intro.value.trim(),
+      show_price: sectionForm.elements.show_price.checked,
+    };
+    try {
+      let id = sectionCtx && sectionCtx.id;
+      if (id) await api(`/sections/${id}`, 'PUT', data);
+      else id = (await api('/sections', 'POST', data)).id;
+      sectionDialog.close();
+      await reload();
+      location.hash = '#tab-' + id;
+      toast('Opgeslagen ✓');
+    } catch (err) { toast(err.message, true); }
+  });
+
+  async function moveSection(dir) {
+    const ids = state.sections.map((s) => s.id);
+    const i = ids.indexOf(sectionCtx.id);
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    try {
+      await api('/sections/reorder', 'PUT', { ids });
+      await reload();
+      sectionCtx = findSection(sectionCtx.id);
+      $('#sectionLeft').disabled = j === 0;
+      $('#sectionRight').disabled = j === ids.length - 1;
+    } catch (err) { toast(err.message, true); }
+  }
+  $('#sectionLeft').addEventListener('click', () => moveSection(-1));
+  $('#sectionRight').addEventListener('click', () => moveSection(1));
+
+  $('#sectionDelete').addEventListener('click', async () => {
+    const s = sectionCtx;
+    const n = s.items.length;
+    if (!confirm(`Tab "${s.title}"${n ? ` en alles wat erin staat (${n})` : ''} verwijderen?`)) return;
+    try {
+      await api(`/sections/${s.id}`, 'DELETE');
+      sectionDialog.close();
+      history.replaceState(null, '', location.pathname);
+      await reload();
+      toast('Tab verwijderd');
+    } catch (err) { toast(err.message, true); }
+  });
+
+  // Titel
+  const siteDialog = $('#siteDialog');
+  const siteForm = $('#siteForm');
+
+  function openSiteDialog() {
+    siteForm.elements.site_title.value = state.settings.site_title || '';
+    siteDialog.showModal();
+    setTimeout(() => siteForm.elements.site_title.focus(), 50);
+  }
+
+  siteForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/settings', 'PUT', { site_title: siteForm.elements.site_title.value.trim() });
+      siteDialog.close();
+      await reload();
+      toast('Opgeslagen ✓');
+    } catch (err) { toast(err.message, true); }
+  });
+
+  // Afbeelding kiezen
+  const imageDialog = $('#imageDialog');
+  let onImagePicked = null;
+
+  function openImageDialog(callback) {
+    onImagePicked = callback;
     $('#imageUrl').value = '';
     $('#imageFile').value = '';
     imageDialog.showModal();
   }
 
-  async function applyImage(url) {
-    if (imageTarget === 'form') {
-      itemCtx.image = url;
-      renderFormImage();
-    } else {
-      await saveField(imageTarget, url);
-      if (imageTarget.startsWith('settings.')) renderHero(); else renderPanel();
-      toast('Opgeslagen ✓');
-    }
+  function pickImage(url) {
+    onImagePicked(url);
     imageDialog.close();
   }
 
@@ -529,23 +572,20 @@
     try {
       const data = await resizeImage(file);
       const { url } = await api('/upload', 'POST', { data });
-      await applyImage(url);
+      pickImage(url);
     } catch (err) { toast(err.message, true); }
   });
 
-  $('#imageUrlSave').addEventListener('click', async () => {
+  $('#imageUrlSave').addEventListener('click', () => {
     const url = safeUrl($('#imageUrl').value.trim());
     if (!url) { toast('Ongeldige link', true); return; }
-    try { await applyImage(url); } catch (err) { toast(err.message, true); }
+    pickImage(url);
   });
 
-  $('#imageRemove').addEventListener('click', async () => {
-    try { await applyImage(''); } catch (err) { toast(err.message, true); }
-  });
+  $('#imageRemove').addEventListener('click', () => pickImage(''));
 
   /* ---------- init ---------- */
 
-  try { state.editing = localStorage.getItem('editing') === '1'; } catch { /* ignore */ }
   reload().catch((err) => {
     $('#panel').innerHTML = `<div class="empty">Kon de inhoud niet laden: ${esc(err.message)}</div>`;
   });

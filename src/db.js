@@ -41,13 +41,39 @@ CREATE TABLE IF NOT EXISTS items (
   position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Een reis bundelt suggesties uit verschillende tabs (locatie, vlucht, overnachting, ...).
+CREATE TABLE IF NOT EXISTS trips (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  note TEXT,
+  added_by TEXT,
+  likes INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS trip_picks (
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  PRIMARY KEY (trip_id, item_id)
+);
 `);
 
-// Eerste keer opstarten: alleen lege tabs aanmaken, alle tekst vul je zelf in.
+// Prijs tonen we alleen bij tabs met dingen die je koopt.
+const PRICED_TABS = ['Vlucht', 'Overnachting'];
+
 // Kolommen die later zijn toegevoegd aan bestaande databases.
 const itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
 if (!itemCols.includes('added_by')) db.exec('ALTER TABLE items ADD COLUMN added_by TEXT');
 
+const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
+if (!sectionCols.includes('show_price')) {
+  db.exec('ALTER TABLE sections ADD COLUMN show_price INTEGER NOT NULL DEFAULT 0');
+  db.prepare(`UPDATE sections SET show_price = 1 WHERE title IN (${PRICED_TABS.map(() => '?').join(', ')})`)
+    .run(...PRICED_TABS);
+}
+
+// Eerste keer opstarten: alleen lege tabs aanmaken, alle tekst vul je zelf in.
 function seed() {
   const hasSections = db.prepare('SELECT COUNT(*) AS n FROM sections').get().n > 0;
   if (hasSections) return;
@@ -60,8 +86,10 @@ function seed() {
     ['Eten & drinken', '🍽️'],
     ['Budget', '💶'],
   ];
-  const insert = db.prepare('INSERT INTO sections (title, icon, intro, position) VALUES (?, ?, \'\', ?)');
-  db.transaction(() => tabs.forEach(([title, icon], i) => insert.run(title, icon, i)))();
+  const insert = db.prepare('INSERT INTO sections (title, icon, intro, position, show_price) VALUES (?, ?, \'\', ?, ?)');
+  db.transaction(() => tabs.forEach(([title, icon], i) => (
+    insert.run(title, icon, i, PRICED_TABS.includes(title) ? 1 : 0)
+  )))();
 }
 
 seed();
