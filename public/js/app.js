@@ -194,22 +194,28 @@
           tag: 'p', cls: 'section-intro', single: false, placeholder: 'Korte introductie van dit onderdeel…',
         }) : ''}
         <div class="section-tools edit-only">
-          <button type="button" class="btn primary sm" data-action="add-item" data-id="${s.id}">＋ Optie toevoegen</button>
           <button type="button" class="btn sm" data-action="move-section" data-id="${s.id}" data-dir="-1" ${idx === 0 ? 'disabled' : ''}>← Tab</button>
           <button type="button" class="btn sm" data-action="move-section" data-id="${s.id}" data-dir="1" ${idx === state.sections.length - 1 ? 'disabled' : ''}>Tab →</button>
           <button type="button" class="btn sm ghost danger" data-action="delete-section" data-id="${s.id}">Tab verwijderen</button>
         </div>
       </div>
+      <button type="button" class="add-cta" data-action="add-item" data-id="${s.id}">
+        <span class="add-cta-plus" aria-hidden="true">＋</span>
+        <span>${esc(addLabel(s))}</span>
+      </button>
       ${best ? cardHtml(best, s, items, true) : ''}
       ${others.length ? `
         <div class="label">${best ? 'Andere opties' : 'Opties'}</div>
         <div class="grid">${others.map((i) => cardHtml(i, s, items, false)).join('')}</div>` : ''}
       ${!items.length ? `
         <div class="empty">
-          <p>Nog geen opties in deze tab.</p>
-          <p class="view-only">Zet de bewerkmodus aan om iets toe te voegen.</p>
-          <button type="button" class="btn primary edit-only" style="margin:0 auto" data-action="add-item" data-id="${s.id}">＋ Eerste optie toevoegen</button>
+          <p>Nog niets toegevoegd. Wees de eerste!</p>
         </div>` : ''}`;
+  }
+
+  function addLabel(s) {
+    const t = (s.title || '').trim();
+    return 'Voeg ' + (t ? t.charAt(0).toLowerCase() + t.slice(1) : 'iets') + ' toe';
   }
 
   function cardHtml(it, s, items, feature) {
@@ -231,6 +237,7 @@
         <div class="card-body">
           ${(it.subtitle || state.editing) ? ed(p + '.subtitle', it.subtitle, { cls: 'card-sub', placeholder: 'Ondertitel' }) : ''}
           ${ed(p + '.title', it.title, { tag: 'h3', cls: 'card-title', placeholder: 'Titel' })}
+          ${it.added_by ? `<div class="added-by">Voorgesteld door ${esc(it.added_by)}</div>` : ''}
           ${(it.price || it.rating || state.editing) ? `
             <div class="card-meta">
               ${(it.price || state.editing) ? ed(p + '.price', it.price, { cls: 'price', placeholder: 'Prijs' }) : ''}
@@ -437,9 +444,13 @@
 
   function openItemDialog(item, sectionId) {
     itemCtx = { id: item ? item.id : null, sectionId: item ? item.section_id : sectionId, image: item ? item.image : '' };
-    $('#itemDialogTitle').textContent = item ? 'Optie bewerken' : 'Nieuwe optie';
-    for (const f of ['title', 'subtitle', 'price', 'rating', 'body', 'pros', 'cons', 'link']) {
+    const section = findSection(itemCtx.sectionId);
+    $('#itemDialogTitle').textContent = item ? 'Bewerken' : addLabel(section);
+    for (const f of ['title', 'subtitle', 'price', 'rating', 'body', 'pros', 'cons', 'link', 'added_by']) {
       itemForm.elements[f].value = item ? (item[f] ?? '') : '';
+    }
+    if (!item) {
+      try { itemForm.elements.added_by.value = localStorage.getItem('name') || ''; } catch { /* ignore */ }
     }
     renderFormImage();
     itemDialog.showModal();
@@ -451,12 +462,14 @@
     const fd = new FormData(itemForm);
     const data = Object.fromEntries(fd.entries());
     data.image = itemCtx.image || '';
+    try { if (data.added_by) localStorage.setItem('name', data.added_by.trim()); } catch { /* ignore */ }
     try {
       if (itemCtx.id) await api(`/items/${itemCtx.id}`, 'PUT', data);
       else await api(`/sections/${itemCtx.sectionId}/items`, 'POST', data);
+      const isNew = !itemCtx.id;
       itemDialog.close();
       await reload();
-      toast('Opgeslagen ✓');
+      toast(isNew ? 'Toegevoegd, bedankt! ✓' : 'Opgeslagen ✓');
     } catch (err) { toast(err.message, true); }
   });
 
