@@ -86,7 +86,7 @@
   function currentRoute() {
     const m = /^#tab-(\d+)$/.exec(location.hash);
     if (m && findSection(+m[1])) return +m[1];
-    return 'overzicht';
+    return state.sections.length ? state.sections[0].id : null;
   }
 
   window.addEventListener('hashchange', () => {
@@ -160,8 +160,7 @@
       `<a class="tab${active ? ' active' : ''}" href="${href}"${active ? ' aria-current="page"' : ''}>`
       + `<span aria-hidden="true">${esc(icon)}</span>${esc(title)}</a>`;
     const nav = $('#tabs');
-    nav.innerHTML = tab('#overzicht', '✨', 'Overzicht', route === 'overzicht')
-      + state.sections.map((s) => tab('#tab-' + s.id, s.icon, s.title, route === s.id)).join('')
+    nav.innerHTML = state.sections.map((s) => tab('#tab-' + s.id, s.icon, s.title, route === s.id)).join('')
       + (state.editing ? '<button type="button" class="tab add" data-action="add-section">＋ Tab</button>' : '');
     const active = $('.tab.active', nav);
     if (active) {
@@ -173,43 +172,13 @@
   function renderPanel() {
     const route = currentRoute();
     const panel = $('#panel');
-    panel.innerHTML = route === 'overzicht' ? overviewHtml() : sectionHtml(findSection(route));
-  }
-
-  function overviewHtml() {
-    const cards = state.sections.map((s) => {
-      const items = sortedItems(s);
-      const best = items.find((i) => i.is_best) || items[0];
-      const img = best && safeUrl(best.image);
-      return `
-        <a class="card plan-card${best && best.is_best ? ' best' : ''}" href="#tab-${s.id}">
-          <div class="card-media">
-            ${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : `<div class="placeholder">${esc(s.icon)}</div>`}
-          </div>
-          <div class="card-body">
-            <div class="plan-kicker">${esc(s.icon)} ${esc(s.title)}${best && best.is_best ? ' · 🏆 Beste keuze' : ''}</div>
-            ${best ? `
-              <h3 class="card-title">${esc(best.title)}</h3>
-              ${best.subtitle ? `<div class="card-sub">${esc(best.subtitle)}</div>` : ''}
-              <div class="card-meta">
-                ${best.price ? `<span class="price">${esc(best.price)}</span>` : ''}
-                ${stars(best.rating)}
-              </div>` : `<p class="plan-empty">Nog niets toegevoegd</p>`}
-            ${items.length > 1 ? `<div class="plan-more">+ ${items.length - 1} andere optie${items.length > 2 ? 's' : ''} →</div>` : ''}
-          </div>
-        </a>`;
-    }).join('');
-
-    const intro = state.settings.overview_intro || state.editing
-      ? ed('settings.overview_intro', state.settings.overview_intro, {
-        tag: 'div', cls: 'overview-intro', single: false, placeholder: 'Schrijf een introductie…',
-      }) : '';
-
-    return `
-      <div class="section-head"><h2>✨ Het plan in het kort</h2></div>
-      ${intro}
-      <div class="label">De beste keuzes</div>
-      <div class="grid">${cards}</div>`;
+    const s = findSection(route);
+    panel.innerHTML = s ? sectionHtml(s) : `
+      <div class="empty">
+        <p>Er zijn nog geen tabs.</p>
+        <p class="view-only">Zet de bewerkmodus aan om een tab toe te voegen.</p>
+        <button type="button" class="btn primary edit-only" style="margin:0 auto" data-action="add-section">＋ Tab toevoegen</button>
+      </div>`;
   }
 
   function sectionHtml(s) {
@@ -393,7 +362,7 @@
       const s = findSection(+btn.dataset.id);
       if (!confirm(`Tab "${s.title}" en alle ${s.items.length} opties verwijderen?`)) return;
       await api(`/sections/${s.id}`, 'DELETE');
-      location.hash = '#overzicht';
+      location.hash = '';
       await reload();
       toast('Tab verwijderd');
     },

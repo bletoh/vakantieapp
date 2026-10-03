@@ -8,7 +8,7 @@ const router = express.Router();
 
 const SETTING_KEYS = [
   'site_title', 'site_subtitle', 'destination', 'date_text',
-  'hero_image', 'overview_intro', 'footer_text',
+  'hero_image', 'footer_text',
 ];
 const SECTION_FIELDS = ['title', 'icon', 'intro'];
 const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons'];
