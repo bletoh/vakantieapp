@@ -23,6 +23,8 @@ const SUGGESTIONS = {
     pros: 'Veel all-inclusive hotels aan het strand\nZon en warme zee in het seizoen\nDirecte vluchten vanaf Amsterdam',
     cons: 'Transfer van ongeveer een uur vanaf het vliegveld\nIn de zomer druk en heet',
     rating: 4,
+    lat: 36.7673,
+    lng: 31.389,
   },
   Vlucht: {
     title: 'Corendon · Amsterdam → Antalya',
@@ -58,19 +60,21 @@ const TRIP_NOTE = 'Een week ultra all inclusive in Side: direct vliegen met Core
 
 function run() {
   if (db.prepare('SELECT 1 FROM trips WHERE title = ?').get(TRIP_TITLE)) {
-    console.log(`"${TRIP_TITLE}" bestaat al, er is niets toegevoegd.`);
+    addMissingPin();
+    console.log(`"${TRIP_TITLE}" bestaat al, er is niets dubbel toegevoegd.`);
     return;
   }
 
   const findSection = db.prepare('SELECT id FROM sections WHERE title = ?');
   const nextPos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM items WHERE section_id = ?');
   const insertItem = db.prepare(`
-    INSERT INTO items (section_id, title, subtitle, body, price, rating, pros, cons, link, position)
-    VALUES (@section_id, @title, @subtitle, @body, @price, @rating, @pros, @cons, @link, @position)
+    INSERT INTO items (section_id, title, subtitle, body, price, rating, pros, cons, link, position, lat, lng, location_id)
+    VALUES (@section_id, @title, @subtitle, @body, @price, @rating, @pros, @cons, @link, @position, @lat, @lng, @location_id)
   `);
 
   db.transaction(() => {
     const itemIds = [];
+    let locationId = null; // vlucht en hotel worden aan de pin van de locatie gekoppeld
     for (const [sectionTitle, s] of Object.entries(SUGGESTIONS)) {
       const section = findSection.get(sectionTitle);
       if (!section) {
@@ -88,7 +92,11 @@ function run() {
         cons: s.cons || '',
         link: s.link || '',
         position: nextPos.get(section.id).p,
+        lat: s.lat ?? null,
+        lng: s.lng ?? null,
+        location_id: sectionTitle === 'Locatie' ? null : locationId,
       });
+      if (sectionTitle === 'Locatie') locationId = lastInsertRowid;
       itemIds.push(lastInsertRowid);
       console.log(`Toegevoegd aan ${sectionTitle}: ${s.title}`);
     }
@@ -98,6 +106,22 @@ function run() {
     for (const id of itemIds) pick.run(tripId, id);
     console.log(`Reis toegevoegd: ${TRIP_TITLE}`);
   })();
+}
+
+// Voor wie het script draaide voordat er een kaart was: zet Side alsnog op de kaart
+// en koppel de vlucht en het hotel eraan.
+function addMissingPin() {
+  const loc = SUGGESTIONS.Locatie;
+  const place = db.prepare('SELECT id, lat FROM items WHERE title = ?').get(loc.title);
+  if (!place) return;
+  if (place.lat == null) {
+    db.prepare('UPDATE items SET lat = ?, lng = ? WHERE id = ?').run(loc.lat, loc.lng, place.id);
+    console.log(`Pin op de kaart gezet: ${loc.title}`);
+  }
+  const link = db.prepare('UPDATE items SET location_id = ? WHERE title = ? AND location_id IS NULL');
+  for (const key of ['Vlucht', 'Overnachting']) {
+    if (link.run(place.id, SUGGESTIONS[key].title).changes) console.log(`Gekoppeld aan de pin: ${SUGGESTIONS[key].title}`);
+  }
 }
 
 run();
