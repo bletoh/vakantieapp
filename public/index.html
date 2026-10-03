@@ -1,55 +1,96 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="nl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vakantieplanner</title>
-<link rel="stylesheet" href="/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>Onze vakantie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-<div class="wrap">
+  <header class="topbar">
+    <a href="#overzicht" class="brand" id="brand"></a>
+    <button class="edit-toggle" id="editToggle" type="button" aria-pressed="false">
+      <span class="edit-toggle-icon">✎</span><span class="edit-toggle-label">Bewerken</span>
+    </button>
+  </header>
 
-  <div class="postcard-header">
-    <div>
-      <div class="eyebrow">Vriendengroep — vakantieplanner</div>
-      <h1>Waar gaan we heen?</h1>
-      <div class="meta" id="period-line">Periode nog niet bevestigd</div>
+  <section class="hero" id="hero"></section>
+
+  <nav class="tabs" id="tabs" aria-label="Onderdelen"></nav>
+
+  <main class="panel" id="panel">
+    <div class="loading">Laden…</div>
+  </main>
+
+  <footer class="footer" id="footer"></footer>
+
+  <div class="edit-banner" id="editBanner">
+    <span>Bewerkmodus — tik op tekst om aan te passen</span>
+    <button type="button" id="editDone">Klaar</button>
+  </div>
+
+  <!-- Item bewerken -->
+  <dialog class="sheet" id="itemDialog">
+    <form method="dialog" id="itemForm">
+      <div class="sheet-head">
+        <h2 id="itemDialogTitle">Optie bewerken</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="img-field" id="itemImageField"></div>
+        <label>Titel<input name="title" required maxlength="120" placeholder="Bijv. TAP Air Portugal"></label>
+        <label>Ondertitel<input name="subtitle" maxlength="160" placeholder="Bijv. AMS → LIS · direct · 2u 45m"></label>
+        <div class="row-2">
+          <label>Prijs<input name="price" maxlength="60" placeholder="€189 p.p."></label>
+          <label>Score
+            <select name="rating">
+              <option value="">Geen</option>
+              <option value="5">★★★★★</option>
+              <option value="4">★★★★</option>
+              <option value="3">★★★</option>
+              <option value="2">★★</option>
+              <option value="1">★</option>
+            </select>
+          </label>
+        </div>
+        <label>Beschrijving<textarea name="body" rows="4" placeholder="Waarom is dit een goede optie?"></textarea></label>
+        <div class="row-2">
+          <label>Pluspunten <small>(één per regel)</small><textarea name="pros" rows="3"></textarea></label>
+          <label>Minpunten <small>(één per regel)</small><textarea name="cons" rows="3"></textarea></label>
+        </div>
+        <label>Link<input name="link" type="url" inputmode="url" placeholder="https://…"></label>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost" data-close>Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Afbeelding kiezen -->
+  <dialog class="sheet small" id="imageDialog">
+    <div class="sheet-head">
+      <h2>Afbeelding</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
     </div>
-  </div>
+    <div class="sheet-body">
+      <label class="btn primary block file-btn">
+        📷 Foto uploaden
+        <input type="file" accept="image/*" id="imageFile" hidden>
+      </label>
+      <div class="divider"><span>of</span></div>
+      <label>Plak een afbeeldingslink<input type="url" id="imageUrl" inputmode="url" placeholder="https://…/foto.jpg"></label>
+      <button type="button" class="btn block" id="imageUrlSave">Link gebruiken</button>
+      <button type="button" class="btn ghost danger block" id="imageRemove">Afbeelding verwijderen</button>
+    </div>
+  </dialog>
 
-  <div class="actions-row" style="margin-top:0; margin-bottom:20px;">
-    <a class="btn btn-outline" href="/periode.html">Periode instellen / wijzigen</a>
-  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <nav class="tabs">
-    <a href="/index.html" class="active">Overzicht</a>
-    <a href="/activiteiten.html">Activiteiten</a>
-    <a href="/kalender.html">Kalender</a>
-    <a href="/agenda.html">Agenda</a>
-    <a href="/accommodaties.html">Accommodatie</a>
-  </nav>
-
-  <div class="card">
-    <div class="card-title">Activiteiten voorstellen &amp; stemmen</div>
-    <p>Iedereen kan een idee toevoegen en stemmen op de leukste plannen.</p>
-    <a class="btn btn-outline" href="/activiteiten.html">Naar activiteiten →</a>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Wanneer kan iedereen?</div>
-    <p>Vul je beschikbare data in en zie in één oogopslag wanneer iedereen kan.</p>
-    <a class="btn btn-outline" href="/kalender.html">Naar kalender →</a>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Dag-tot-dag agenda</div>
-    <p>Zodra de periode vaststaat, bouw hier de dagplanning op.</p>
-    <a class="btn btn-outline" href="/agenda.html">Naar agenda →</a>
-  </div>
-
-</div>
-
-<script src="/js/common.js"></script>
-<script src="/js/index.js"></script>
+  <script src="/js/app.js"></script>
 </body>
 </html>

@@ -2,68 +2,65 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, 'vakantieplanner.db'));
 db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
 db.exec(`
-CREATE TABLE IF NOT EXISTS activities (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,
-  description TEXT,
-  added_by TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS votes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  activity_id INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(activity_id, name)
-);
-
-CREATE TABLE IF NOT EXISTS availability (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  date TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(name, date)
-);
-
-CREATE TABLE IF NOT EXISTS agenda_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  date TEXT NOT NULL,
-  time TEXT,
-  title TEXT NOT NULL,
-  description TEXT,
-  activity_id INTEGER REFERENCES activities(id) ON DELETE SET NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
 
-CREATE TABLE IF NOT EXISTS accommodations (
+CREATE TABLE IF NOT EXISTS sections (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
-  url TEXT,
-  notes TEXT,
-  added_by TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  icon TEXT,
+  intro TEXT,
+  position INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS accommodation_votes (
+CREATE TABLE IF NOT EXISTS items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  accommodation_id INTEGER NOT NULL REFERENCES accommodations(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(accommodation_id, name)
+  section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  subtitle TEXT,
+  body TEXT,
+  image TEXT,
+  link TEXT,
+  price TEXT,
+  rating INTEGER,
+  pros TEXT,
+  cons TEXT,
+  is_best INTEGER NOT NULL DEFAULT 0,
+  likes INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 `);
 
+// Eerste keer opstarten: alleen lege tabs aanmaken, alle tekst vul je zelf in.
+function seed() {
+  const hasSections = db.prepare('SELECT COUNT(*) AS n FROM sections').get().n > 0;
+  if (hasSections) return;
+
+  const tabs = [
+    ['Locatie', '📍'],
+    ['Vlucht', '✈️'],
+    ['Overnachting', '🏨'],
+    ['Activiteiten', '🎉'],
+    ['Eten & drinken', '🍽️'],
+    ['Budget', '💶'],
+  ];
+  const insert = db.prepare('INSERT INTO sections (title, icon, intro, position) VALUES (?, ?, \'\', ?)');
+  db.transaction(() => tabs.forEach(([title, icon], i) => insert.run(title, icon, i)))();
+}
+
+seed();
+
 module.exports = db;
+module.exports.UPLOAD_DIR = UPLOAD_DIR;
