@@ -11,7 +11,7 @@ const SETTING_KEYS = [
   'hero_image', 'footer_text',
 ];
 const SECTION_FIELDS = ['title', 'icon', 'intro'];
-const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons'];
+const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons', 'added_by'];
 
 function pick(body, fields) {
   const out = {};

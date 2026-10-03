@@ -221,6 +221,22 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .feature .card-title { font-size: 1.75rem; }
 }
 
+.add-cta {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; margin: 0 0 8px; padding: 16px 20px;
+  border: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius); background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: 1.0625rem;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.add-cta:hover { border-color: var(--accent); }
+.add-cta:active { transform: scale(.99); }
+.add-cta-plus {
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 1rem; line-height: 1;
+}
+.added-by { font-size: .8125rem; color: var(--muted); margin-top: -4px; }
+
 .empty {
   text-align: center; color: var(--muted);
   border: 2px dashed var(--line); border-radius: var(--radius);
@@ -337,6 +353,7 @@ body.editing .footer { padding-bottom: 96px; }
   transform: translate(-50%, -20px); opacity: 0; pointer-events: none;
   background: var(--text); color: var(--bg);
   padding: 9px 16px; border-radius: 999px; font-size: .875rem; font-weight: 600;
+  white-space: nowrap;
   transition: opacity .2s, transform .2s;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }

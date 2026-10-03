@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS items (
 `);
 
 // Eerste keer opstarten: alleen lege tabs aanmaken, alle tekst vul je zelf in.
+// Kolommen die later zijn toegevoegd aan bestaande databases.
+const itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
+if (!itemCols.includes('added_by')) db.exec('ALTER TABLE items ADD COLUMN added_by TEXT');
+
 function seed() {
   const hasSections = db.prepare('SELECT COUNT(*) AS n FROM sections').get().n > 0;
   if (hasSections) return;
