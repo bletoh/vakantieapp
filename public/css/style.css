@@ -221,18 +221,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .feature .card-title { font-size: 1.75rem; }
 }
 
-/* overview */
-.overview-intro {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 20px 22px; margin: 12px 0 8px; font-size: 1.0625rem; white-space: pre-line;
-}
-.plan-card { text-decoration: none; color: inherit; transition: transform .15s; }
-.plan-card:hover { transform: translateY(-2px); }
-.plan-card .card-media { aspect-ratio: 16 / 9; }
-.plan-kicker { display: flex; align-items: center; gap: 6px; font-size: .8125rem; font-weight: 700; color: var(--accent); }
-.plan-empty { color: var(--muted); font-style: italic; }
-.plan-more { font-size: .875rem; font-weight: 600; color: var(--muted); }
-
 .empty {
   text-align: center; color: var(--muted);
   border: 2px dashed var(--line); border-radius: var(--radius);
