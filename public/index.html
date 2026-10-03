@@ -55,7 +55,7 @@
           <label>Minpunten <small>(één per regel)</small><textarea name="cons" rows="3"></textarea></label>
         </div>
         <label>Link<input name="link" type="url" inputmode="url" placeholder="https://…"></label>
-        <label id="locationField">Locatie <small>(pin op de kaart)</small><select name="location_id"></select></label>
+        <label id="locationField">Bestemming <small>(pin op de kaart)</small><select name="location_id"></select></label>
         <label>Je naam <small>(optioneel)</small><input name="added_by" maxlength="40" autocomplete="given-name"></label>
         <label class="check"><input type="checkbox" name="is_best"> Dit is de beste keuze</label>
       </div>
@@ -67,19 +67,38 @@
     </form>
   </dialog>
 
-  <!-- Pin: vluchten en hotels in de buurt -->
-  <dialog class="sheet" id="pinDialog">
+  <!-- Planpaneel van een bestemming: datum, vlucht, hotel, activiteiten en eten -->
+  <dialog class="sheet plan-sheet" id="pinDialog" aria-labelledby="pinTitle">
     <div class="sheet-head">
-      <h2 id="pinTitle" tabindex="-1" autofocus>Locatie</h2>
+      <div class="plan-head">
+        <span class="plan-num" id="pinNum" aria-hidden="true"></span>
+        <div>
+          <span class="plan-kicker">Reis plannen naar</span>
+          <h2 id="pinTitle" tabindex="-1">Bestemming</h2>
+        </div>
+      </div>
       <div class="sheet-head-actions">
-        <button type="button" class="text-btn" id="pinEdit">Aanpassen</button>
-        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+        <button type="button" class="text-btn" id="pinEdit">Foto en details</button>
+        <button type="button" class="icon-btn" data-close aria-label="Planpaneel sluiten">✕</button>
       </div>
     </div>
     <div class="sheet-body pin-body" id="pinBody"></div>
     <div class="sheet-foot">
-      <button type="button" class="btn ghost danger" id="pinDelete">Pin verwijderen</button>
+      <button type="button" class="btn ghost danger" id="pinDelete">Verwijderen</button>
       <button type="button" class="btn primary" data-close>Klaar</button>
+    </div>
+  </dialog>
+
+  <!-- Datumprikker: voor welke bestemming is deze periode? -->
+  <dialog class="sheet small" id="destDialog">
+    <div class="sheet-head">
+      <h2 id="destDialogTitle">Waarheen?</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p class="hint">Kies de bestemming; de datum wordt aan die reis gekoppeld en je gaat verder plannen op de kaart.</p>
+      <div class="link-list" id="destList"></div>
+      <button type="button" class="btn block" id="destNoMap">Reis zonder bestemming maken</button>
     </div>
   </dialog>
 
@@ -112,6 +131,29 @@
       <div class="sheet-foot">
         <button type="button" class="btn ghost" data-close>Annuleren</button>
         <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Stemronde aanmaken of aanpassen -->
+  <dialog class="sheet" id="pollRoundDialog">
+    <form method="dialog" id="pollRoundForm">
+      <div class="sheet-head">
+        <h2 id="pollRoundTitle">Nieuwe stemronde</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="sheet-body">
+        <label>Vraag<input name="title" required maxlength="80"></label>
+        <fieldset class="pick-group">
+          <legend>Kies uit deze bestemmingen</legend>
+          <div id="pollRoundOptions"></div>
+        </fieldset>
+        <label>Stemmen kan tot en met <small>(leeg = tot je hem sluit)</small><input type="date" name="closes_at"></label>
+        <label>Wie stemmen er mee? <small>(één naam per regel; zo zie je wie nog moet stemmen)</small><textarea name="participants" rows="4"></textarea></label>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost" data-close>Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan en delen</button>
       </div>
     </form>
   </dialog>
@@ -161,6 +203,8 @@
             <option value="map">Kaart met pinnen</option>
             <option value="flight">Vluchten (te koppelen aan een pin)</option>
             <option value="stay">Overnachtingen (te koppelen aan een pin)</option>
+            <option value="do">Activiteiten (te koppelen aan een pin)</option>
+            <option value="eat">Eten &amp; drinken (te koppelen aan een pin)</option>
           </select>
         </label>
         <label class="check"><input type="checkbox" name="show_price"> Prijs tonen</label>

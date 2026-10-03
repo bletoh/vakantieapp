@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const db = require('../db');
+const { nearby } = require('../nearby');
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const SETTING_KEYS = [
   'poll_start', 'poll_end', 'trip_days',
 ];
 const SECTION_FIELDS = ['title', 'icon', 'intro', 'show_price', 'kind'];
-const SECTION_KINDS = ['', 'map', 'flight', 'stay'];
+const SECTION_KINDS = ['', 'map', 'flight', 'stay', 'do', 'eat'];
 const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons', 'added_by', 'lat', 'lng', 'location_id'];
 
 function pick(body, fields) {
@@ -59,7 +60,7 @@ function getContent() {
   const picks = db.prepare('SELECT trip_id, item_id FROM trip_picks').all();
   for (const t of trips) t.item_ids = picks.filter((p) => p.trip_id === t.id).map((p) => p.item_id);
   const availability = db.prepare('SELECT name, date FROM available_days ORDER BY name, date').all();
-  return { settings, sections, trips, availability };
+  return { settings, sections, trips, availability, polls: db.getPolls() };
 }
 
 router.get('/content', (req, res) => {
@@ -252,6 +253,97 @@ router.put('/availability', (req, res) => {
 router.delete('/availability/:name', (req, res) => {
   db.prepare('DELETE FROM available_days WHERE name = ?').run(req.params.name);
   res.json({ ok: true });
+});
+
+/* ---------- stemronde ---------- */
+
+function pollBody(body) {
+  const title = String(body.title || '').trim().slice(0, 80) || 'Waar gaan we heen?';
+  const closesAt = ISO_DATE.test(body.closes_at || '') ? body.closes_at : null;
+  const participants = (Array.isArray(body.participants) ? body.participants : String(body.participants || '').split(/[\n,]/))
+    .map((n) => String(n).trim().slice(0, 40)).filter(Boolean);
+  const itemIds = (Array.isArray(body.item_ids) ? body.item_ids : [])
+    .map((n) => parseInt(n, 10))
+    .filter((n) => db.prepare("SELECT 1 FROM items i JOIN sections s ON s.id = i.section_id WHERE i.id = ? AND s.kind = 'map'").get(n));
+  return { title, closesAt, participants: [...new Set(participants)].join('\n'), itemIds };
+}
+
+function setPollOptions(id, itemIds) {
+  db.prepare('DELETE FROM poll_options WHERE poll_id = ?').run(id);
+  // Stemmen op een bestemming die niet meer meedoet, vervallen.
+  db.prepare(`DELETE FROM poll_votes WHERE poll_id = ? AND item_id NOT IN (${itemIds.map(() => '?').join(', ') || 'NULL'})`).run(id, ...itemIds);
+  const insert = db.prepare('INSERT OR IGNORE INTO poll_options (poll_id, item_id) VALUES (?, ?)');
+  for (const itemId of itemIds) insert.run(id, itemId);
+}
+
+router.post('/polls', (req, res) => {
+  const p = pollBody(req.body);
+  if (p.itemIds.length < 2) return res.status(400).json({ error: 'Kies minstens twee bestemmingen' });
+  const slug = crypto.randomBytes(5).toString('base64url').replace(/[-_]/g, 'x').slice(0, 7);
+  const id = db.transaction(() => {
+    const newId = db.prepare('INSERT INTO polls (slug, title, closes_at, participants, created_by) VALUES (?, ?, ?, ?, ?)')
+      .run(slug, p.title, p.closesAt, p.participants, String(req.body.created_by || '').trim().slice(0, 40)).lastInsertRowid;
+    setPollOptions(newId, p.itemIds);
+    return newId;
+  })();
+  res.json({ id, slug });
+});
+
+router.put('/polls/:id', (req, res) => {
+  const poll = db.prepare('SELECT * FROM polls WHERE id = ?').get(req.params.id);
+  if (!poll) return res.status(404).json({ error: 'Stemronde niet gevonden' });
+  db.transaction(() => {
+    if ('closed' in req.body) db.prepare('UPDATE polls SET closed = ? WHERE id = ?').run(req.body.closed ? 1 : 0, poll.id);
+    if ('title' in req.body || 'item_ids' in req.body || 'closes_at' in req.body || 'participants' in req.body) {
+      const p = pollBody({ title: poll.title, closes_at: poll.closes_at, participants: poll.participants, ...req.body });
+      db.prepare('UPDATE polls SET title = ?, closes_at = ?, participants = ? WHERE id = ?').run(p.title, p.closesAt, p.participants, poll.id);
+      if ('item_ids' in req.body) {
+        if (p.itemIds.length < 2) {
+          const err = new Error('Kies minstens twee bestemmingen');
+          err.status = 400;
+          throw err;
+        }
+        setPollOptions(poll.id, p.itemIds);
+      }
+    }
+  })();
+  res.json({ ok: true });
+});
+
+router.delete('/polls/:id', (req, res) => {
+  db.prepare('DELETE FROM polls WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+router.put('/polls/:id/vote', (req, res) => {
+  const poll = db.getPolls().find((p) => p.id === +req.params.id);
+  if (!poll) return res.status(404).json({ error: 'Stemronde niet gevonden' });
+  if (poll.is_closed) return res.status(400).json({ error: 'Deze stemronde is gesloten' });
+  const name = String(req.body.name || '').trim().slice(0, 40);
+  if (!name) return res.status(400).json({ error: 'Vul eerst je naam in' });
+  const itemId = parseInt(req.body.item_id, 10);
+  if (!itemId) {
+    db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND name = ?').run(poll.id, name);
+  } else {
+    if (!poll.item_ids.includes(itemId)) return res.status(400).json({ error: 'Deze bestemming doet niet mee' });
+    db.prepare(`INSERT INTO poll_votes (poll_id, name, item_id) VALUES (?, ?, ?)
+      ON CONFLICT(poll_id, name) DO UPDATE SET item_id = excluded.item_id, voted_at = datetime('now')`).run(poll.id, name, itemId);
+  }
+  res.json({ ok: true });
+});
+
+/* ---------- in de buurt (OpenStreetMap, met cache) ---------- */
+
+router.get('/nearby/:kind', async (req, res, next) => {
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) return res.status(400).json({ error: 'Ongeldige plek' });
+  try {
+    res.json(await nearby(req.params.kind, lat, lng));
+  } catch (err) {
+    console.error('nearby', err.message);
+    res.status(err.status || 502).json({ error: 'OpenStreetMap is even niet bereikbaar' });
+  }
 });
 
 /* ---------- uploads ---------- */

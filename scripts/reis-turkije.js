@@ -65,7 +65,9 @@ function run() {
     return;
   }
 
-  const findSection = db.prepare('SELECT id FROM sections WHERE title = ?');
+  // Tabs op soort zoeken: de kaarttab heette eerst "Locatie" en nu "Kaart".
+  const KIND = { Locatie: 'map', Vlucht: 'flight', Overnachting: 'stay' };
+  const findSection = db.prepare('SELECT id FROM sections WHERE kind = ? ORDER BY position, id');
   const nextPos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM items WHERE section_id = ?');
   const insertItem = db.prepare(`
     INSERT INTO items (section_id, title, subtitle, body, price, rating, pros, cons, link, position, lat, lng, location_id)
@@ -76,7 +78,7 @@ function run() {
     const itemIds = [];
     let locationId = null; // vlucht en hotel worden aan de pin van de locatie gekoppeld
     for (const [sectionTitle, s] of Object.entries(SUGGESTIONS)) {
-      const section = findSection.get(sectionTitle);
+      const section = findSection.get(KIND[sectionTitle]);
       if (!section) {
         console.log(`Tab "${sectionTitle}" niet gevonden, deze suggestie is overgeslagen.`);
         continue;
