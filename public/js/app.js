@@ -180,7 +180,7 @@
       ${s.kind === 'map' ? `
         <div class="map-wrap">
           <div id="map" class="map" aria-label="Kaart"></div>
-          <div class="map-hint">Tik op de kaart om een pin te prikken</div>
+          <div class="map-hint">Tik op de kaart om een pin te prikken, tik op een pin voor vluchten en hotels</div>
         </div>` : ''}
       <button type="button" class="add-cta" data-action="add-item" data-id="${s.id}">
         <span class="add-cta-plus" aria-hidden="true">＋</span>
@@ -424,6 +424,9 @@
       itemDialog.close();
       await reload();
       toast(isNew ? 'Toegevoegd, bedankt! ✓' : 'Opgeslagen ✓');
+      // Nieuwe pin op de kaart: meteen vluchten en hotels in de buurt tonen.
+      const saved = findItem(id);
+      if (isNew && saved && saved.lat != null && findSection(saved.section_id).kind === 'map') openPinSheet(saved);
     } catch (err) { toast(err.message, true); }
   });
 
@@ -559,12 +562,28 @@
     setTimeout(() => { if (map) { map.invalidateSize(); drawFlights(true); } }, 150);
   }
 
+  // Tik op de kaart: pin direct opslaan en meteen vluchten en hotels tonen.
+  // De plaatsnaam wordt op de achtergrond opgezocht en daarna ingevuld.
+  let pinning = false;
   async function addPinAt(section, latlng) {
-    const preset = { lat: latlng.lat, lng: latlng.lng };
-    openItemDialog(null, section.id, preset);
-    const name = await placeName(latlng.lat, latlng.lng);
-    if (name && itemDialog.open && !itemCtx.id && !itemForm.elements.title.value) {
-      itemForm.elements.title.value = name;
+    if (pinning) return;
+    pinning = true;
+    const { lat, lng } = latlng;
+    try {
+      const { id } = await api(`/sections/${section.id}/items`, 'POST', {
+        title: 'Nieuwe plek', lat, lng, added_by: store.get('name'),
+      });
+      await reload();
+      openPinSheet(findItem(id));
+      const name = await placeName(lat, lng);
+      if (name && findItem(id) && findItem(id).title === 'Nieuwe plek') {
+        await api(`/items/${id}`, 'PUT', { title: name });
+        await reload();
+      }
+    } catch (err) {
+      toast(err.message, true);
+    } finally {
+      pinning = false;
     }
   }
 
@@ -706,7 +725,7 @@
         const t = el.tags || {};
         const pos = elPos(el);
         return {
-          iata: String(t.iata).toUpperCase().slice(0, 3),
+          iata: String(t.iata || '').trim().toUpperCase(),
           name: t['name:nl'] || t['name:en'] || t.name || t.iata,
           international: /international/i.test([t['aerodrome:type'], t.aerodrome, t.name, t['name:en']].join(' ')),
           pos,
@@ -741,6 +760,7 @@
           km: distanceKm([loc.lat, loc.lng], pos),
         };
       })
+      .filter((h) => h.name)
       .sort((a, b) => (b.stars || 0) - (a.stars || 0) || a.km - b.km)
       .slice(0, 30);
   }
@@ -845,6 +865,17 @@
         <p class="fineprint">Hotelgegevens: © OpenStreetMap-bijdragers.</p>
       </section>`}`;
   }
+
+  $('#pinDelete').addEventListener('click', async () => {
+    const loc = findItem(pinCtx.locId);
+    if (!loc || !confirm(`Pin "${loc.title}" verwijderen?`)) return;
+    try {
+      await api(`/items/${loc.id}`, 'DELETE');
+      pinDialog.close();
+      await reload();
+      toast('Pin verwijderd');
+    } catch (err) { toast(err.message, true); }
+  });
 
   $('#pinEdit').addEventListener('click', () => {
     const loc = findItem(pinCtx.locId);
