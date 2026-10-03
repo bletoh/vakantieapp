@@ -1,7 +1,7 @@
 {
   "name": "vakantieplanner",
-  "version": "2.0.0",
-  "description": "Vakantieplanner - activiteiten, beschikbaarheid en dagplanning voor de vriendengroep",
+  "version": "3.0.0",
+  "description": "Vakantieblog om aan vrienden te laten zien wat de beste bestemming, vlucht en overnachting is",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js"
