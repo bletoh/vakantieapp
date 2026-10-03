@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS trip_picks (
   item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   PRIMARY KEY (trip_id, item_id)
 );
+
+-- Datumprikker: per persoon de dagen waarop diegene kan (datum als JJJJ-MM-DD).
+CREATE TABLE IF NOT EXISTS available_days (
+  name TEXT NOT NULL,
+  date TEXT NOT NULL,
+  PRIMARY KEY (name, date)
+);
 `);
 
 // Prijs tonen we alleen bij tabs met dingen die je koopt.
@@ -73,6 +80,10 @@ if (!itemCols.includes('lng')) db.exec('ALTER TABLE items ADD COLUMN lng REAL');
 if (!itemCols.includes('location_id')) {
   db.exec('ALTER TABLE items ADD COLUMN location_id INTEGER REFERENCES items(id) ON DELETE SET NULL');
 }
+
+const tripCols = db.prepare('PRAGMA table_info(trips)').all().map((c) => c.name);
+if (!tripCols.includes('start_date')) db.exec('ALTER TABLE trips ADD COLUMN start_date TEXT');
+if (!tripCols.includes('end_date')) db.exec('ALTER TABLE trips ADD COLUMN end_date TEXT');
 
 const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
 if (!sectionCols.includes('show_price')) {

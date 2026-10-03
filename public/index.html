@@ -95,6 +95,27 @@
     </div>
   </dialog>
 
+  <!-- Periode datumprikker -->
+  <dialog class="sheet small" id="pollDialog">
+    <form method="dialog" id="pollForm">
+      <div class="sheet-head">
+        <h2>Periode instellen</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="row-2">
+          <label>Van<input type="date" name="poll_start" required></label>
+          <label>Tot en met<input type="date" name="poll_end" required></label>
+        </div>
+        <label>Hoeveel dagen duurt de reis?<input type="number" name="trip_days" min="1" max="60" required></label>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost" data-close>Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Reis -->
   <dialog class="sheet" id="tripDialog">
     <form method="dialog" id="tripForm">
@@ -104,6 +125,11 @@
       </div>
       <div class="sheet-body">
         <label>Naam van de reis<input name="title" required maxlength="80"></label>
+        <div class="row-2">
+          <label>Vertrek<input type="date" name="start_date"></label>
+          <label>Terug<input type="date" name="end_date"></label>
+        </div>
+        <p id="tripDateWarn" class="date-warn" hidden></p>
         <div class="trip-picks-form" id="tripPicks"></div>
         <label>Toelichting <small>(optioneel)</small><textarea name="note" rows="3"></textarea></label>
         <label>Je naam <small>(optioneel)</small><input name="added_by" maxlength="40" autocomplete="given-name"></label>
