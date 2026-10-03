@@ -39,13 +39,27 @@
   }
 
   let toastTimer;
-  function toast(msg, isError = false) {
+  // Melding onderin. Met `action` ({ label, run }) krijgt hij een knop, bijv. "Ongedaan maken".
+  function toast(msg, isError = false, action = null) {
     const el = $('#toast');
+    // Een modaal venster maakt de rest van de pagina onklikbaar; zet de melding er dan in.
+    const modal = $$('dialog[open]').reverse().find((d) => d.matches(':modal'));
+    const host = modal || document.body;
+    if (el.parentElement !== host) host.append(el);
     el.textContent = msg;
     el.classList.toggle('error', isError);
+    el.classList.toggle('has-action', !!action);
+    if (action) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-btn';
+      btn.textContent = action.label;
+      btn.addEventListener('click', () => { el.classList.remove('show'); action.run(); }, { once: true });
+      el.append(btn);
+    }
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+    toastTimer = setTimeout(() => el.classList.remove('show'), action ? 6000 : 2200);
   }
 
   const store = {
@@ -192,7 +206,7 @@
       + tabLink('#datum', '<span aria-hidden="true">📅</span> Datum', route === 'datum')
       + tabLink('#reizen', '<span aria-hidden="true">🧳</span> Reizen', route === 'reizen')
       + tabLink('#stem', `<span aria-hidden="true">🗳️</span> Stemmen${openPolls().length ? ` <span class="tab-badge">${openPolls().length}</span>` : ''}`, route === 'stem')
-      + lists.map((s) => tabLink(`#tab-${s.id}`, esc(s.title), route === s.id)).join('')
+      + lists.map((s) => tabLink(`#tab-${s.id}`, `${s.icon ? `<span aria-hidden="true">${esc(s.icon)}</span> ` : ''}${esc(s.title)}`, route === s.id)).join('')
       + '<button type="button" class="tab add" data-action="add-section" aria-label="Tab toevoegen">＋</button>';
     const active = $('.tab.active', nav);
     if (active) {
@@ -460,7 +474,7 @@
         const days = rangeDays(weekStart, addDays(weekStart, 6));
         const inRange = days.filter((d) => d >= cfg.start && d <= cfg.end && d.slice(0, 7) === first.slice(0, 7));
         weeks.push(`
-          <button type="button" class="wk" data-week="${inRange.join(',')}"${inRange.length ? '' : ' disabled'} aria-label="Hele week">${weekNumber(weekStart)}</button>
+          <button type="button" class="wk" data-week="${inRange.join(',')}"${inRange.length ? '' : ' disabled'} aria-label="Week ${weekNumber(weekStart)}: hele week aan of uit">${weekNumber(weekStart)}</button>
           ${days.map((d) => {
             if (d.slice(0, 7) !== first.slice(0, 7)) return '<span class="day out"></span>';
             const active = d >= cfg.start && d <= cfg.end;
@@ -475,7 +489,14 @@
       }
       months.push(`
         <div class="month">
-          <h3 class="month-title">${fmt(first, { month: 'long', year: 'numeric' })}</h3>
+          <div class="month-head">
+            <h3 class="month-title">${fmt(first, { month: 'long', year: 'numeric' })}</h3>
+            ${me ? (() => {
+              const md = rangeDays(first, last).filter((d) => d >= cfg.start && d <= cfg.end);
+              const all = md.length && md.every((d) => mine.has(d));
+              return md.length ? `<button type="button" class="text-btn" data-week="${md.join(',')}" aria-pressed="${all}">${all ? 'Hele maand wissen' : 'Ik kan de hele maand'}</button>` : '';
+            })() : ''}
+          </div>
           <div class="cal">
             <span class="dow"></span>${['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'].map((d) => `<span class="dow">${d}</span>`).join('')}
             ${weeks.join('')}
@@ -495,9 +516,7 @@
         <p class="section-intro">Vink aan wanneer je kunt. De beste periodes van ${cfg.days} dagen tussen ${fmtShort(cfg.start)} en ${fmtShort(cfg.end)} komen bovenaan.</p>
       </div>
 
-      <label class="poll-name">Jouw naam
-        <input id="pollName" value="${esc(me)}" maxlength="40" autocomplete="given-name" placeholder="Naam">
-      </label>
+      ${whoHtml(me, people)}
 
       <div class="label">Beste periodes</div>
       ${best.length ? `<ol class="best-list">${best.map((w, i) => `
@@ -525,9 +544,13 @@
           </li>`;
         }).join('')}</ul>` : ''}
 
-      <div class="label">Kalender</div>
-      <p class="hint">Tik op een dag als je kunt. Tik op het weeknummer voor de hele week. Hoe donkerder, hoe meer mensen kunnen.</p>
-      <div class="months">${months.join('')}</div>
+      <div class="label" id="kalender">Kalender</div>
+      ${me ? `<div class="quick-fill">
+          <button type="button" class="btn sm primary" data-fill="all">✓ Ik kan de hele periode</button>
+          ${mine.size ? '<button type="button" class="btn sm ghost" data-fill="none">Alles wissen</button>' : ''}
+        </div>` : ''}
+      <p class="hint">Tik of veeg over de dagen waarop je kunt. Kun je bijna altijd? Kies <em>Ik kan de hele periode</em> en tik weg wanneer je niet kunt. Donkerder = meer mensen kunnen.</p>
+      <div class="months${me ? '' : ' locked'}">${months.join('')}</div>
 
       ${people.length ? `
         <div class="label">Ingevuld door</div>
@@ -537,6 +560,43 @@
         </ul>` : ''}`;
   }
 
+  // Wie vult er in? Bekende namen zijn één tik; een nieuwe naam typ je één keer.
+  let whoOpen = false;
+  function whoHtml(me, people) {
+    if (me && !whoOpen) {
+      return `<div class="who who-set">
+        <span>Je vult in als <strong>${esc(me)}</strong></span>
+        <button type="button" class="text-btn" data-who-change>Iemand anders?</button>
+      </div>`;
+    }
+    const names = [...new Set([...people, ...knownPeople()])].filter((n) => n && n !== me).sort((a, b) => a.localeCompare(b, 'nl'));
+    return `<div class="who" id="who">
+      <p class="who-q">Wie ben jij?</p>
+      ${names.length ? `<div class="who-chips">${names.map((n) => `<button type="button" class="chip-btn" data-who="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
+      <form class="who-new" data-who-form>
+        <label class="sr-only" for="pollName">${names.length ? 'Of typ een nieuwe naam' : 'Je naam'}</label>
+        <input id="pollName" maxlength="40" autocomplete="given-name" placeholder="${names.length ? 'Nieuwe naam' : 'Je naam'}" enterkeyhint="done">
+        <button type="submit" class="btn primary">Verder</button>
+      </form>
+    </div>`;
+  }
+
+  function chooseWho(name) {
+    name = String(name || '').trim();
+    if (!name) return;
+    store.set('name', name);
+    whoOpen = false;
+    renderPanel();
+    const cal = $('#kalender');
+    if (cal) cal.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
+
+  document.addEventListener('submit', (e) => {
+    if (!e.target.matches('[data-who-form]')) return;
+    e.preventDefault();
+    chooseWho($('#pollName').value);
+  });
+
   function weekNumber(iso) {
     const d = toDate(iso);
     d.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7));
@@ -545,14 +605,15 @@
   }
 
   function pollName() {
-    const input = $('#pollName');
-    const name = (input ? input.value : store.get('name')).trim();
+    const name = whoOpen ? '' : store.get('name').trim();
     if (!name) {
-      toast('Vul eerst je naam in', true);
-      if (input) input.focus();
+      toast('Kies eerst wie je bent', true);
+      const who = $('#who');
+      if (who) who.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      const input = $('#pollName');
+      if (input && !$('.chip-btn')) input.focus({ preventScroll: true });
       return '';
     }
-    store.set('name', name);
     return name;
   }
 
@@ -575,9 +636,67 @@
     }
   }
 
+  // Vegen over dagen: alle dagen waar je overheen gaat krijgen dezelfde stand als de eerste.
+  // touch-action: pan-y laat verticaal scrollen werken; horizontaal vegen vinkt dagen aan.
+  let paint = null;
+  document.addEventListener('pointerdown', (e) => {
+    const day = e.target.closest && e.target.closest('.months [data-day]');
+    if (!day || day.disabled || e.button > 0 || !store.get('name').trim() || whoOpen) return;
+    paint = { on: day.getAttribute('aria-pressed') !== 'true', days: new Set([day.dataset.day]), moved: false, id: e.pointerId };
+    if (day.hasPointerCapture && day.hasPointerCapture(e.pointerId)) day.releasePointerCapture(e.pointerId);
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!paint || e.pointerId !== paint.id) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const day = el && el.closest && el.closest('.months [data-day]');
+    if (!day || day.disabled || paint.days.has(day.dataset.day)) return;
+    paint.days.add(day.dataset.day);
+    paint.moved = true;
+    for (const d of paint.days) {
+      const b = $(`[data-day="${d}"]`);
+      if (b) b.classList.toggle('painting', true), b.classList.toggle('paint-off', !paint.on);
+    }
+  });
+  const endPaint = (e) => {
+    if (!paint || (e && e.pointerId !== paint.id)) return;
+    const p = paint;
+    paint = null;
+    if (!p.moved) return; // gewone tik: dat doet de klik
+    suppressDayClick = true;
+    setTimeout(() => { suppressDayClick = false; }, 400);
+    setAvailable([...p.days], p.on);
+  };
+  document.addEventListener('pointerup', endPaint);
+  document.addEventListener('pointercancel', () => {
+    // Bijv. de browser begint te scrollen: wat al geveegd is toch opslaan.
+    if (paint && paint.moved) endPaint({ pointerId: paint.id }); else paint = null;
+  });
+  let suppressDayClick = false;
+
   document.addEventListener('click', (e) => {
+    const who = e.target.closest('[data-who]');
+    if (who) { chooseWho(who.dataset.who); return; }
+    if (e.target.closest('[data-who-change]')) {
+      whoOpen = true;
+      renderPanel();
+      const first = $('#who .chip-btn') || $('#pollName');
+      if (first) first.focus();
+      return;
+    }
+    const fill = e.target.closest('[data-fill]');
+    if (fill) {
+      const cfg = pollSettings();
+      const all = rangeDays(cfg.start, cfg.end);
+      if (fill.dataset.fill === 'none' && !confirm('Al je aangevinkte dagen wissen?')) return;
+      setAvailable(all, fill.dataset.fill === 'all');
+      toast(fill.dataset.fill === 'all' ? 'Hele periode aangevinkt ✓ Tik nu de dagen weg waarop je niet kunt.' : 'Gewist');
+      return;
+    }
     const day = e.target.closest('[data-day]');
-    if (day && !day.disabled) { setAvailable([day.dataset.day], day.getAttribute('aria-pressed') !== 'true'); return; }
+    if (day && !day.disabled) {
+      if (!suppressDayClick) setAvailable([day.dataset.day], day.getAttribute('aria-pressed') !== 'true');
+      return;
+    }
     const wk = e.target.closest('[data-week]');
     if (wk && !wk.disabled) {
       const dates = wk.dataset.week.split(',').filter(Boolean);
@@ -586,12 +705,6 @@
     }
   });
 
-  document.addEventListener('change', (e) => {
-    if (e.target.id === 'pollName') {
-      store.set('name', e.target.value.trim());
-      renderPanel();
-    }
-  });
 
   /* ---------- actions ---------- */
 
@@ -998,10 +1111,56 @@
     map = L.map(el, { worldCopyJump: true, zoomSnap: 0.5, zoomControl: false });
     L.control.zoom({ position: 'bottomright', zoomInTitle: 'Inzoomen', zoomOutTitle: 'Uitzoomen' }).addTo(map);
     // Standaardkaart van OpenStreetMap: gratis, geen API-sleutel nodig.
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
-    }).addTo(map);
+    });
+    // Satellietbeeld van Esri (gratis, geen sleutel), met plaatsnamen eroverheen.
+    const satellite = L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Beelden &copy; Esri, Maxar, Earthstar Geographics', maxZoom: 19, maxNativeZoom: 18,
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19, maxNativeZoom: 18,
+      }),
+    ]);
+    const setBase = (sat) => {
+      (sat ? streets : satellite).remove();
+      (sat ? satellite : streets).addTo(map);
+      el.classList.toggle('sat', sat);
+      store.set('mapLayer', sat ? 'sat' : '');
+      const b = el.querySelector('[data-map="layer"]');
+      if (b) { b.setAttribute('aria-pressed', String(sat)); b.title = sat ? 'Toon de gewone kaart' : 'Toon satellietbeeld'; }
+    };
+
+    const Buttons = L.Control.extend({
+      options: { position: 'bottomright' },
+      onAdd() {
+        const box = L.DomUtil.create('div', 'leaflet-bar map-buttons');
+        box.innerHTML = `
+          <a href="#" role="button" data-map="fit" title="Toon alle pinnen" aria-label="Toon alle pinnen">⤢</a>
+          <a href="#" role="button" data-map="layer" title="Toon satellietbeeld" aria-label="Satellietbeeld" aria-pressed="false">🛰️</a>`;
+        L.DomEvent.disableClickPropagation(box);
+        L.DomEvent.on(box, 'click', (e) => {
+          const a = e.target.closest('[data-map]');
+          if (!a) return;
+          L.DomEvent.preventDefault(e);
+          if (a.dataset.map === 'fit') fitAll(true);
+          else setBase(!el.classList.contains('sat'));
+        });
+        return box;
+      },
+    });
+    new Buttons().addTo(map);
+    setBase(store.get('mapLayer') === 'sat');
+
+    // Ver uitgezoomd: alleen nummers en namen, geen datums; heel ver: alleen nummers.
+    const zoomClass = () => {
+      const z = map.getZoom();
+      el.classList.toggle('zoom-far', z < 5);
+      el.classList.toggle('zoom-world', z < 3.5);
+    };
+    map.on('zoomend', zoomClass);
 
     L.circleMarker(HOME, { radius: 6, color: '#fff', weight: 2, fillColor: '#f97316', fillOpacity: 1, interactive: false })
       .addTo(map).bindTooltip('🇳🇱 Thuis', { direction: 'top', offset: [0, -6] });
@@ -1011,8 +1170,15 @@
 
     if (!pinFromHash()) fitAll(false);
     else { const p = pinFromHash(); if (hasPos(p)) map.setView([p.lat, p.lng], 9); else fitAll(false); }
+    zoomClass();
 
-    map.on('click', (e) => addPinAt(e.latlng));
+    // Even wachten bij een klik: een dubbelklik is inzoomen, geen nieuwe pin.
+    let clickTimer = null;
+    map.on('click', (e) => {
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => addPinAt(e.latlng), 280);
+    });
+    map.on('dblclick zoomstart movestart', () => clearTimeout(clickTimer));
     // Na het tekenen (en als de kaart zichtbaar is) de vluchten laten vliegen.
     setTimeout(() => { if (map) { map.invalidateSize(); drawFlights(true); } }, 150);
     setupSearch();
@@ -1023,7 +1189,8 @@
     const pins = locations().filter(hasPos);
     if (pins.length) {
       const b = L.latLngBounds([HOME, ...pins.map((p) => [p.lat, p.lng])]);
-      map.fitBounds(b, { padding: [50, 50], maxZoom: 7, animate });
+      // Bovenaan extra ruimte, zodat geen pin achter het zoekveld valt.
+      map.fitBounds(b, { paddingTopLeft: [50, 150], paddingBottomRight: [70, 40], maxZoom: 7, animate });
     } else {
       map.setView([44, 12], 3.5, { animate });
     }
@@ -1073,7 +1240,7 @@
   // Tik op de kaart: pin direct opslaan en meteen het planpaneel tonen.
   // De plaatsnaam wordt op de achtergrond opgezocht en daarna ingevuld.
   let pinning = false;
-  async function addPinAt(latlng, title) {
+  async function addPinAt(latlng, title, { fly = true } = {}) {
     const section = mapSection();
     if (pinning || !section) return;
     pinning = true;
@@ -1083,8 +1250,8 @@
         title: title || 'Nieuwe plek', lat, lng, added_by: store.get('name'),
       });
       await reload();
-      openPin(id);
-      toast('Pin geprikt ✓');
+      openPin(id, { fly });
+      toast('Pin geprikt ✓', false, { label: 'Ongedaan maken', run: () => undoPin(id) });
       if (!title) {
         const name = await placeName(lat, lng);
         if (name && findItem(id) && findItem(id).title === 'Nieuwe plek') {
@@ -1097,6 +1264,16 @@
     } finally {
       pinning = false;
     }
+  }
+
+  // Per ongeluk geprikt: pin meteen weer weghalen.
+  async function undoPin(id) {
+    try {
+      if (pinCtx && pinCtx.locId === id) closePinSheet();
+      await api(`/items/${id}`, 'DELETE');
+      await reload();
+      toast('Pin weggehaald');
+    } catch (err) { toast(err.message, true); }
   }
 
   // Plaatsnaam opzoeken bij de aangeklikte plek (OpenStreetMap Nominatim).
@@ -1150,15 +1327,42 @@
     }
   }
 
+  // Met één tik op de kaart: populaire vakantiebestemmingen vanuit Nederland.
+  const POPULAR = [
+    ['Barcelona', 'Spanje', 41.3874, 2.1686], ['Lissabon', 'Portugal', 38.7223, -9.1393],
+    ['Rome', 'Italië', 41.9028, 12.4964], ['Kreta', 'Griekenland', 35.2401, 24.8093],
+    ['Mallorca', 'Spanje', 39.6953, 3.0176], ['Side', 'Turkije', 36.7673, 31.3890],
+    ['Málaga', 'Spanje', 36.7213, -4.4214], ['Algarve', 'Portugal', 37.0179, -7.9307],
+    ['Parijs', 'Frankrijk', 48.8566, 2.3522], ['Gran Canaria', 'Spanje', 27.9202, -15.5474],
+    ['Dubrovnik', 'Kroatië', 42.6507, 18.0944], ['Praag', 'Tsjechië', 50.0755, 14.4378],
+  ].map(([name, country, lat, lng]) => ({ name, country, detail: country, lat, lng }));
+
+  function showPopular() {
+    const list = $('#placeResults');
+    const input = $('#placeSearch');
+    if (!list || !input || input.value.trim()) return;
+    const picks = POPULAR.filter((r) => !nearbyPin(r)).slice(0, 8);
+    if (!picks.length) return;
+    searchResults = picks;
+    searchActive = -1;
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    list.innerHTML = `<li class="place-head" role="presentation">Populair · tik om toe te voegen</li>`
+      + picks.map((r, i) => `<li id="place-${i}" role="option" data-place="${i}" aria-selected="false" class="place-chip">
+        <strong>${esc(r.name)}</strong><small>${esc(r.country)}</small></li>`).join('');
+    markActive();
+  }
+
   function setupSearch() {
     const input = $('#placeSearch');
     if (!input) return;
+    input.addEventListener('focus', showPopular);
     input.addEventListener('input', () => {
       clearTimeout(searchTimer);
       pendingEnter = false;
       searchBusy = input.value.trim().length >= 2;
       const q = input.value.trim();
-      if (q.length < 2) { showResults([]); return; }
+      if (q.length < 2) { showResults([]); if (!q) showPopular(); return; }
       searchTimer = setTimeout(async () => {
         const seq = ++searchSeq;
         renderResultsLoading();
@@ -1179,6 +1383,7 @@
         markActive();
       } else if (e.key === 'Enter') {
         e.preventDefault();
+        if (!input.value.trim() && searchActive < 0) return;
         if (searchResults.length && !searchBusy) choosePlace(searchResults[Math.max(0, searchActive)]);
         else if (input.value.trim().length >= 2) pendingEnter = true;
       } else if (e.key === 'Escape') {
@@ -1246,8 +1451,11 @@
     input.blur();
     const near = nearbyPin(r);
     if (near) { openPin(near.id, { fly: true }); return; }
-    if (map) map.flyTo([r.lat, r.lng], 9, { duration: 1.2 });
-    await addPinAt({ lat: r.lat, lng: r.lng }, [r.name, r.country !== r.name ? r.country : ''].filter(Boolean).join(', '));
+    // Een land of regio past in beeld; een stad of eiland zoomt in tot zichtbaar is wat er in de buurt ligt.
+    const e = Array.isArray(r.extent) && r.extent.length === 4 ? r.extent : null;
+    if (map && e) map.flyToBounds([[e[3], e[0]], [e[1], e[2]]], { paddingTopLeft: [40, 120], paddingBottomRight: [40, 40], maxZoom: 10, duration: reducedMotion() ? 0 : 1.2 });
+    else if (map) map.flyTo([r.lat, r.lng], 9, { duration: reducedMotion() ? 0 : 1.2 });
+    await addPinAt({ lat: r.lat, lng: r.lng }, [r.name, r.country !== r.name ? r.country : ''].filter(Boolean).join(', '), { fly: !map });
   }
 
   /* --- vluchtanimatie --- */
@@ -1799,6 +2007,22 @@
     await setTripDates(loc, start.value || end.value, end.value || start.value);
   });
 
+  // Na het afronden van een stap meteen door naar de volgende die nog open staat.
+  function advanceStep(from) {
+    if (!pinCtx) return;
+    const loc = findItem(pinCtx.locId);
+    if (!loc) return;
+    const p = planOf(loc);
+    const next = !(p.trip && p.trip.start_date) ? 'when' : !p.per.flight.length ? 'flight' : !p.per.stay.length ? 'stay' : 'do';
+    if (next === from) return;
+    pinCtx.open.delete(from);
+    pinCtx.open.add(next);
+    renderPinSheet();
+    if (next === 'do' && hasPos(loc)) loadPinData('do', () => findPlaces(loc, 'do'));
+    const el = $(`[data-step="${next}"]`, pinDialog);
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
+
   async function setTripDates(loc, start, end) {
     if (start > end) [start, end] = [end, start];
     try {
@@ -1824,6 +2048,7 @@
     if (win) {
       const [start, end] = win.dataset.setDates.split('|');
       await setTripDates(loc, start, end);
+      advanceStep('when');
       return;
     }
     if (t.closest('[data-clear-dates]')) {
@@ -1860,9 +2085,12 @@
     const add = t.closest('[data-add-airport], [data-add-hotel], [data-add-do], [data-add-eat]');
     if (!add) return;
     add.disabled = true;
+    const kind = add.matches('[data-add-airport]') ? 'flight' : add.matches('[data-add-hotel]') ? 'stay' : null;
+    const first = kind && !planOf(loc).per[kind].length;
     try {
       await addSuggestion(loc, add);
       toast('Toegevoegd aan de reis ✓');
+      if (first) advanceStep(kind);
     } catch (err) {
       add.disabled = false;
       toast(err.message, true);

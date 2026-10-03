@@ -847,3 +847,96 @@ button.chip:hover { background: var(--navy-soft); }
   * { transition: none !important; animation: none !important; }
 }
 .when-range { margin: 0; }
+
+/* melding met knop (bijv. ongedaan maken) */
+.toast.has-action { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding-right: 8px; }
+.toast-btn {
+  font: inherit; font-weight: 600; color: inherit; background: none; cursor: pointer;
+  border: 1px solid currentColor; border-radius: 4px; padding: 4px 10px; min-height: 32px;
+}
+.toast-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* populaire bestemmingen in het zoekveld */
+.place-head { padding: 8px 12px 4px; font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.place-results:has(.place-chip) { display: grid; grid-template-columns: 1fr 1fr; }
+.place-results:has(.place-chip) .place-head { grid-column: 1 / -1; }
+
+/* eigen kaartknoppen boven de zoomknoppen */
+.map-buttons a { display: grid !important; place-items: center; font-size: 1.05rem; text-decoration: none; }
+.map-buttons a[aria-pressed="true"] { background: var(--navy-soft); }
+.map.sat .leaflet-tile-pane { filter: none; }
+
+/* labels rustiger bij ver uitzoomen */
+.map.zoom-far .pin-label small { display: none; }
+.map.zoom-world .leaflet-tooltip.pin-label { display: none; }
+
+/* ---------- datumprikker: wie ben jij, snel invullen, vegen ---------- */
+
+.who { display: grid; gap: 10px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); max-width: 560px; }
+.who-q { margin: 0; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; }
+.who-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-btn {
+  min-height: 44px; padding: 0 16px; border-radius: 999px; font-weight: 600;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+}
+.chip-btn:hover, .chip-btn:focus-visible { border-color: var(--ink); }
+.chip-btn:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.who-new { display: flex; gap: 8px; }
+.who-new input {
+  flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--ink); padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper);
+}
+.who-new input:focus { outline: 2px solid var(--navy); outline-offset: -1px; border-color: transparent; }
+.who-set { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 10px 14px; }
+
+.quick-fill { display: flex; flex-wrap: wrap; gap: 8px; }
+.month-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.month-head .month-title { margin: 0; }
+.months.locked .day:not(.off) { opacity: .6; }
+
+/* dagen: grotere tikvlakken, vegen in de breedte, duidelijk "ik kan" */
+.cal { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.day { min-height: 42px; -webkit-tap-highlight-color: transparent; }
+.day.mine { background: color-mix(in srgb, var(--good) 80%, var(--surface)); color: #fff; border-color: var(--good); }
+.day.mine::after { color: #fff; font-size: .7rem; }
+.day.mine .dcount { color: rgba(255, 255, 255, .85); }
+@media (prefers-color-scheme: dark) {
+  .day.mine { background: color-mix(in srgb, var(--good) 55%, var(--surface)); color: var(--ink); }
+  .day.mine::after, .day.mine .dcount { color: var(--ink); }
+}
+.day.painting { outline: 3px solid var(--good); outline-offset: -3px; }
+.day.painting.paint-off { outline-color: var(--bad); opacity: .6; }
+.day:focus-visible, .wk:focus-visible { outline: 3px solid var(--navy); outline-offset: 1px; }
+
+/* meldingen mogen afbreken op smalle schermen */
+.toast { white-space: normal; max-width: calc(100vw - 32px); width: max-content; text-align: center; }
+
+/* ---------- mobiel: geen titel, tabs als balk onderaan ---------- */
+
+@media (max-width: 600px) {
+  .tabs {
+    position: fixed; top: auto; bottom: 0; left: 0; right: 0; z-index: 900;
+    gap: 0; padding: 0 0 var(--safe-b);
+    border-bottom: none; border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 94%, transparent);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  }
+  .tab {
+    flex: 1 0 64px; min-height: 56px; padding: 6px 4px 7px; margin: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    font-size: .6875rem; line-height: 1.2; text-align: center;
+    border-bottom: none; border-top: 3px solid transparent;
+  }
+  .tab > span[aria-hidden] { font-size: 1.3rem; line-height: 1.1; }
+  .tab.active { border-top-color: var(--red); border-bottom: none; }
+  .tab.add { flex: 0 0 48px; font-size: 1.4rem; }
+  .tab-badge { position: absolute; transform: translate(14px, -16px); }
+  .tab { position: relative; }
+  .panel { padding-bottom: calc(96px + var(--safe-b)); }
+  .planner { padding-bottom: calc(96px + var(--safe-b)); }
+  .toast { bottom: calc(76px + var(--safe-b)); }
+  dialog .toast { bottom: calc(20px + var(--safe-b)); }
+  html { scroll-padding-top: 12px; }
+  /* kaart iets hoger nu de titel weg is */
+  .map { height: min(64dvh, 600px); }
+}
