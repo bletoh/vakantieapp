@@ -244,8 +244,8 @@
           ${picks.length ? `<ul class="trip-picks">${picks.map(({ s, it }) => `
             <li><a class="trip-pick" href="#tab-${s.id}">
               <span class="trip-pick-icon" aria-hidden="true">${esc(s.icon)}</span>
-              <span class="trip-pick-text"><small>${esc(s.title)}</small>${esc(it.title)}</span>
-              ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}
+              <span class="trip-pick-text"><small>${esc(s.title)}</small>${esc(it.title)}
+                ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}</span>
             </a></li>`).join('')}</ul>` : ''}
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
           <div class="card-foot">${likeBtn('trip', t.id, t.likes)}</div>
