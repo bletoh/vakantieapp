@@ -91,6 +91,7 @@
     state.sections = data.sections;
     state.trips = data.trips || [];
     render();
+    if (pinCtx && pinDialog.open) renderPinSheet();
   }
 
   /* ---------- routing ---------- */
@@ -99,7 +100,8 @@
     if (location.hash === '#reizen') return 'reizen';
     const m = /^#tab-(\d+)$/.exec(location.hash);
     if (m && findSection(+m[1])) return +m[1];
-    return state.sections.length ? state.sections[0].id : null;
+    const first = state.sections.find((s) => s.kind !== 'flight' && s.kind !== 'stay') || state.sections[0];
+    return first ? first.id : null;
   }
 
   window.addEventListener('hashchange', () => {
@@ -132,7 +134,10 @@
   function renderTabs() {
     const route = currentRoute();
     const nav = $('#tabs');
-    nav.innerHTML = state.sections.map((s) => {
+    // Vluchten en overnachtingen beheer je via de pinnen op de kaart; die tabs tonen we niet.
+    const hasMap = sectionsOfKind('map').length > 0;
+    const visible = state.sections.filter((s) => !(hasMap && (s.kind === 'flight' || s.kind === 'stay')));
+    nav.innerHTML = visible.map((s) => {
       const active = route === s.id;
       return `<a class="tab${active ? ' active' : ''}" href="#tab-${s.id}"${active ? ' aria-current="page"' : ''}>${esc(s.title)}</a>`;
     }).join('')
@@ -185,21 +190,36 @@
       ${others.length ? `
         <div class="label">${best ? 'Andere opties' : 'Opties'}</div>
         <div class="grid">${others.map((i) => cardHtml(i, s, false)).join('')}</div>` : ''}
-      ${!items.length ? '<div class="empty"><p>Nog niets toegevoegd. Wees de eerste!</p></div>' : ''}`;
+      ${!items.length ? '<div class="empty"><p>Nog niets toegevoegd. Wees de eerste!</p></div>' : ''}
+      ${s.kind === 'map' ? unlinkedHtml() : ''}`;
+  }
+
+  // Vluchten en overnachtingen die nog niet aan een pin hangen, zodat ze niet zoekraken.
+  function unlinkedHtml() {
+    const rest = state.sections
+      .filter((s) => s.kind === 'flight' || s.kind === 'stay')
+      .flatMap((s) => sortedItems(s).filter((it) => !it.location_id || !findItem(it.location_id)).map((it) => ({ s, it })));
+    if (!rest.length) return '';
+    return `
+      <div class="label">Nog niet aan een pin gekoppeld</div>
+      <div class="grid">${rest.map(({ s, it }) => cardHtml(it, s, false)).join('')}</div>`;
   }
 
   // Koppelingen tussen een locatie (pin) en vluchten/overnachtingen, als kleine chips.
   function linkChipsHtml(it, s) {
     if (s.kind === 'map') {
       const links = linkedTo(it.id);
-      const pin = it.lat != null ? '<span class="chip">Op de kaart</span>' : '';
+      const pin = it.lat != null ? `<button type="button" class="chip" data-action="open-pin" data-id="${it.id}">📍 Op de kaart · vluchten en hotels</button>` : '';
       if (!links.length && !pin) return '';
-      return `<div class="chips">${pin}${links.map(({ s: ls, it: li }) =>
-        `<a class="chip" href="#tab-${ls.id}">${esc(ls.icon)} ${esc(li.title)}</a>`).join('')}</div>`;
+      return `<div class="chips">${pin}</div>${links.length ? `<ul class="linked">${links.map(({ s: ls, it: li }) => `
+        <li><button type="button" data-action="edit-item" data-id="${li.id}">
+          <span aria-hidden="true">${esc(ls.icon)}</span><span>${esc(li.title)}</span>
+          ${ls.show_price && li.price ? `<span class="price">${esc(li.price)}</span>` : ''}
+        </button></li>`).join('')}</ul>` : ''}`;
     }
     const loc = it.location_id && findItem(it.location_id);
     if (!loc) return '';
-    return `<div class="chips"><a class="chip" href="#tab-${loc.section_id}">📍 ${esc(loc.title)}</a></div>`;
+    return `<div class="chips"><button type="button" class="chip" data-action="open-pin" data-id="${loc.id}">📍 ${esc(loc.title)}</button></div>`;
   }
 
   function cardHtml(it, s, feature) {
@@ -299,6 +319,7 @@
     'edit-section': (btn) => openSectionDialog(findSection(+btn.dataset.id)),
     'edit-site': () => openSiteDialog(),
     'edit-item': (btn) => openItemDialog(findItem(+btn.dataset.id)),
+    'open-pin': (btn) => openPinSheet(findItem(+btn.dataset.id)),
     'link-item': (btn) => openLinkDialog(findItem(+btn.dataset.loc), findSection(+btn.dataset.section)),
   };
 
@@ -503,9 +524,8 @@
     for (const it of pins) {
       const m = L.marker([it.lat, it.lng], { icon: pinIcon(it), draggable: true, autoPan: true })
         .addTo(map)
-        .bindTooltip(esc(it.title), { permanent: true, interactive: true, direction: 'top', className: 'pin-label' })
-        .bindPopup(() => pinPopupHtml(it.id), { minWidth: 220, maxWidth: 280 });
-      m.on('click', () => flyTo(it.id));
+        .bindTooltip(esc(it.title), { permanent: true, interactive: true, direction: 'top', className: 'pin-label' });
+      m.on('click', () => { flyTo(it.id); openPinSheet(it); });
       m.on('dragend', async () => {
         const { lat, lng } = m.getLatLng();
         try {
@@ -518,41 +538,25 @@
       markers[it.id] = m;
     }
 
+    // Opgeslagen hotels als kleine stipjes rond hun pin.
+    for (const st of sectionsOfKind('stay')) {
+      for (const h of st.items) {
+        if (h.lat == null || !h.location_id) continue;
+        L.circleMarker([h.lat, h.lng], { radius: 5, weight: 2, color: '#fff', fillColor: '#b8412c', fillOpacity: 1 })
+          .addTo(map).bindTooltip(esc(h.title), { direction: 'top', offset: [0, -4] })
+          .on('click', () => openItemDialog(h));
+      }
+    }
+
     if (pins.length) {
       map.fitBounds(L.latLngBounds([HOME, ...pins.map((p) => [p.lat, p.lng])]), { padding: [40, 40], maxZoom: 7 });
     } else {
       map.setView([45, 12], 3.5);
     }
 
-    // Een tik die alleen een open pinvenster sluit, prikt geen nieuwe pin.
-    let popupClosedAt = 0;
-    map.on('popupclose', () => { popupClosedAt = Date.now(); });
-    map.on('click', (e) => {
-      if (Date.now() - popupClosedAt < 400) return;
-      addPinAt(section, e.latlng);
-    });
+    map.on('click', (e) => addPinAt(section, e.latlng));
     // Na het tekenen (en als de kaart zichtbaar is) de vluchten laten vliegen.
     setTimeout(() => { if (map) { map.invalidateSize(); drawFlights(true); } }, 150);
-  }
-
-  function pinPopupHtml(locId) {
-    const loc = findItem(locId);
-    if (!loc) return '';
-    const links = linkedTo(locId);
-    const linkable = state.sections.filter((s) => s.kind === 'flight' || s.kind === 'stay');
-    return `
-      <div class="pin-popup">
-        <strong class="pin-popup-title">${esc(loc.title)}</strong>
-        ${links.length ? `<ul class="pin-links">${links.map(({ s, it }) => `
-          <li><button type="button" data-action="edit-item" data-id="${it.id}">
-            <span>${esc(s.icon)}</span><span>${esc(it.title)}</span>
-            ${s.show_price && it.price ? `<small>${esc(it.price)}</small>` : ''}
-          </button></li>`).join('')}</ul>` : '<p class="hint">Nog niets gekoppeld.</p>'}
-        <div class="pin-actions">
-          ${linkable.map((s) => `<button type="button" class="btn sm" data-action="link-item" data-loc="${loc.id}" data-section="${s.id}">＋ ${esc(s.icon)} ${esc(s.title)}</button>`).join('')}
-          <button type="button" class="btn sm ghost" data-action="edit-item" data-id="${loc.id}">✎ Aanpassen</button>
-        </div>
-      </div>`;
   }
 
   async function addPinAt(section, latlng) {
@@ -652,6 +656,245 @@
     };
     requestAnimationFrame(step);
   }
+
+  /* ---------- pinpaneel: vluchten en hotels in de buurt (gratis, via OpenStreetMap) ---------- */
+
+  const HOME_CODE = 'AMS';
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  const overpassCache = new Map();
+  const pinDialog = $('#pinDialog');
+  let pinCtx = null;
+
+  async function overpass(query) {
+    if (overpassCache.has(query)) return overpassCache.get(query);
+    let lastErr;
+    for (const url of OVERPASS) {
+      try {
+        const res = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(query) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = (await res.json()).elements || [];
+        overpassCache.set(query, data);
+        return data;
+      } catch (err) { lastErr = err; }
+    }
+    throw lastErr;
+  }
+
+  function distanceKm(a, b) {
+    const R = 6371;
+    const rad = (d) => d * Math.PI / 180;
+    const dLat = rad(b[0] - a[0]);
+    const dLng = rad(b[1] - a[1]);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  // Grove schatting: ± 800 km/u kruissnelheid plus een half uur voor opstijgen en landen.
+  function flightTime(km) {
+    const min = Math.round(km / 800 * 60 + 30);
+    return `${Math.floor(min / 60)}u ${String(min % 60).padStart(2, '0')}m`;
+  }
+
+  const elPos = (el) => (el.center ? [el.center.lat, el.center.lon] : [el.lat, el.lon]);
+
+  async function findAirports(loc) {
+    const q = `[out:json][timeout:25];nwr(around:200000,${loc.lat},${loc.lng})["aeroway"="aerodrome"]["iata"];out center tags;`;
+    const els = await overpass(q);
+    const seen = new Set();
+    return els
+      .map((el) => {
+        const t = el.tags || {};
+        const pos = elPos(el);
+        return {
+          iata: String(t.iata).toUpperCase().slice(0, 3),
+          name: t['name:nl'] || t['name:en'] || t.name || t.iata,
+          international: /international/i.test([t['aerodrome:type'], t.aerodrome, t.name, t['name:en']].join(' ')),
+          pos,
+          km: distanceKm([loc.lat, loc.lng], pos),
+        };
+      })
+      .filter((a) => /^[A-Z]{3}$/.test(a.iata) && a.iata !== HOME_CODE && !seen.has(a.iata) && seen.add(a.iata))
+      .sort((a, b) => (b.international - a.international) || a.km - b.km)
+      .slice(0, 3)
+      .sort((a, b) => a.km - b.km);
+  }
+
+  const HOTEL_TYPES = { hotel: 'Hotel', resort: 'Resort', apartment: 'Appartement', hostel: 'Hostel', guest_house: 'Pension', motel: 'Motel' };
+
+  async function findHotels(loc) {
+    const q = `[out:json][timeout:25];nwr(around:5000,${loc.lat},${loc.lng})["tourism"~"^(hotel|resort|apartment|hostel|guest_house|motel)$"]["name"];out center tags 80;`;
+    const els = await overpass(q);
+    return els
+      .map((el) => {
+        const t = el.tags || {};
+        const pos = elPos(el);
+        const stars = parseInt(t.stars, 10);
+        return {
+          name: t.name,
+          type: HOTEL_TYPES[t.tourism] || 'Verblijf',
+          stars: stars >= 1 && stars <= 7 ? stars : null,
+          website: safeUrl(t.website || t['contact:website'] || ''),
+          street: [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '),
+          city: t['addr:city'] || '',
+          osm: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+          pos,
+          km: distanceKm([loc.lat, loc.lng], pos),
+        };
+      })
+      .sort((a, b) => (b.stars || 0) - (a.stars || 0) || a.km - b.km)
+      .slice(0, 30);
+  }
+
+  const kmText = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(km < 10 ? 1 : 0).replace('.', ',')} km`);
+
+  async function ensureSection(kind, title, icon) {
+    const found = sectionsOfKind(kind)[0];
+    if (found) return found;
+    const { id } = await api('/sections', 'POST', { title, icon, kind, show_price: true });
+    await reload();
+    return findSection(id);
+  }
+
+  function openPinSheet(loc) {
+    if (!loc) return;
+    pinCtx = { locId: loc.id };
+    renderPinSheet();
+    if (!pinDialog.open) pinDialog.showModal();
+    if (loc.lat == null) return;
+    loadPinData('airports', () => findAirports(loc));
+    loadPinData('hotels', () => findHotels(loc));
+  }
+
+  async function loadPinData(key, fn) {
+    const locId = pinCtx.locId;
+    pinCtx[key] = 'loading';
+    renderPinSheet();
+    let result;
+    try { result = await fn(); } catch { result = 'error'; }
+    if (!pinCtx || pinCtx.locId !== locId) return;
+    pinCtx[key] = result;
+    renderPinSheet();
+  }
+
+  function renderPinSheet() {
+    const loc = findItem(pinCtx.locId);
+    if (!loc) { pinDialog.close(); return; }
+    $('#pinTitle').textContent = loc.title;
+    const links = linkedTo(loc.id);
+    const titles = new Set(links.map(({ it }) => it.title));
+    const status = (v, empty) => (v === 'loading' ? '<p class="hint">Zoeken…</p>'
+      : v === 'error' ? '<p class="hint">Kon niet laden. Probeer het later nog eens.</p>'
+        : !v || !v.length ? `<p class="hint">${empty}</p>` : '');
+
+    const airports = Array.isArray(pinCtx.airports) ? pinCtx.airports : [];
+    const hotels = Array.isArray(pinCtx.hotels) ? pinCtx.hotels : [];
+
+    $('#pinBody').innerHTML = `
+      ${links.length ? `
+        <section>
+          <h3 class="sheet-label">Gekozen</h3>
+          <ul class="linked">${links.map(({ s, it }) => `
+            <li><button type="button" data-action="edit-item" data-id="${it.id}">
+              <span aria-hidden="true">${esc(s.icon)}</span><span>${esc(it.title)}</span>
+              ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}
+            </button></li>`).join('')}</ul>
+        </section>` : ''}
+      ${state.sections.some((s) => s.kind === 'flight' || s.kind === 'stay') ? `
+        <div class="pin-actions">${state.sections.filter((s) => s.kind === 'flight' || s.kind === 'stay').map((s) =>
+          `<button type="button" class="btn sm" data-action="link-item" data-loc="${loc.id}" data-section="${s.id}">＋ Eigen ${esc(s.title.toLowerCase())} kiezen</button>`).join('')}
+        </div>` : ''}
+      ${loc.lat == null ? '<p class="hint">Deze locatie staat nog niet op de kaart. Prik een pin om vluchten en hotels te zoeken.</p>' : `
+      <section>
+        <h3 class="sheet-label">Vluchten vanaf Amsterdam</h3>
+        ${status(pinCtx.airports, 'Geen vliegveld gevonden binnen 200 km.')}
+        <ul class="results">${airports.map((a, i) => {
+          const title = `Amsterdam → ${a.name} (${a.iata})`;
+          const added = titles.has(title);
+          return `<li class="result">
+            <div class="result-main">
+              <strong>${HOME_CODE} → ${esc(a.iata)}</strong>
+              <span>${esc(a.name)}</span>
+              <small>${kmText(a.km)} van de pin · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen</small>
+              <span class="result-links">
+                <a href="https://www.google.com/travel/flights?q=${encodeURIComponent(`Flights from ${HOME_CODE} to ${a.iata}`)}" target="_blank" rel="noopener">Google Flights ↗</a>
+                <a href="https://www.skyscanner.nl/transport/vluchten/${HOME_CODE.toLowerCase()}/${esc(a.iata.toLowerCase())}/" target="_blank" rel="noopener">Skyscanner ↗</a>
+              </span>
+            </div>
+            <button type="button" class="btn sm${added ? ' done' : ''}" data-add-airport="${i}"${added ? ' disabled' : ''}>${added ? '✓ Toegevoegd' : '＋ Toevoegen'}</button>
+          </li>`;
+        }).join('')}</ul>
+        <p class="fineprint">Vliegtijd is een schatting. Prijzen zie je via de links.</p>
+      </section>
+      <section>
+        <h3 class="sheet-label">Hotels in de buurt</h3>
+        ${status(pinCtx.hotels, 'Geen hotels gevonden binnen 5 km.')}
+        <ul class="results">${hotels.map((h, i) => {
+          const added = titles.has(h.name);
+          return `<li class="result">
+            <div class="result-main">
+              <strong>${esc(h.name)}</strong>
+              <small>${h.stars ? `${'★'.repeat(h.stars)} · ` : ''}${esc(h.type)} · ${kmText(h.km)}</small>
+              <span class="result-links">
+                ${h.website ? `<a href="${esc(h.website)}" target="_blank" rel="noopener">Website ↗</a>` : ''}
+                <a href="https://www.booking.com/searchresults.nl.html?ss=${encodeURIComponent(`${h.name} ${h.city || loc.title}`)}" target="_blank" rel="noopener">Prijs op Booking ↗</a>
+              </span>
+            </div>
+            <button type="button" class="btn sm${added ? ' done' : ''}" data-add-hotel="${i}"${added ? ' disabled' : ''}>${added ? '✓ Toegevoegd' : '＋ Toevoegen'}</button>
+          </li>`;
+        }).join('')}</ul>
+        <p class="fineprint">Hotelgegevens: © OpenStreetMap-bijdragers.</p>
+      </section>`}`;
+  }
+
+  $('#pinEdit').addEventListener('click', () => {
+    const loc = findItem(pinCtx.locId);
+    pinDialog.close();
+    openItemDialog(loc);
+  });
+
+  $('#pinBody').addEventListener('click', async (e) => {
+    const aBtn = e.target.closest('[data-add-airport]');
+    const hBtn = e.target.closest('[data-add-hotel]');
+    if (!aBtn && !hBtn) return;
+    const loc = findItem(pinCtx.locId);
+    const btn = aBtn || hBtn;
+    btn.disabled = true;
+    try {
+      if (aBtn) {
+        const a = pinCtx.airports[+aBtn.dataset.addAirport];
+        const section = await ensureSection('flight', 'Vlucht', '✈️');
+        await api(`/sections/${section.id}/items`, 'POST', {
+          title: `Amsterdam → ${a.name} (${a.iata})`,
+          subtitle: `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen`,
+          body: `Vliegveld op ${kmText(a.km)} van ${loc.title}. Vliegtijd is een schatting; zoek de prijs op via de link.`,
+          link: `https://www.google.com/travel/flights?q=${encodeURIComponent(`Flights from ${HOME_CODE} to ${a.iata}`)}`,
+          location_id: loc.id,
+          added_by: store.get('name'),
+        });
+      } else {
+        const h = pinCtx.hotels[+hBtn.dataset.addHotel];
+        const section = await ensureSection('stay', 'Overnachting', '🏨');
+        await api(`/sections/${section.id}/items`, 'POST', {
+          title: h.name,
+          subtitle: [h.stars ? `${h.stars}★` : '', h.type, h.city].filter(Boolean).join(' · '),
+          body: [h.street && `${h.street}${h.city ? ', ' + h.city : ''}`, `${kmText(h.km)} van ${loc.title}.`].filter(Boolean).join('\n'),
+          rating: h.stars && h.stars <= 5 ? h.stars : null,
+          link: h.website || h.osm,
+          lat: h.pos[0],
+          lng: h.pos[1],
+          location_id: loc.id,
+          added_by: store.get('name'),
+        });
+      }
+      await reload();
+      if (aBtn) flyTo(loc.id);
+      renderPinSheet();
+      toast('Toegevoegd ✓');
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message, true);
+    }
+  });
 
   // Reis
   const tripDialog = $('#tripDialog');
