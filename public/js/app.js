@@ -206,7 +206,7 @@
       + tabLink('#datum', '<span aria-hidden="true">📅</span> Datum', route === 'datum')
       + tabLink('#reizen', '<span aria-hidden="true">🧳</span> Reizen', route === 'reizen')
       + tabLink('#stem', `<span aria-hidden="true">🗳️</span> Stemmen${openPolls().length ? ` <span class="tab-badge">${openPolls().length}</span>` : ''}`, route === 'stem')
-      + lists.map((s) => tabLink(`#tab-${s.id}`, esc(s.title), route === s.id)).join('')
+      + lists.map((s) => tabLink(`#tab-${s.id}`, `${s.icon ? `<span aria-hidden="true">${esc(s.icon)}</span> ` : ''}${esc(s.title)}`, route === s.id)).join('')
       + '<button type="button" class="tab add" data-action="add-section" aria-label="Tab toevoegen">＋</button>';
     const active = $('.tab.active', nav);
     if (active) {
@@ -474,7 +474,7 @@
         const days = rangeDays(weekStart, addDays(weekStart, 6));
         const inRange = days.filter((d) => d >= cfg.start && d <= cfg.end && d.slice(0, 7) === first.slice(0, 7));
         weeks.push(`
-          <button type="button" class="wk" data-week="${inRange.join(',')}"${inRange.length ? '' : ' disabled'} aria-label="Hele week">${weekNumber(weekStart)}</button>
+          <button type="button" class="wk" data-week="${inRange.join(',')}"${inRange.length ? '' : ' disabled'} aria-label="Week ${weekNumber(weekStart)}: hele week aan of uit">${weekNumber(weekStart)}</button>
           ${days.map((d) => {
             if (d.slice(0, 7) !== first.slice(0, 7)) return '<span class="day out"></span>';
             const active = d >= cfg.start && d <= cfg.end;
@@ -489,7 +489,14 @@
       }
       months.push(`
         <div class="month">
-          <h3 class="month-title">${fmt(first, { month: 'long', year: 'numeric' })}</h3>
+          <div class="month-head">
+            <h3 class="month-title">${fmt(first, { month: 'long', year: 'numeric' })}</h3>
+            ${me ? (() => {
+              const md = rangeDays(first, last).filter((d) => d >= cfg.start && d <= cfg.end);
+              const all = md.length && md.every((d) => mine.has(d));
+              return md.length ? `<button type="button" class="text-btn" data-week="${md.join(',')}" aria-pressed="${all}">${all ? 'Hele maand wissen' : 'Ik kan de hele maand'}</button>` : '';
+            })() : ''}
+          </div>
           <div class="cal">
             <span class="dow"></span>${['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'].map((d) => `<span class="dow">${d}</span>`).join('')}
             ${weeks.join('')}
@@ -509,9 +516,7 @@
         <p class="section-intro">Vink aan wanneer je kunt. De beste periodes van ${cfg.days} dagen tussen ${fmtShort(cfg.start)} en ${fmtShort(cfg.end)} komen bovenaan.</p>
       </div>
 
-      <label class="poll-name">Jouw naam
-        <input id="pollName" value="${esc(me)}" maxlength="40" autocomplete="given-name" placeholder="Naam">
-      </label>
+      ${whoHtml(me, people)}
 
       <div class="label">Beste periodes</div>
       ${best.length ? `<ol class="best-list">${best.map((w, i) => `
@@ -539,9 +544,13 @@
           </li>`;
         }).join('')}</ul>` : ''}
 
-      <div class="label">Kalender</div>
-      <p class="hint">Tik op een dag als je kunt. Tik op het weeknummer voor de hele week. Hoe donkerder, hoe meer mensen kunnen.</p>
-      <div class="months">${months.join('')}</div>
+      <div class="label" id="kalender">Kalender</div>
+      ${me ? `<div class="quick-fill">
+          <button type="button" class="btn sm primary" data-fill="all">✓ Ik kan de hele periode</button>
+          ${mine.size ? '<button type="button" class="btn sm ghost" data-fill="none">Alles wissen</button>' : ''}
+        </div>` : ''}
+      <p class="hint">Tik of veeg over de dagen waarop je kunt. Kun je bijna altijd? Kies <em>Ik kan de hele periode</em> en tik weg wanneer je niet kunt. Donkerder = meer mensen kunnen.</p>
+      <div class="months${me ? '' : ' locked'}">${months.join('')}</div>
 
       ${people.length ? `
         <div class="label">Ingevuld door</div>
@@ -551,6 +560,43 @@
         </ul>` : ''}`;
   }
 
+  // Wie vult er in? Bekende namen zijn één tik; een nieuwe naam typ je één keer.
+  let whoOpen = false;
+  function whoHtml(me, people) {
+    if (me && !whoOpen) {
+      return `<div class="who who-set">
+        <span>Je vult in als <strong>${esc(me)}</strong></span>
+        <button type="button" class="text-btn" data-who-change>Iemand anders?</button>
+      </div>`;
+    }
+    const names = [...new Set([...people, ...knownPeople()])].filter((n) => n && n !== me).sort((a, b) => a.localeCompare(b, 'nl'));
+    return `<div class="who" id="who">
+      <p class="who-q">Wie ben jij?</p>
+      ${names.length ? `<div class="who-chips">${names.map((n) => `<button type="button" class="chip-btn" data-who="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
+      <form class="who-new" data-who-form>
+        <label class="sr-only" for="pollName">${names.length ? 'Of typ een nieuwe naam' : 'Je naam'}</label>
+        <input id="pollName" maxlength="40" autocomplete="given-name" placeholder="${names.length ? 'Nieuwe naam' : 'Je naam'}" enterkeyhint="done">
+        <button type="submit" class="btn primary">Verder</button>
+      </form>
+    </div>`;
+  }
+
+  function chooseWho(name) {
+    name = String(name || '').trim();
+    if (!name) return;
+    store.set('name', name);
+    whoOpen = false;
+    renderPanel();
+    const cal = $('#kalender');
+    if (cal) cal.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }
+
+  document.addEventListener('submit', (e) => {
+    if (!e.target.matches('[data-who-form]')) return;
+    e.preventDefault();
+    chooseWho($('#pollName').value);
+  });
+
   function weekNumber(iso) {
     const d = toDate(iso);
     d.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7));
@@ -559,14 +605,15 @@
   }
 
   function pollName() {
-    const input = $('#pollName');
-    const name = (input ? input.value : store.get('name')).trim();
+    const name = whoOpen ? '' : store.get('name').trim();
     if (!name) {
-      toast('Vul eerst je naam in', true);
-      if (input) input.focus();
+      toast('Kies eerst wie je bent', true);
+      const who = $('#who');
+      if (who) who.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      const input = $('#pollName');
+      if (input && !$('.chip-btn')) input.focus({ preventScroll: true });
       return '';
     }
-    store.set('name', name);
     return name;
   }
 
@@ -589,9 +636,67 @@
     }
   }
 
+  // Vegen over dagen: alle dagen waar je overheen gaat krijgen dezelfde stand als de eerste.
+  // touch-action: pan-y laat verticaal scrollen werken; horizontaal vegen vinkt dagen aan.
+  let paint = null;
+  document.addEventListener('pointerdown', (e) => {
+    const day = e.target.closest && e.target.closest('.months [data-day]');
+    if (!day || day.disabled || e.button > 0 || !store.get('name').trim() || whoOpen) return;
+    paint = { on: day.getAttribute('aria-pressed') !== 'true', days: new Set([day.dataset.day]), moved: false, id: e.pointerId };
+    if (day.hasPointerCapture && day.hasPointerCapture(e.pointerId)) day.releasePointerCapture(e.pointerId);
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!paint || e.pointerId !== paint.id) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const day = el && el.closest && el.closest('.months [data-day]');
+    if (!day || day.disabled || paint.days.has(day.dataset.day)) return;
+    paint.days.add(day.dataset.day);
+    paint.moved = true;
+    for (const d of paint.days) {
+      const b = $(`[data-day="${d}"]`);
+      if (b) b.classList.toggle('painting', true), b.classList.toggle('paint-off', !paint.on);
+    }
+  });
+  const endPaint = (e) => {
+    if (!paint || (e && e.pointerId !== paint.id)) return;
+    const p = paint;
+    paint = null;
+    if (!p.moved) return; // gewone tik: dat doet de klik
+    suppressDayClick = true;
+    setTimeout(() => { suppressDayClick = false; }, 400);
+    setAvailable([...p.days], p.on);
+  };
+  document.addEventListener('pointerup', endPaint);
+  document.addEventListener('pointercancel', () => {
+    // Bijv. de browser begint te scrollen: wat al geveegd is toch opslaan.
+    if (paint && paint.moved) endPaint({ pointerId: paint.id }); else paint = null;
+  });
+  let suppressDayClick = false;
+
   document.addEventListener('click', (e) => {
+    const who = e.target.closest('[data-who]');
+    if (who) { chooseWho(who.dataset.who); return; }
+    if (e.target.closest('[data-who-change]')) {
+      whoOpen = true;
+      renderPanel();
+      const first = $('#who .chip-btn') || $('#pollName');
+      if (first) first.focus();
+      return;
+    }
+    const fill = e.target.closest('[data-fill]');
+    if (fill) {
+      const cfg = pollSettings();
+      const all = rangeDays(cfg.start, cfg.end);
+      if (fill.dataset.fill === 'none' && !confirm('Al je aangevinkte dagen wissen?')) return;
+      setAvailable(all, fill.dataset.fill === 'all');
+      toast(fill.dataset.fill === 'all' ? 'Hele periode aangevinkt ✓ Tik nu de dagen weg waarop je niet kunt.' : 'Gewist');
+      return;
+    }
     const day = e.target.closest('[data-day]');
-    if (day && !day.disabled) { setAvailable([day.dataset.day], day.getAttribute('aria-pressed') !== 'true'); return; }
+    if (day && !day.disabled) {
+      if (!suppressDayClick) setAvailable([day.dataset.day], day.getAttribute('aria-pressed') !== 'true');
+      return;
+    }
     const wk = e.target.closest('[data-week]');
     if (wk && !wk.disabled) {
       const dates = wk.dataset.week.split(',').filter(Boolean);
@@ -600,12 +705,6 @@
     }
   });
 
-  document.addEventListener('change', (e) => {
-    if (e.target.id === 'pollName') {
-      store.set('name', e.target.value.trim());
-      renderPanel();
-    }
-  });
 
   /* ---------- actions ---------- */
 

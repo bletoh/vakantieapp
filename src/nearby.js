@@ -49,10 +49,10 @@ async function limited(fn) {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchOverpass(query) {
+async function fetchOverpass(query, urls = [...MIRRORS, MIRRORS[0]]) {
   let lastErr;
   // Elke server een kans en de hoofdserver nog een tweede: Overpass is soms even te druk (429/504).
-  for (const url of [...MIRRORS, MIRRORS[0]]) {
+  for (const url of urls) {
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -88,6 +88,58 @@ function airportsNear(lat, lng, meters = 200000) {
     }));
 }
 
+// Photon (komoot) geeft in één snelle vraag de dichtstbijzijnde plekken met een bepaalde OSM-tag.
+// Minder details dan Overpass (geen sterren of website), maar binnen een paar seconden en zelden druk.
+const PHOTON = {
+  hotels: { radius: 5, limit: 50, tags: ['tourism:hotel', 'tourism:guest_house', 'tourism:apartment', 'tourism:hostel', 'tourism:motel', 'leisure:resort'] },
+  eat: { radius: 2, limit: 60, tags: ['amenity:restaurant', 'amenity:cafe', 'amenity:bar', 'amenity:ice_cream', 'amenity:pub'] },
+  do: { radius: 8, limit: 60, tags: ['tourism:attraction', 'tourism:museum', 'tourism:viewpoint', 'tourism:theme_park', 'tourism:zoo',
+    'tourism:aquarium', 'tourism:gallery', 'natural:beach', 'leisure:water_park', 'historic:castle', 'historic:ruins', 'historic:archaeological_site'] },
+};
+const OSM_TYPES = { N: 'node', W: 'way', R: 'relation' };
+
+async function fetchPhoton(kind, lat, lng) {
+  const cfg = PHOTON[kind];
+  const qs = new URLSearchParams({ lat, lon: lng, radius: cfg.radius, limit: cfg.limit });
+  for (const t of cfg.tags) qs.append('osm_tag', t);
+  const res = await fetch(`https://photon.komoot.io/reverse?${qs}`, {
+    headers: { 'User-Agent': 'vakantieplanner (prive groepsapp)' },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!res.ok) throw new Error(`photon: HTTP ${res.status}`);
+  const data = await res.json();
+  // Omzetten naar dezelfde vorm als Overpass, zodat de app er niets van merkt.
+  return (data.features || []).filter((f) => f.properties && f.properties.name).map((f) => {
+    const p = f.properties;
+    const [lon, la] = f.geometry.coordinates;
+    const tags = { name: p.name, [p.osm_key]: p.osm_value };
+    if (p.street) tags['addr:street'] = p.street;
+    if (p.housenumber) tags['addr:housenumber'] = p.housenumber;
+    if (p.locality || p.city) tags['addr:city'] = p.locality || p.city;
+    return { type: OSM_TYPES[p.osm_type] || 'node', id: p.osm_id, lat: la, lon, tags };
+  });
+}
+
+// Hotels en eten: eerst Photon (snel; dichtbij is wat je wilt). Activiteiten: eerst Overpass,
+// want dat kent bekende plekken (Wikipedia); lukt dat niet snel, dan Photon.
+async function fetchNearby(kind, lat, lng) {
+  const overpass = (urls) => limited(() => fetchOverpass(QUERIES[kind](lat, lng), urls));
+  if (kind === 'hotels' || kind === 'eat') {
+    try {
+      const els = await fetchPhoton(kind, lat, lng);
+      if (els.length) return els;
+    } catch (err) { console.error('nearby', err.message); }
+    return overpass();
+  }
+  if (kind === 'do') {
+    try { return await overpass(MIRRORS.slice(0, 2)); } catch (err) {
+      console.error('nearby', err.message);
+      return fetchPhoton(kind, lat, lng);
+    }
+  }
+  return overpass();
+}
+
 function nearby(kind, lat, lng) {
   if (!QUERIES[kind]) throw Object.assign(new Error('Onbekende soort'), { status: 400 });
   if (kind === 'airports') return Promise.resolve(airportsNear(+lat, +lng));
@@ -98,7 +150,7 @@ function nearby(kind, lat, lng) {
   const row = db.prepare(`SELECT data FROM nearby_cache WHERE key = ? AND fetched_at > datetime('now', '-${TTL_DAYS} days')`).get(key);
   if (row) return Promise.resolve(JSON.parse(row.data));
   if (inFlight.has(key)) return inFlight.get(key);
-  const job = limited(() => fetchOverpass(QUERIES[kind](+la, +ln))).then((els) => {
+  const job = fetchNearby(kind, +la, +ln).then((els) => {
     db.prepare(`INSERT INTO nearby_cache (key, data, fetched_at) VALUES (?, ?, datetime('now'))
       ON CONFLICT(key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`).run(key, JSON.stringify(els));
     return els;
