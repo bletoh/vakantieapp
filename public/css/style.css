@@ -301,6 +301,36 @@ a.chip:hover { background: var(--navy-soft); }
 .pin-links small { font-family: var(--mono); color: var(--navy); }
 .pin-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
+/* gekoppelde vlucht/hotel onder een locatie */
+.linked { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.linked button {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  border: none; border-bottom: 1px solid var(--line); background: none; padding: 9px 0;
+}
+.linked button > span:nth-child(2) { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.linked button:hover > span:nth-child(2) { color: var(--navy); }
+button.chip { border: none; cursor: pointer; font: inherit; font-size: .8125rem; }
+button.chip:hover { background: var(--navy-soft); }
+
+/* pinpaneel */
+.sheet-head-actions { display: flex; align-items: center; gap: 12px; }
+.pin-body { gap: 22px; }
+.pin-body section { display: grid; gap: 8px; }
+.sheet-label {
+  margin: 0; font-family: var(--mono); font-size: .75rem; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.results { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.result { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.result-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.result-main strong { font-weight: 600; overflow-wrap: anywhere; }
+.result-main small { color: var(--muted); font-size: .8125rem; }
+.result-links { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .8125rem; margin-top: 2px; }
+.result-links a { color: var(--navy); }
+.result .btn { flex-shrink: 0; }
+.btn.done { color: var(--good); border-color: transparent; background: none; opacity: 1; }
+.fineprint { margin: 0; font-size: .75rem; color: var(--muted); }
+
 /* ---------- knoppen ---------- */
 
 .btn {
