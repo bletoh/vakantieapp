@@ -1,6 +1,6 @@
 {
   "name": "vakantieplanner",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Vakantieblog om aan vrienden te laten zien wat de beste bestemming, vlucht en overnachting is",
   "main": "src/server.js",
   "scripts": {
@@ -9,6 +9,7 @@
   "dependencies": {
     "better-sqlite3": "^11.3.0",
     "express": "^4.19.2",
-    "leaflet": "^1.9.4"
+    "leaflet": "^1.9.4",
+    "sharp": "^0.33.5"
   }
 }

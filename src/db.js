@@ -58,6 +58,33 @@ CREATE TABLE IF NOT EXISTS trip_picks (
   PRIMARY KEY (trip_id, item_id)
 );
 
+-- Stemronde: de groep kiest tussen bestemmingen (pinnen); te delen via een eigen link.
+CREATE TABLE IF NOT EXISTS polls (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  closes_at TEXT,
+  participants TEXT,
+  created_by TEXT,
+  closed INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS poll_options (
+  poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  PRIMARY KEY (poll_id, item_id)
+);
+
+-- Eén stem per persoon per ronde; opnieuw stemmen vervangt de oude stem.
+CREATE TABLE IF NOT EXISTS poll_votes (
+  poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  voted_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (poll_id, name)
+);
+
 -- Datumprikker: per persoon de dagen waarop diegene kan (datum als JJJJ-MM-DD).
 CREATE TABLE IF NOT EXISTS available_days (
   name TEXT NOT NULL,
@@ -69,8 +96,10 @@ CREATE TABLE IF NOT EXISTS available_days (
 // Prijs tonen we alleen bij tabs met dingen die je koopt.
 const PRICED_TABS = ['Vlucht', 'Overnachting'];
 
-// Soort tab: 'map' toont een kaart met pinnen, 'flight' en 'stay' kun je aan een pin koppelen.
-const TAB_KINDS = { Locatie: 'map', Vlucht: 'flight', Overnachting: 'stay' };
+// Soort tab: 'map' toont een kaart met pinnen; 'flight', 'stay', 'do' en 'eat' kun je aan een pin koppelen.
+const TAB_KINDS = {
+  Kaart: 'map', Locatie: 'map', Vlucht: 'flight', Overnachting: 'stay', Activiteiten: 'do', 'Eten & drinken': 'eat',
+};
 
 // Kolommen die later zijn toegevoegd aan bestaande databases.
 const itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
@@ -97,13 +126,21 @@ if (!sectionCols.includes('kind')) {
   for (const [title, kind] of Object.entries(TAB_KINDS)) setKind.run(kind, title);
 }
 
+// Activiteiten en Eten & drinken kun je sinds de kaartplanner ook aan een pin koppelen.
+const setLooseKind = db.prepare("UPDATE sections SET kind = ? WHERE title = ? AND kind = ''");
+setLooseKind.run('do', 'Activiteiten');
+setLooseKind.run('eat', 'Eten & drinken');
+
+// De kaart is de centrale plek van de app; de oude naam "Locatie" wordt "Kaart".
+db.prepare("UPDATE sections SET title = 'Kaart', icon = '🗺️' WHERE kind = 'map' AND title = 'Locatie'").run();
+
 // Eerste keer opstarten: alleen lege tabs aanmaken, alle tekst vul je zelf in.
 function seed() {
   const hasSections = db.prepare('SELECT COUNT(*) AS n FROM sections').get().n > 0;
   if (hasSections) return;
 
   const tabs = [
-    ['Locatie', '📍'],
+    ['Kaart', '🗺️'],
     ['Vlucht', '✈️'],
     ['Overnachting', '🏨'],
     ['Activiteiten', '🎉'],
@@ -120,5 +157,22 @@ function seed() {
 
 seed();
 
+// Stemrondes met opties, stemmen en of ze (ook door de sluitdatum) gesloten zijn.
+function getPolls() {
+  const today = new Date().toISOString().slice(0, 10);
+  const polls = db.prepare('SELECT * FROM polls ORDER BY id DESC').all();
+  const options = db.prepare('SELECT poll_id, item_id FROM poll_options').all();
+  const votes = db.prepare('SELECT poll_id, name, item_id, voted_at FROM poll_votes ORDER BY voted_at').all();
+  for (const p of polls) {
+    p.item_ids = options.filter((o) => o.poll_id === p.id).map((o) => o.item_id);
+    p.votes = votes.filter((v) => v.poll_id === p.id).map(({ name, item_id, voted_at }) => ({ name, item_id, voted_at }));
+    p.participants = String(p.participants || '').split('\n').filter(Boolean);
+    p.is_closed = !!p.closed || !!(p.closes_at && p.closes_at < today);
+  }
+  return polls;
+}
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
+module.exports.DATA_DIR = DATA_DIR;
+module.exports.getPolls = getPolls;

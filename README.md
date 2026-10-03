@@ -4,17 +4,25 @@ Een blogachtige website waarmee je je vrienden laat zien wat de beste vakantiepl
 
 ## Functies
 
-- **Tabs** per onderdeel (Locatie, Vlucht, Overnachting, Activiteiten, Eten & drinken, Budget). Met ＋ voeg je een tab toe, met ⚙️ pas je hem aan (naam, icoon, intro, prijs tonen, volgorde, verwijderen).
-- **Suggesties toevoegen**: onder elke tab staat een knop (bijv. "Voeg locatie toe") waarmee iedereen direct iets kan voorstellen, met optioneel een naam.
-- **Tik op een kaart** om hem aan te passen, als 🏆 *beste keuze* te markeren of te verwijderen. Er is geen aparte bewerkmodus.
-- **Prijs** wordt alleen getoond bij tabs waar dat aanstaat (standaard Vlucht en Overnachting).
-- **Alles via de kaart**: tik op een pin voor een paneel met de dichtstbijzijnde vliegvelden (met geschatte vliegtijd vanaf Amsterdam en links naar Google Flights/Skyscanner) en hotels binnen 5 km. Met één tik voeg je ze toe; ze worden aan de pin gekoppeld. Gegevens komen gratis en zonder API-sleutel van OpenStreetMap (Overpass). De tabs Vlucht en Overnachting worden daarom niet meer in de tabbalk getoond.
-- **Kaart** in de tab Locatie: tik op de kaart om een pin te prikken (de plaatsnaam wordt automatisch ingevuld). Tik op een pin om er een vlucht of overnachting aan te koppelen; een gekoppelde vlucht vliegt met een animatie vanuit Nederland naar de pin. Pinnen kun je verslepen.
-- **Datum (datumprikker)**: iedereen vinkt in een kalender aan wanneer hij of zij kan; de beste periodes (standaard 7 dagen, instelbaar) komen bovenaan, met een knop om er meteen een reis van te maken. Een reis met datums waarop iemand niet kan, wordt rood met wie er niet kan.
-- **🧳 Reizen**: combineer suggesties uit de tabs (bijv. een locatie, vlucht en overnachting) tot één reisvoorstel.
-- **Foto's** bij een suggestie: uploaden vanaf je telefoon (automatisch verkleind) of een link plakken.
-- **Hartjes** op suggesties en reizen.
-- Gebouwd voor mobiel, met automatische dark mode.
+- **🗺️ De kaart is de startpagina.** Zoek bovenaan een stad, eiland of land, of tik ergens op de kaart: er komt meteen een genummerde pin met de plaatsnaam. Naast de kaart (op mobiel eronder) staat de lijst met bestemmingen. Per bestemming zie je in één oogopslag of datum, vlucht en hotel al geregeld zijn.
+- **Plannen vanuit een pin.** Tik op een pin of een bestemming in de lijst en het planpaneel opent, op een breed scherm naast de kaart zodat de kaart bruikbaar blijft. Het paneel heeft vijf stappen:
+  - **📅 Wanneer**: kies een van de beste periodes uit de datumprikker of vul zelf datums in. Je ziet direct wie er dan niet kan.
+  - **✈️ Vlucht**: vliegvelden in de buurt met geschatte vliegtijd. De links naar Google Flights en Skyscanner zoeken al op jullie reisdatums.
+  - **🏨 Overnachting**: hotels binnen 5 km, met een Booking-link waarin de datums al staan.
+  - **🎉 Activiteiten** en **🍽️ Eten & drinken**: bezienswaardigheden, stranden en restaurants in de buurt.
+  - Met één tik voeg je een suggestie toe. Hotels, activiteiten en restaurants verschijnen als gekleurde stipjes rond de pin, en een gekozen vlucht vliegt als animatie vanuit Nederland naar de pin.
+- **De reis wordt automatisch bijgehouden.** Zodra je een datum, vlucht of hotel kiest, maakt de app een reis voor die bestemming aan of werkt hem bij. Die reis staat in **🧳 Reizen**, waar je kunt vergelijken en hartjes geven.
+- **📅 Datumprikker**: iedereen vinkt in een kalender aan wanneer hij of zij kan. De beste periodes staan bovenaan. Met *Plan reis* kies je voor welke bestemming die periode is, en daarna ga je verder op de kaart. Vanuit een pin kom je met één tik in de datumprikker en weer terug.
+- **🗳️ Stemronde**: laat de groep kiezen tussen bestemmingen.
+  - Elke ronde heeft een eigen link (`/stem/…`). Deel je die in WhatsApp, dan verschijnt er een voorbeeld met de vraag, de keuzes en de tussenstand, als plaatje dat de server zelf maakt.
+  - Iedereen stemt met zijn of haar naam en kan de stem later nog wijzigen.
+  - *Herinneren* maakt een WhatsApp-bericht met wie er nog niet heeft gestemd. Na het sluiten deel je de uitslag op dezelfde manier. De winnaar wordt de beste keuze op de kaart (rode pin).
+  - De app kan zelf geen WhatsApp-berichten versturen: de knoppen openen WhatsApp met het bericht al ingevuld, en jij tikt op versturen.
+- **Toegankelijk.** Zoeken werkt helemaal met het toetsenbord (pijltjes en Enter). Pinnen bereik je met Tab en open je met Enter. De nummers op de pinnen komen overeen met de lijst. Het paneel sluit met Escape, de app werkt op mobiel en heeft een automatische dark mode.
+- **Tabs**: naast Kaart, Datum, Reizen en Stemmen kun je zelf tabs toevoegen (＋) en aanpassen (naam, icoon, intro, prijs tonen, volgorde). Activiteiten en Eten & drinken kun je ook als lijst bekijken.
+- **Foto's** bij een suggestie of bestemming: uploaden vanaf je telefoon (automatisch verkleind) of een link plakken.
+
+Kaartgegevens, plaatsnamen en plekken in de buurt komen gratis en zonder API-sleutel van OpenStreetMap (tegels, Nominatim, Photon en Overpass). De server bewaart de zoekresultaten voor plekken in de buurt 14 dagen, zodat de groep niet steeds hoeft te wachten.
 
 ## Starten
 
