@@ -73,8 +73,24 @@ async function fetchOverpass(query) {
   throw lastErr;
 }
 
+// Vliegvelden met lijnvluchten komen uit een vaste lijst (OurAirports, publiek domein),
+// zodat vluchtsuggesties meteen verschijnen, ook als Overpass druk is.
+// Bijwerken: zie scripts/vliegvelden.js.
+const AIRPORTS = require('./airports.json');
+
+function airportsNear(lat, lng, meters = 200000) {
+  const [s, w, n, e] = bbox(lat, lng, meters).split(',').map(Number);
+  return AIRPORTS
+    .filter(([, , la, ln]) => la >= s && la <= n && ln >= w && ln <= e)
+    .map(([iata, name, la, ln, large]) => ({
+      type: 'node', lat: la, lon: ln,
+      tags: { iata, name, 'aerodrome:type': large ? 'international' : 'regional' },
+    }));
+}
+
 function nearby(kind, lat, lng) {
   if (!QUERIES[kind]) throw Object.assign(new Error('Onbekende soort'), { status: 400 });
+  if (kind === 'airports') return Promise.resolve(airportsNear(+lat, +lng));
   // Afronden op ± 100 m, zodat een iets verschoven pin de cache nog gebruikt.
   const la = (+lat).toFixed(3);
   const ln = (+lng).toFixed(3);

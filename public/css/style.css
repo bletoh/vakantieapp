@@ -847,3 +847,25 @@ button.chip:hover { background: var(--navy-soft); }
   * { transition: none !important; animation: none !important; }
 }
 .when-range { margin: 0; }
+
+/* melding met knop (bijv. ongedaan maken) */
+.toast.has-action { pointer-events: auto; display: flex; align-items: center; gap: 12px; padding-right: 8px; }
+.toast-btn {
+  font: inherit; font-weight: 600; color: inherit; background: none; cursor: pointer;
+  border: 1px solid currentColor; border-radius: 4px; padding: 4px 10px; min-height: 32px;
+}
+.toast-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* populaire bestemmingen in het zoekveld */
+.place-head { padding: 8px 12px 4px; font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.place-results:has(.place-chip) { display: grid; grid-template-columns: 1fr 1fr; }
+.place-results:has(.place-chip) .place-head { grid-column: 1 / -1; }
+
+/* eigen kaartknoppen boven de zoomknoppen */
+.map-buttons a { display: grid !important; place-items: center; font-size: 1.05rem; text-decoration: none; }
+.map-buttons a[aria-pressed="true"] { background: var(--navy-soft); }
+.map.sat .leaflet-tile-pane { filter: none; }
+
+/* labels rustiger bij ver uitzoomen */
+.map.zoom-far .pin-label small { display: none; }
+.map.zoom-world .leaflet-tooltip.pin-label { display: none; }
