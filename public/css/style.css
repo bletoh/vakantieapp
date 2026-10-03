@@ -258,6 +258,8 @@ a.chip:hover { background: var(--navy-soft); }
   background: var(--surface); border: 1px solid var(--line);
   font-size: .8125rem; color: var(--ink);
 }
+.map .leaflet-tile-pane { filter: saturate(.7) sepia(.15); }
+@media (prefers-color-scheme: dark) { .map .leaflet-tile-pane { filter: saturate(.5) brightness(.75); } }
 .map-error { display: grid; place-items: center; height: 100%; color: var(--muted); }
 
 .pin-icon { background: none; border: none; }
