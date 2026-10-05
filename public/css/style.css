@@ -1218,3 +1218,73 @@ button.chip:hover { background: var(--navy-soft); }
 .trip-share { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 4px; }
 .trip-share .btn.wa { gap: 8px; border-radius: 999px; padding: 8px 14px; }
 .trip-share .text-btn { font-size: .8125rem; }
+
+/* ---------- ideeën: vakantiepakketten ---------- */
+
+.idea-cats { display: flex; flex-wrap: wrap; gap: 8px; max-width: 900px; }
+.cat {
+  min-height: 40px; padding: 0 16px; border-radius: 999px; font-weight: 500; font-size: .9375rem;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  transition: border-color .15s, background .15s;
+}
+.cat:hover { border-color: var(--ink); }
+.cat[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.cat:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.idea-opts { display: grid; grid-template-columns: 2fr 1fr 1.4fr; gap: 12px; max-width: 640px; margin: 18px 0 8px; }
+.idea-opts label { display: grid; gap: 6px; font-size: .8125rem; font-weight: 600; }
+.idea-opts select, .idea-opts input {
+  font: inherit; font-size: 16px; color: var(--ink); width: 100%; min-height: 44px; padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+}
+.idea-opts .euro { position: relative; display: block; }
+.idea-opts .euro::before { content: '€'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 500; }
+.idea-opts .euro input { padding-left: 28px; }
+@media (max-width: 520px) { .idea-opts { grid-template-columns: 1fr 1fr; } .idea-opts label:first-child { grid-column: 1 / -1; } }
+
+.idea-results { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); margin-top: 16px; }
+.idea-results > .hint, .idea-results > .empty, .idea-results > .fineprint { grid-column: 1 / -1; }
+.pkg { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; background: var(--surface); }
+.pkg-img { position: relative; aspect-ratio: 16 / 9; background: linear-gradient(135deg, var(--surface-2), var(--line)); }
+.pkg-img { overflow: hidden; }
+.pkg-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pkg-score {
+  position: absolute; left: 12px; top: 12px; padding: 4px 10px; border-radius: 999px;
+  background: var(--surface); color: var(--ink); font-size: .8125rem; font-weight: 700; box-shadow: var(--shadow-sm);
+}
+.pkg-body { display: grid; gap: 10px; padding: 16px; }
+.pkg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.pkg-head h3 { margin: 0; font-size: 1.25rem; letter-spacing: -.015em; }
+.pkg-head small { font-weight: 500; color: var(--muted); font-size: .9375rem; }
+.pkg-on { font-size: .75rem; font-weight: 600; color: var(--good); }
+.pkg-why { display: flex; flex-wrap: wrap; gap: 6px; }
+.pkg-why .chip { background: var(--surface-2); font-size: .75rem; }
+.pkg-why .chip.weather { background: color-mix(in srgb, #f59e0b 16%, var(--surface)); }
+.pkg-line { display: flex; align-items: flex-start; gap: 10px; font-size: .9375rem; }
+.pkg-line .ic { margin-top: 2px; color: var(--muted); }
+.pkg-line a { font-weight: 600; }
+.pkg-hotels { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pkg-hotel {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 12px; transition: border-color .15s, box-shadow .15s;
+}
+.pkg-hotel.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.pkg-hotel input { margin: 4px 0 0; accent-color: var(--brand); width: 18px; height: 18px; flex: none; }
+.pkg-hotel-main { display: grid; gap: 2px; min-width: 0; }
+.pkg-hotel-main strong { font-weight: 600; overflow-wrap: anywhere; }
+.pkg-hotel-main small { color: var(--muted); font-size: .8125rem; }
+.group-review { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: .8125rem; color: var(--good); font-weight: 500; }
+.group-review .ic { width: 14px; height: 14px; }
+.pkg-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--line); margin-top: 4px; }
+.pkg-total { display: grid; }
+.pkg-total strong { font-size: 1.125rem; }
+.pkg-total small { color: var(--muted); font-size: .8125rem; }
+.pkg-foot .btn { gap: 8px; min-height: 44px; padding: 10px 16px; }
+
+/* tabbalk op de telefoon: zes tabs passen naast elkaar */
+@media (max-width: 600px) {
+  .tab { flex: 1 0 54px; padding: 6px 2px 7px; }
+  .tab > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .tab.add { flex: 0 0 40px; }
+  .idea-results { grid-template-columns: 1fr; }
+}
