@@ -1544,7 +1544,7 @@
     ['Mallorca', 'Spanje', 39.6953, 3.0176], ['Side', 'Turkije', 36.7673, 31.3890],
     ['Málaga', 'Spanje', 36.7213, -4.4214], ['Algarve', 'Portugal', 37.0179, -7.9307],
     ['Parijs', 'Frankrijk', 48.8566, 2.3522], ['Gran Canaria', 'Spanje', 27.9202, -15.5474],
-    ['Dubrovnik', 'Kroatië', 42.6507, 18.0944], ['Praag', 'Tsjechië', 50.0755, 14.4378],
+    ['Dubrovnik', 'Kroatië', 42.6507, 18.0944], ['Ibiza', 'Spanje', 38.9067, 1.4206],
   ].map(([name, country, lat, lng]) => ({ name, country, detail: country, lat, lng }));
 
   function showPopular() {
