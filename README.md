@@ -15,6 +15,13 @@ Een blogachtige website waarmee je je vrienden laat zien wat de beste vakantiepl
   - Met één tik voeg je een suggestie toe. Na de eerste keuze voor datum, vlucht of hotel gaat het paneel vanzelf door naar de volgende stap die nog open staat. Hotels, activiteiten en restaurants verschijnen als gekleurde stipjes rond de pin, en een gekozen vlucht vliegt als animatie vanuit Nederland naar de pin.
 - **De reis wordt automatisch bijgehouden.** Zodra je een datum, vlucht of hotel kiest, maakt de app een reis voor die bestemming aan of werkt hem bij. Die reis staat in **🧳 Reizen**, waar je kunt vergelijken en hartjes geven.
 - **📅 Datumprikker**: iedereen vinkt in een kalender aan wanneer hij of zij kan. Wie je bent kies je met één tik uit de bekende namen (of je typt één keer een nieuwe naam). Met *Ik kan de hele periode* of *Ik kan de hele maand* vink je alles in één keer aan en tik je daarna de dagen weg waarop je niet kunt. Je kunt ook met je vinger of muis over een rij dagen vegen. De beste periodes staan bovenaan. Met *Plan reis* kies je voor welke bestemming die periode is, en daarna ga je verder op de kaart. Vanuit een pin kom je met één tik in de datumprikker en weer terug.
+- **📤 Reis delen in WhatsApp**: in het planpaneel van een bestemming en op elke reis in Reizen staat *Deel reis via WhatsApp*. De link (`/reis/…`) opent een overzicht om alleen te bekijken, zonder knoppen om iets te veranderen. Daarin staan:
+  - een kaart met de bestemming, het hotel en de gekozen plekken
+  - de datums, en wie er wel en niet kan
+  - de vlucht met een zoeklink op jullie datums, en het hotel met een Booking-link
+  - de activiteiten, het eten en de toelichting
+
+  In WhatsApp verschijnt een voorbeeld met een plaatje van de reis. Elke reis heeft een eigen, onraadbare link. Valt een reis buiten de periode van de datumprikker, dan staat er niet dat iedereen "niet kan", maar dat het buiten de periode valt.
 - **🗳️ Stemronde**: laat de groep kiezen tussen bestemmingen.
   - Elke ronde heeft een eigen link (`/stem/…`). Deel je die in WhatsApp, dan verschijnt er een voorbeeld met de vraag, de keuzes en de tussenstand, als plaatje dat de server zelf maakt.
   - Iedereen stemt met zijn of haar naam en kan de stem later nog wijzigen.

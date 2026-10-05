@@ -201,8 +201,8 @@ function saveTrip(id, body) {
         throw err;
       }
     } else {
-      id = db.prepare('INSERT INTO trips (title, note, added_by, start_date, end_date) VALUES (?, ?, ?, ?, ?)')
-        .run(title, note, addedBy, start, end).lastInsertRowid;
+      id = db.prepare('INSERT INTO trips (title, note, added_by, start_date, end_date, share_slug) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(title, note, addedBy, start, end, db.shareSlug()).lastInsertRowid;
     }
     db.prepare('DELETE FROM trip_picks WHERE trip_id = ?').run(id);
     const insert = db.prepare('INSERT OR IGNORE INTO trip_picks (trip_id, item_id) VALUES (?, ?)');

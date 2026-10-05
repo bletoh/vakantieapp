@@ -183,4 +183,339 @@ router.get('/og/site.jpg', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/* ---------- gedeelde reis: alleen-lezen overzicht (/reis/<code>) ---------- */
+
+const KIND_LABEL = { flight: 'Vlucht', stay: 'Overnachting', do: 'Activiteiten', eat: 'Eten & drinken' };
+const KIND_ICON = { map: 'pin', flight: 'plane', stay: 'bed', do: 'sparkles', eat: 'utensils' };
+const DOT = { stay: '#e0245e', do: '#008a05', eat: '#d97706' };
+const HOME = [52.3105, 4.7683]; // Schiphol
+
+const ICONS = {
+  pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+  plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  bed: '<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>',
+  sparkles: '<path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/>',
+  utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
+  heart: '<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+};
+const icon = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.list}</svg>`;
+
+const isoDay = (d) => d.toISOString().slice(0, 10);
+function rangeDays(a, b) {
+  const out = [];
+  for (let d = new Date(a + 'T00:00:00Z'); isoDay(d) <= b; d.setUTCDate(d.getUTCDate() + 1)) out.push(isoDay(d));
+  return out;
+}
+const fmtDay = (iso, opts) => new Date(iso + 'T12:00:00Z').toLocaleDateString('nl-NL', { timeZone: 'UTC', ...opts });
+function dateText(t) {
+  if (!t.start_date) return '';
+  const y = t.start_date.slice(0, 4) !== t.end_date.slice(0, 4);
+  const a = fmtDay(t.start_date, { weekday: 'short', day: 'numeric', month: 'short', ...(y ? { year: 'numeric' } : {}) });
+  const b = fmtDay(t.end_date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const n = rangeDays(t.start_date, t.end_date).length;
+  return t.start_date === t.end_date ? `${b}` : `${a} – ${b} · ${n} dagen`;
+}
+const shortDates = (t) => (t.start_date ? `${fmtDay(t.start_date, { day: 'numeric', month: 'short' })} – ${fmtDay(t.end_date, { day: 'numeric', month: 'short' })}` : '');
+const clip = (str, n) => (String(str).length > n ? `${String(str).slice(0, n - 1).trim()}…` : String(str));
+
+function tripBySlug(slug) {
+  return db.prepare('SELECT * FROM trips WHERE share_slug = ?').get(String(slug)) || null;
+}
+
+// Alles wat op het overzicht komt: bestemming, gekozen dingen per soort en wie er kan.
+function tripView(trip) {
+  const picks = db.prepare(`
+    SELECT i.*, s.kind, s.title AS section_title, s.icon AS section_icon, s.show_price
+    FROM trip_picks p JOIN items i ON i.id = p.item_id JOIN sections s ON s.id = i.section_id
+    WHERE p.trip_id = ? ORDER BY s.position, s.id, i.position, i.id`).all(trip.id);
+  const loc = picks.find((x) => x.kind === 'map') || null;
+  const groups = [];
+  for (const x of picks) {
+    if (x === loc) continue;
+    let g = groups.find((y) => y.sectionId === x.section_id);
+    if (!g) groups.push(g = { sectionId: x.section_id, kind: x.kind, title: KIND_LABEL[x.kind] || x.section_title, icon: x.section_icon, items: [] });
+    g.items.push(x);
+  }
+  // Vlucht en overnachting eerst, daarna de rest in de volgorde van de tabs.
+  const order = { flight: 0, stay: 1, do: 2, eat: 3 };
+  groups.sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+
+  // Wie er kan, alleen als de reis (deels) in de periode van de datumprikker valt.
+  const pollStart = setting('poll_start') || isoDay(new Date());
+  const pollEnd = setting('poll_end') || (() => {
+    const d = new Date(pollStart + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 83); // standaard 12 weken, net als in de app
+    return isoDay(d);
+  })();
+  let who = null;
+  if (trip.start_date && !(trip.end_date < pollStart || trip.start_date > pollEnd)) {
+    const days = rangeDays(trip.start_date, trip.end_date);
+    const byName = new Map();
+    for (const { name, date } of db.prepare('SELECT name, date FROM available_days').all()) {
+      if (!byName.has(name)) byName.set(name, new Set());
+      byName.get(name).add(date);
+    }
+    if (byName.size) {
+      const can = [];
+      const cannot = [];
+      for (const [name, set] of byName) {
+        const ok = days.filter((d) => set.has(d)).length;
+        (ok === days.length ? can : cannot).push({ name, ok, total: days.length });
+      }
+      who = { can, cannot };
+    }
+  }
+  return { trip, loc, groups, who };
+}
+
+function flightUrl(item, trip) {
+  const m = /→\s*([A-Z]{3})/.exec(item.subtitle || item.title || '');
+  if (!m) return item.link || '';
+  const when = trip.start_date ? ` on ${trip.start_date} returning ${trip.end_date}` : '';
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(`Flights from AMS to ${m[1]}${when}`)}`;
+}
+function bookingUrl(item, loc, trip) {
+  const q = `${item.title} ${loc ? shortName(loc.title) : ''}`.trim();
+  const dates = trip.start_date ? `&checkin=${trip.start_date}&checkout=${trip.end_date > trip.start_date ? trip.end_date : trip.start_date}` : '';
+  return `https://www.booking.com/searchresults.nl.html?ss=${encodeURIComponent(q)}${dates}`;
+}
+const safeLink = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
+const safeImg = (u) => (u && (u.startsWith('/uploads/') || /^https?:\/\//i.test(u)) ? u : '');
+
+function tripMeta(v) {
+  const { trip, loc, groups } = v;
+  const flight = groups.find((g) => g.kind === 'flight');
+  const stay = groups.find((g) => g.kind === 'stay');
+  const extra = groups.filter((g) => g.kind === 'do' || g.kind === 'eat').reduce((n, g) => n + g.items.length, 0);
+  const bits = [
+    trip.start_date && shortDates(trip),
+    flight && `vlucht ${(flight.items[0].subtitle || flight.items[0].title).split('·')[0].trim()}`,
+    stay && `hotel ${stay.items[0].title}`,
+    extra && `${extra} ${extra === 1 ? 'plek' : 'plekken'} om te bezoeken`,
+  ].filter(Boolean);
+  return {
+    title: `✈️ ${trip.title}${loc && !trip.title.includes(shortName(loc.title)) ? ` · ${shortName(loc.title)}` : ''}`,
+    description: bits.length ? `${bits.join(' · ')}. Tik voor het hele reisplan.` : 'Tik voor het hele reisplan.',
+  };
+}
+
+function itemCard(x, v) {
+  const { trip, loc } = v;
+  const links = [];
+  if (x.kind === 'flight') {
+    const u = flightUrl(x, trip);
+    if (u) links.push(`<a href="${esc(u)}" target="_blank" rel="noopener">Vluchten zoeken ↗</a>`);
+  } else if (x.kind === 'stay') {
+    links.push(`<a href="${esc(bookingUrl(x, loc, trip))}" target="_blank" rel="noopener">Prijs op Booking ↗</a>`);
+    if (safeLink(x.link)) links.push(`<a href="${esc(x.link)}" target="_blank" rel="noopener">Website ↗</a>`);
+  } else if (safeLink(x.link)) {
+    links.push(`<a href="${esc(x.link)}" target="_blank" rel="noopener">Meer info ↗</a>`);
+  }
+  const img = safeImg(x.image);
+  const stars = x.rating ? `<span class="stars" aria-label="${x.rating} sterren">${'★'.repeat(x.rating)}</span>` : '';
+  return `<article class="item">
+    ${img ? `<img class="item-img" src="${esc(img)}" alt="" loading="lazy">` : ''}
+    <div class="item-body">
+      <h3>${esc(x.title)}</h3>
+      ${x.subtitle || stars ? `<p class="sub">${stars}${stars && x.subtitle ? ' · ' : ''}${esc(x.subtitle || '')}</p>` : ''}
+      ${x.show_price && x.price ? `<span class="price">${esc(x.price)}</span>` : ''}
+      ${x.body && x.kind !== 'flight' ? `<p class="body">${esc(x.body)}</p>` : ''}
+      ${links.length ? `<p class="links">${links.join('')}</p>` : ''}
+    </div>
+  </article>`;
+}
+
+function tripPageHtml(req, v) {
+  const { trip, loc, groups, who } = v;
+  const site = setting('site_title') || 'Onze vakantie';
+  const meta = tripMeta(v);
+  const url = `${origin(req)}/reis/${trip.share_slug}`;
+  const ver = `${groups.reduce((n, g) => n + g.items.length, 0)}${trip.start_date || ''}${trip.likes}`;
+  const image = sharp ? `${origin(req)}/og/reis/${trip.share_slug}.jpg?v=${encodeURIComponent(ver)}` : '';
+  const heroImg = loc && safeImg(loc.image);
+  const points = [];
+  if (loc && loc.lat != null) points.push({ lat: loc.lat, lng: loc.lng, kind: 'map', title: loc.title });
+  for (const g of groups) for (const x of g.items) if (x.lat != null && x.lng != null) points.push({ lat: x.lat, lng: x.lng, kind: g.kind, title: x.title });
+  const mapData = JSON.stringify({ points, home: HOME, dot: DOT, flight: groups.some((g) => g.kind === 'flight') }).replace(/</g, '\\u003c');
+
+  const whoHtml = who ? `
+    <section class="who ${who.cannot.length ? 'some' : 'all'}">
+      ${icon('users')}
+      <div>
+        ${who.cannot.length
+          ? `<strong>Kan niet: ${who.cannot.map((c) => `${esc(c.name)} <small>(${c.ok} van ${c.total} dagen)</small>`).join(', ')}</strong>
+             ${who.can.length ? `<span>Kan wel: ${who.can.map((c) => esc(c.name)).join(', ')}</span>` : ''}`
+          : `<strong>Iedereen kan</strong><span>${who.can.map((c) => esc(c.name)).join(', ')}</span>`}
+      </div>
+    </section>` : '';
+
+  return `<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <title>${esc(trip.title)} · ${esc(site)}</title>
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="${esc(site)}">
+  <meta property="og:title" content="${esc(meta.title)}">
+  <meta property="og:description" content="${esc(meta.description)}">
+  <meta property="og:url" content="${esc(url)}">
+  ${image ? `<meta property="og:image" content="${esc(image)}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">` : ''}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="description" content="${esc(meta.description)}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <style>
+    :root { --bg: #fff; --surface: #fff; --surface-2: #f4f4f4; --ink: #222; --muted: #6a6a6a; --line: #e2e2e2;
+      --brand: #e0245e; --good: #008a05; --bad: #c13515; color-scheme: light; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121212; --surface: #1c1c1c; --surface-2: #262626; --ink: #f2f2f2; --muted: #a3a3a3; --line: #333;
+        --brand: #ff5c8a; --good: #4cc26a; --bad: #ff7a66; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; }
+    .ic { width: 1.2em; height: 1.2em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .map { height: min(42vh, 360px); background: var(--surface-2); }
+    .map .leaflet-tile-pane { filter: saturate(.85); }
+    @media (prefers-color-scheme: dark) { .map .leaflet-tile-pane { filter: brightness(.72) saturate(.55); } }
+    .hero-img { width: 100%; height: min(36vh, 300px); object-fit: cover; display: block; }
+    main { max-width: 680px; margin: -22px auto 0; position: relative; z-index: 500; padding: 22px 16px 48px;
+      background: var(--bg); border-radius: 22px 22px 0 0; }
+    .kicker { margin: 0; color: var(--brand); font-weight: 600; font-size: .875rem; }
+    h1 { margin: 4px 0 6px; font-size: clamp(1.75rem, 7vw, 2.25rem); line-height: 1.15; letter-spacing: -.025em; }
+    .facts { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 0; padding: 0; list-style: none; color: var(--ink); font-weight: 500; }
+    .facts li { display: flex; align-items: center; gap: 8px; }
+    .facts .muted { color: var(--muted); font-weight: 400; }
+    .who { display: flex; gap: 12px; align-items: flex-start; margin: 20px 0 0; padding: 14px 16px; border-radius: 14px; }
+    .who.all { background: color-mix(in srgb, var(--good) 10%, var(--surface)); }
+    .who.all .ic { color: var(--good); }
+    .who.some { background: color-mix(in srgb, var(--bad) 9%, var(--surface)); }
+    .who.some .ic { color: var(--bad); }
+    .who .ic { margin-top: 2px; }
+    .who div { display: grid; gap: 2px; }
+    .who small { font-weight: 400; color: var(--muted); }
+    .who span { color: var(--muted); font-size: .9375rem; }
+    .note { margin: 20px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); white-space: pre-line; }
+    .note small { display: block; color: var(--muted); margin-top: 6px; }
+    h2 { display: flex; align-items: center; gap: 10px; margin: 30px 0 12px; font-size: 1.25rem; letter-spacing: -.015em; }
+    h2 .ic { width: 22px; height: 22px; }
+    h2 .count { font-size: .8125rem; font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 9px; }
+    .items { display: grid; gap: 12px; }
+    .item { display: flex; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); }
+    .item-img { width: 104px; object-fit: cover; flex: none; }
+    .item-body { padding: 14px 16px; display: grid; gap: 4px; min-width: 0; }
+    .item h3 { margin: 0; font-size: 1.0625rem; line-height: 1.3; overflow-wrap: anywhere; }
+    .sub { margin: 0; color: var(--muted); font-size: .875rem; }
+    .stars { color: var(--ink); letter-spacing: 1px; }
+    .price { justify-self: start; margin-top: 2px; padding: 2px 9px; border-radius: 6px; background: var(--surface-2); font-weight: 600; font-size: .875rem; }
+    .body { margin: 2px 0 0; color: var(--muted); font-size: .875rem; white-space: pre-line; }
+    .links { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; font-size: .875rem; font-weight: 600; }
+    .links a { text-decoration: underline; text-underline-offset: 3px; }
+    .empty { color: var(--muted); }
+    footer { max-width: 680px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .8125rem; display: flex; align-items: center; gap: 8px; }
+    .lock { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); }
+    .pin { width: 30px; height: 40px; position: relative; filter: drop-shadow(0 2px 2px rgba(0,0,0,.3)); }
+    .pin::before { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; background: #e0245e; border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+    .pin-icon { background: none; border: none; }
+    .leaflet-container { font-family: inherit; }
+    .leaflet-tooltip.lbl { border: none; border-radius: 999px; padding: 3px 10px; box-shadow: 0 2px 8px rgba(0,0,0,.2); font-weight: 600; font-size: .75rem; }
+    .leaflet-tooltip.lbl::before { display: none; }
+    .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 14px 0 0; color: var(--muted); font-size: .8125rem; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+  </style>
+</head>
+<body>
+  ${points.length ? '<div id="map" class="map" role="img" aria-label="Kaart van de reis"></div>' : heroImg ? `<img class="hero-img" src="${esc(heroImg)}" alt="">` : ''}
+  <main>
+    <p class="kicker">Reisplan${trip.added_by ? ` van ${esc(trip.added_by)}` : ''}</p>
+    <h1>${esc(trip.title)}</h1>
+    <ul class="facts">
+      ${loc ? `<li>${icon('pin')}${esc(loc.title)}</li>` : ''}
+      ${trip.start_date ? `<li>${icon('calendar')}${esc(dateText(trip))}</li>` : '<li class="muted">Datum nog niet gekozen</li>'}
+      ${trip.likes ? `<li class="muted">${icon('heart')}${trip.likes} ${trip.likes === 1 ? 'hartje' : 'hartjes'}</li>` : ''}
+    </ul>
+    ${points.length > 1 ? `<div class="legend">${groups.filter((g) => DOT[g.kind] && g.items.some((x) => x.lat != null)).map((g) => `<span><i style="background:${DOT[g.kind]}"></i>${esc(g.title)}</span>`).join('')}</div>` : ''}
+    ${whoHtml}
+    ${trip.note ? `<p class="note">${esc(trip.note)}${trip.added_by ? `<small>— ${esc(trip.added_by)}</small>` : ''}</p>` : ''}
+    ${groups.length ? groups.map((g) => `
+      <h2>${KIND_ICON[g.kind] ? icon(KIND_ICON[g.kind]) : `<span aria-hidden="true">${esc(g.icon || '')}</span>`}${esc(g.title)}${g.items.length > 1 ? ` <span class="count">${g.items.length}</span>` : ''}</h2>
+      <div class="items">${g.items.map((x) => itemCard(x, v)).join('')}</div>`).join('')
+      : '<p class="empty">Er zijn nog geen vlucht, hotel of activiteiten gekozen.</p>'}
+  </main>
+  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)}</footer>
+  ${points.length ? `<script src="/vendor/leaflet/leaflet.js"></script>
+  <script>
+  (function () {
+    var d = ${mapData};
+    if (!window.L) return;
+    var map = L.map('map', { zoomControl: false, scrollWheelZoom: false, attributionControl: true });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+    var dest = d.points.filter(function (p) { return p.kind === 'map'; })[0];
+    if (dest && d.flight) {
+      L.polyline([d.home, [dest.lat, dest.lng]], { color: '#e0245e', weight: 2, dashArray: '2 7', lineCap: 'round', opacity: .8 }).addTo(map);
+      L.circleMarker(d.home, { radius: 5, color: '#fff', weight: 2, fillColor: '#f97316', fillOpacity: 1 }).addTo(map);
+    }
+    d.points.forEach(function (p) {
+      if (p.kind === 'map') {
+        L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'pin-icon', html: '<div class="pin"></div>', iconSize: [30, 40], iconAnchor: [15, 40] }), keyboard: false })
+          .addTo(map).bindTooltip(p.title.split(',')[0], { permanent: true, direction: 'top', offset: [0, -38], className: 'lbl' });
+      } else {
+        L.circleMarker([p.lat, p.lng], { radius: 7, weight: 2, color: '#fff', fillColor: d.dot[p.kind] || '#222', fillOpacity: 1 })
+          .addTo(map).bindTooltip(p.title, { direction: 'top', offset: [0, -6] });
+      }
+    });
+    var pts = d.points.map(function (p) { return [p.lat, p.lng]; });
+    if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 12 });
+    else map.setView(pts[0], 10);
+  })();
+  </script>` : ''}
+</body>
+</html>`;
+}
+
+router.get('/reis/:slug', (req, res, next) => {
+  const trip = tripBySlug(req.params.slug);
+  if (!trip) return next();
+  res.set('Cache-Control', 'no-cache').type('html').send(tripPageHtml(req, tripView(trip)));
+});
+
+router.get('/og/reis/:slug.jpg', async (req, res, next) => {
+  if (!sharp) return next();
+  const trip = tripBySlug(req.params.slug);
+  if (!trip) return next();
+  try {
+    const v = tripView(trip);
+    const max = v.loc && v.loc.image ? 34 : 50;
+    const rows = [];
+    if (trip.start_date) rows.push(dateText(trip));
+    for (const g of v.groups) {
+      const first = g.items[0];
+      if (g.kind === 'flight') rows.push(`Vlucht ${(first.subtitle || first.title).split('·')[0].trim()}`);
+      else if (g.kind === 'stay') rows.push(`Hotel ${first.title}`);
+    }
+    const extra = v.groups.filter((g) => g.kind === 'do' || g.kind === 'eat').reduce((n, g) => n + g.items.length, 0);
+    if (extra) rows.push(`${extra} ${extra === 1 ? 'plek' : 'plekken'} om te bezoeken`);
+    const img = await renderCard({
+      kicker: v.loc ? clip(v.loc.title, 40) : 'Reisplan',
+      title: trip.title,
+      rows: rows.slice(0, 4).map((label) => ({ label: clip(label, max), votes: null })),
+      footer: 'Tik voor het hele reisplan',
+    }, v.loc && v.loc.image);
+    res.type('jpeg').set('Cache-Control', 'public, max-age=300').send(img);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

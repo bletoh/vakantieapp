@@ -1213,3 +1213,8 @@ button.chip:hover { background: var(--navy-soft); }
 .planned-row.conflict { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 7%, var(--surface)); }
 .planned-row.conflict small { color: var(--bad); }
 .day.trip-conflict { box-shadow: inset 0 -3px 0 var(--bad); }
+
+/* reis delen in WhatsApp */
+.trip-share { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 4px; }
+.trip-share .btn.wa { gap: 8px; border-radius: 999px; padding: 8px 14px; }
+.trip-share .text-btn { font-size: .8125rem; }

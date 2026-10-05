@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
@@ -114,6 +115,14 @@ const tripCols = db.prepare('PRAGMA table_info(trips)').all().map((c) => c.name)
 if (!tripCols.includes('start_date')) db.exec('ALTER TABLE trips ADD COLUMN start_date TEXT');
 if (!tripCols.includes('end_date')) db.exec('ALTER TABLE trips ADD COLUMN end_date TEXT');
 
+// Elke reis heeft een onraadbare code voor de alleen-lezen deellink (/reis/<code>).
+const shareSlug = () => crypto.randomBytes(9).toString('base64url').replace(/[-_]/g, 'x').slice(0, 10);
+if (!tripCols.includes('share_slug')) db.exec('ALTER TABLE trips ADD COLUMN share_slug TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS trips_share_slug ON trips (share_slug)');
+for (const { id } of db.prepare('SELECT id FROM trips WHERE share_slug IS NULL').all()) {
+  db.prepare('UPDATE trips SET share_slug = ? WHERE id = ?').run(shareSlug(), id);
+}
+
 const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
 if (!sectionCols.includes('show_price')) {
   db.exec('ALTER TABLE sections ADD COLUMN show_price INTEGER NOT NULL DEFAULT 0');
@@ -176,3 +185,4 @@ module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;
 module.exports.getPolls = getPolls;
+module.exports.shareSlug = shareSlug;

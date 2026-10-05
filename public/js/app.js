@@ -343,6 +343,22 @@
         : '<div class="empty"><p>Nog geen reizen voorgesteld. Wees de eerste!</p></div>'}`;
   }
 
+  // Alleen-lezen overzicht van een reis, te delen in WhatsApp.
+  const tripShareUrl = (t) => `${location.origin}/reis/${t.share_slug}`;
+  function tripShareText(t) {
+    const lines = [`✈️ *${t.title}*`];
+    if (t.start_date) lines.push(`📅 ${rangeText(t.start_date, t.end_date)} (${dayCount(t.start_date, t.end_date)} dagen)`);
+    lines.push(`Bekijk het hele reisplan: ${tripShareUrl(t)}`);
+    return lines.join('\n');
+  }
+  function tripShareHtml(t, cls = '') {
+    if (!t || !t.share_slug) return '';
+    return `<div class="trip-share ${cls}">
+      <a class="btn sm wa" href="${waLink(tripShareText(t))}" target="_blank" rel="noopener">${WA_ICON} Deel reis via WhatsApp</a>
+      <a class="text-btn" href="/reis/${esc(t.share_slug)}" target="_blank" rel="noopener">Bekijk wat zij zien ↗</a>
+    </div>`;
+  }
+
   function tripLocation(t) {
     return locations().find((l) => t.item_ids.includes(l.id)) || null;
   }
@@ -376,6 +392,7 @@
                 ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}</span>
             </a></li>`).join('')}</ul>` : ''}
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
+          ${tripShareHtml(t)}
           <div class="card-foot">
             ${likeBtn('trip', t.id, t.likes)}
             ${loc ? `<a class="link-btn" href="#pin-${loc.id}">Verder plannen op de kaart →</a>` : ''}
@@ -448,6 +465,9 @@
   // Wie kan niet tijdens een reis (alleen mensen die de datumprikker hebben ingevuld).
   function conflictsOf(trip) {
     if (!trip.start_date || !trip.end_date) return null;
+    // Valt de reis helemaal buiten de periode van de datumprikker, dan weten we niet wie er kan.
+    const cfg = pollSettings();
+    if (trip.end_date < cfg.start || trip.start_date > cfg.end) return null;
     const range = rangeDays(trip.start_date, trip.end_date);
     const out = [];
     for (const [name, set] of availabilityMap()) {
@@ -467,7 +487,8 @@
     const n = dayCount(t.start_date, t.end_date);
     return `
       <div class="trip-dates">${rangeText(t.start_date, t.end_date)} · ${n} ${n === 1 ? 'dag' : 'dagen'}</div>
-      ${conflicts.length ? `<div class="conflict-note"><strong>Kan niet:</strong> ${conflictText(conflicts)}</div>`
+      ${!conflicts ? (availabilityMap().size ? '<div class="hint">Valt buiten de periode van de datumprikker</div>' : '')
+        : conflicts.length ? `<div class="conflict-note"><strong>Kan niet:</strong> ${conflictText(conflicts)}</div>`
         : availabilityMap().size ? '<div class="ok-note">✓ Iedereen kan</div>' : ''}`;
   }
 
@@ -557,11 +578,12 @@
       ${dated.length ? `
         <div class="label">Geplande reizen</div>
         <ul class="planned">${dated.map((t) => {
-          const c = conflictsOf(t);
+          const c = conflictsOf(t) || [];
+          const known = conflictsOf(t) !== null;
           return `<li class="planned-row${c.length ? ' conflict' : ''}" data-trip="${t.id}" tabindex="0">
             <strong>${esc(t.title)}</strong>
             <span>${rangeText(t.start_date, t.end_date)}</span>
-            ${c.length ? `<small>Kan niet: ${conflictText(c)}</small>` : people.length ? '<small>✓ Iedereen kan</small>' : ''}
+            ${c.length ? `<small>Kan niet: ${conflictText(c)}</small>` : !known ? '<span>Buiten de periode van de datumprikker</span>' : people.length ? '<small>✓ Iedereen kan</small>' : ''}
           </li>`;
         }).join('')}</ul>` : ''}
 
@@ -2066,15 +2088,17 @@
     const windows = bestWindows(byName, cfg);
     const dated = t && t.start_date;
     const conflicts = p.conflicts || [];
+    const known = byName.size > 0 && p.conflicts !== null;
     const me = store.get('name').trim();
     const summary = dated
-      ? `${shortRange(t.start_date, t.end_date)}${conflicts.length ? ` · <span class="warn">${conflicts.length} kan niet</span>` : byName.size ? ' · iedereen kan' : ''}`
+      ? `${shortRange(t.start_date, t.end_date)}${conflicts.length ? ` · <span class="warn">${conflicts.length} kan niet</span>` : known ? ' · iedereen kan' : ''}`
       : 'Nog niet gekozen';
     const body = `
       ${dated ? `<div class="when-chosen">
           <p class="when-range"><strong>${rangeText(t.start_date, t.end_date)}</strong> · ${dayCount(t.start_date, t.end_date)} dagen</p>
           ${conflicts.length ? `<div class="conflict-note"><strong>Kan niet:</strong> ${conflictText(conflicts)}</div>`
-            : byName.size ? '<div class="ok-note">✓ Iedereen die de datumprikker invulde kan</div>' : ''}
+            : known ? '<div class="ok-note">✓ Iedereen die de datumprikker invulde kan</div>'
+            : byName.size ? '<p class="hint">Valt buiten de periode van de datumprikker, dus we weten niet wie er kan.</p>' : ''}
         </div>` : ''}
       ${windows.length ? `
         <p class="mini-label">Beste periodes uit de datumprikker</p>
@@ -2204,6 +2228,7 @@
           ${loc.added_by ? `<span class="added-by">Voorgesteld door ${esc(loc.added_by)}</span>` : ''}
           <span class="progress lg" role="img" aria-label="${p.done} van ${p.total} geregeld"><span style="width:${Math.round(p.done / p.total * 100)}%"></span></span>
           <span class="plan-status">${p.done === p.total ? '✓ Datum, vlucht en hotel geregeld' : `${p.done} van ${p.total} geregeld: datum, vlucht en hotel`}</span>
+          ${p.done ? tripShareHtml(p.trip) : ''}
         </div>
       </div>
       ${whenStepHtml(loc, p)}
