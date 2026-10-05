@@ -2,7 +2,7 @@
 *.env
 .env.*
 !.env.example
-data/
+/data/
 db_data/
 mysql/
 *.sql
