@@ -966,11 +966,16 @@
         </div>`;
       listOpen = false;
       mountMap();
-      sheetSwipe($('#destGrip'), { up: () => setListOpen(true), down: () => setListOpen(false), tap: () => setListOpen(!listOpen) });
+      sheetSwipe($('#destGrip'), {
+        up: () => setListOpen(true), down: () => setListOpen(false), tap: () => setListOpen(!listOpen),
+        sheet: () => (isPhone() ? $('#destSheet') : null),
+      });
+      setupCarousel();
     } else {
       drawMapData();
     }
     $('#planner').innerHTML = plannerHtml();
+    restoreCarousel();
     const pin = pinFromHash();
     if (pin && (!pinCtx || pinCtx.locId !== pin.id || !pinDialog.open)) openPin(pin.id, { fly: true });
   }
@@ -989,23 +994,120 @@
     grip.setAttribute('aria-expanded', String(open));
     grip.setAttribute('aria-label', open ? 'Lijst met bestemmingen inklappen' : 'Lijst met bestemmingen uitklappen');
     if (!open) $('#planner').scrollTop = 0;
+    carouselHold = Date.now() + 500;
+  }
+
+  // Ingeklapt op de telefoon staan de bestemmingen als kaartjes naast elkaar.
+  // Veeg je naar een ander kaartje, dan licht die pin op en schuift de kaart er zo nodig heen.
+  let carouselLeft = 0;
+  let carouselQuiet = false;
+  let carouselHold = 0;
+  let carouselCurrent = null;
+
+  const carouselList = () => (isPhone() && !listOpen ? $('#destSheet .dest-list') : null);
+
+  function centeredCard(list) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const li of list.children) {
+      const d = Math.abs(li.offsetLeft - 16 - list.scrollLeft);
+      if (d < bestDist) { best = li; bestDist = d; }
+    }
+    return best;
+  }
+
+  function markCurrent(id) {
+    carouselCurrent = id;
+    $$('#destSheet .dest').forEach((li) => li.classList.toggle('current', +li.dataset.dest === id));
+  }
+
+  function setupCarousel() {
+    let timer = null;
+    $('#destSheet').addEventListener('scroll', (e) => {
+      const list = e.target;
+      if (!list.classList || !list.classList.contains('dest-list')) return;
+      carouselLeft = list.scrollLeft;
+      clearTimeout(timer);
+      timer = setTimeout(() => carouselSettled(list), 140);
+    }, true);
+  }
+
+  function carouselSettled(list) {
+    if (carouselQuiet) { carouselQuiet = false; return; }
+    if (list !== carouselList() || pinDialog.open || Date.now() < carouselHold) return;
+    const li = centeredCard(list);
+    const loc = li && findItem(+li.dataset.dest);
+    if (!loc || loc.id === carouselCurrent) return;
+    markCurrent(loc.id);
+    highlightPin(loc.id);
+    if (map && hasPos(loc) && !map.getBounds().pad(-0.2).contains([loc.lat, loc.lng])) {
+      map.panTo([loc.lat, loc.lng], { animate: !reducedMotion(), duration: 0.6 });
+    }
+  }
+
+  // Zet een kaartje vooraan zonder dat de kaart gaat schuiven.
+  function scrollCarouselTo(id) {
+    const list = carouselList();
+    const li = list && list.querySelector(`[data-dest="${id}"]`);
+    if (!li) return;
+    const left = Math.max(0, Math.min(list.scrollWidth - list.clientWidth, li.offsetLeft - 16));
+    if (Math.abs(left - list.scrollLeft) > 2) { carouselQuiet = true; list.scrollLeft = left; }
+    markCurrent(id);
+  }
+
+  // Na opnieuw tekenen van de lijst: hetzelfde kaartje in beeld houden.
+  function restoreCarousel() {
+    const list = carouselList();
+    if (!list) return;
+    if (carouselLeft > 0) {
+      list.scrollLeft = carouselLeft;
+      if (list.scrollLeft > 0) carouselQuiet = true;
+    }
+    if (carouselCurrent) markCurrent(carouselCurrent);
   }
 
   // Omhoog of omlaag vegen over een greep; een tik (of Enter) doet `tap`.
-  function sheetSwipe(el, { up, down, tap }) {
+  // Met `sheet` (een functie die het paneel geeft) volgt het paneel je vinger tijdens het vegen.
+  function sheetSwipe(el, { up, down, tap, sheet }) {
     if (!el) return;
     let y0 = null;
+    let h0 = 0;
+    let target = null;
     let swiped = false;
-    el.addEventListener('pointerdown', (e) => { y0 = e.clientY; swiped = false; });
+    const release = () => {
+      if (target) { target.style.height = ''; target.style.transition = ''; }
+      target = null;
+    };
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button > 0 || e.target.closest('button:not(.sheet-grip), a, input')) return;
+      y0 = e.clientY;
+      swiped = false;
+      target = sheet ? sheet() : null;
+      if (target) h0 = target.getBoundingClientRect().height;
+      try { el.setPointerCapture(e.pointerId); } catch { /* niet erg */ }
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (y0 === null || !target) return;
+      const dy = e.clientY - y0;
+      if (Math.abs(dy) < 4) return;
+      const max = target.parentElement === document.body || target.tagName === 'DIALOG'
+        ? window.innerHeight - 20 : target.parentElement.getBoundingClientRect().height - 8;
+      target.style.transition = 'none';
+      target.style.height = `${Math.max(60, Math.min(max, h0 - dy))}px`;
+    });
     el.addEventListener('pointerup', (e) => {
       if (y0 === null) return;
       const dy = e.clientY - y0;
       y0 = null;
-      if (Math.abs(dy) < 24) return;
+      if (Math.abs(dy) < 24) { release(); return; }
       swiped = true;
+      // Inline hoogte loslaten en tegelijk de nieuwe stand kiezen: de CSS-overgang doet de rest.
+      const t = target;
+      target = null;
       (dy < 0 ? up : down)();
+      if (t && t.style.height !== '0px') { t.style.transition = ''; t.style.height = ''; }
     });
-    el.addEventListener('pointercancel', () => { y0 = null; });
+    el.addEventListener('pointercancel', () => { y0 = null; release(); });
     if (tap) el.addEventListener('click', () => { if (!swiped) tap(); swiped = false; });
   }
 
@@ -1747,6 +1849,7 @@
     setHashQuietly(`#pin-${id}`);
     if (fly && map && hasPos(loc)) flyToVisible([loc.lat, loc.lng], Math.max(map.getZoom(), 8));
     setListOpen(false);
+    scrollCarouselTo(id);
     openPinSheet(loc);
   }
 
@@ -1788,6 +1891,7 @@
       pinDialog.classList.toggle('bottom', mode === 'bottom');
       setPinFull(false);
       document.body.classList.toggle('pin-bottom', mode === 'bottom');
+      if (mode !== 'side') Object.assign(pinDialog.style, { top: '', left: '', width: '', height: '', transition: '' });
       if (mode === 'side') { placeSideSheet(); pinDialog.show(); } else if (mode === 'bottom') pinDialog.show(); else pinDialog.showModal();
       $('#pinTitle').focus({ preventScroll: true });
     }
@@ -1818,19 +1922,30 @@
     grip.setAttribute('aria-expanded', String(full));
     grip.setAttribute('aria-label', full ? 'Planpaneel kleiner maken, kaart tonen' : 'Planpaneel groter maken');
   }
+  // Omlaag vegen vanuit de halve stand: paneel zakt weg en sluit.
+  function slidePinSheetAway() {
+    if (reducedMotion()) { closePinSheet(); return; }
+    pinDialog.style.transition = 'height .18s ease-in';
+    pinDialog.style.height = '0px';
+    setTimeout(closePinSheet, 180);
+  }
+  const pinSheetEl = () => (currentMode() === 'bottom' ? pinDialog : null);
   sheetSwipe($('#pinGrip'), {
     up: () => setPinFull(true),
-    down: () => (pinDialog.classList.contains('full') ? setPinFull(false) : closePinSheet()),
+    down: () => (pinDialog.classList.contains('full') ? setPinFull(false) : slidePinSheetAway()),
     tap: () => setPinFull(!pinDialog.classList.contains('full')),
+    sheet: pinSheetEl,
   });
   sheetSwipe($('.sheet-head', pinDialog), {
     up: () => { if (currentMode() === 'bottom') setPinFull(true); },
-    down: () => { if (currentMode() !== 'bottom') return; if (pinDialog.classList.contains('full')) setPinFull(false); else closePinSheet(); },
+    down: () => { if (currentMode() !== 'bottom') return; if (pinDialog.classList.contains('full')) setPinFull(false); else slidePinSheetAway(); },
+    sheet: pinSheetEl,
   });
 
   pinDialog.addEventListener('close', () => {
     pinCtx = null;
     document.body.classList.remove('pin-bottom');
+    if (currentMode() === 'bottom') { pinDialog.style.height = ''; pinDialog.style.transition = ''; }
     if (/^#pin-\d+$/.test(location.hash)) setHashQuietly('#kaart');
     refreshPinMarkers();
     if (pinReturnFocus && pinReturnFocus.isConnected) pinReturnFocus.focus({ preventScroll: true });
