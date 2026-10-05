@@ -92,7 +92,8 @@ router.get('/stem/:slug', (req, res, next) => {
 
 /* ---------- plaatjes voor het voorbeeld (1200 × 630) ---------- */
 
-const C = { paper: '#f3eee4', ink: '#1d1b16', muted: '#6f685c', red: '#b8412c', navy: '#1f3a68', line: '#d9cfbd', good: '#3f6b3a' };
+// Zelfde kleuren als de app: wit, grijstinten en één accentkleur.
+const C = { paper: '#ffffff', ink: '#222222', muted: '#6a6a6a', red: '#e0245e', navy: '#222222', line: '#ebebeb', good: '#008a05' };
 
 function wrap(text, max) {
   const words = String(text).split(/\s+/);
@@ -105,13 +106,9 @@ function wrap(text, max) {
   return out.slice(0, 2);
 }
 
+// Accentbalk bovenaan.
 function stripe() {
-  let s = '';
-  for (let x = -40; x < 1240; x += 44) {
-    s += `<polygon points="${x},0 ${x + 14},0 ${x + 8},10 ${x - 6},10" fill="${C.red}"/>`;
-    s += `<polygon points="${x + 22},0 ${x + 36},0 ${x + 30},10 ${x + 16},10" fill="${C.navy}"/>`;
-  }
-  return s;
+  return `<rect width="1200" height="10" fill="${C.red}"/>`;
 }
 
 function cardSvg({ kicker, title, rows, footer, photoWidth }) {
@@ -125,15 +122,15 @@ function cardSvg({ kicker, title, rows, footer, photoWidth }) {
     const pct = total ? r.votes / total : 0;
     return `
       <text x="70" y="${yy}" font-family="DejaVu Sans" font-size="30" font-weight="bold" fill="${C.ink}">${esc(r.label)}</text>
-      ${r.votes != null ? `<text x="${w - 70}" y="${yy}" text-anchor="end" font-family="DejaVu Sans Mono" font-size="26" fill="${C.muted}">${r.votes} ${r.votes === 1 ? 'stem' : 'stemmen'}</text>
+      ${r.votes != null ? `<text x="${w - 70}" y="${yy}" text-anchor="end" font-family="DejaVu Sans" font-size="26" fill="${C.muted}">${r.votes} ${r.votes === 1 ? 'stem' : 'stemmen'}</text>
       <rect x="70" y="${yy + 14}" width="${barMax}" height="12" rx="6" fill="${C.line}"/>
       <rect x="70" y="${yy + 14}" width="${Math.max(12, barMax * pct)}" height="12" rx="6" fill="${i === 0 && total ? C.red : C.navy}"/>` : ''}`;
   }).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">
     <rect width="1200" height="630" fill="${C.paper}"/>
     ${stripe()}
-    <text x="70" y="104" font-family="DejaVu Sans Mono" font-size="24" letter-spacing="4" fill="${C.red}">${esc(kicker)}</text>
-    ${titleLines.map((l, i) => `<text x="70" y="${172 + i * 70}" font-family="DejaVu Serif" font-size="60" font-weight="bold" fill="${C.ink}">${esc(l)}</text>`).join('')}
+    <text x="70" y="104" font-family="DejaVu Sans" font-size="26" font-weight="bold" fill="${C.red}">${esc(kicker)}</text>
+    ${titleLines.map((l, i) => `<text x="70" y="${172 + i * 70}" font-family="DejaVu Sans" font-size="58" font-weight="bold" fill="${C.ink}">${esc(l)}</text>`).join('')}
     ${rowSvg}
     <text x="70" y="585" font-family="DejaVu Sans" font-size="26" fill="${C.muted}">${esc(footer)}</text>
   </svg>`;
@@ -163,7 +160,7 @@ router.get('/og/stem/:slug.jpg', async (req, res, next) => {
     const winner = poll.is_closed && rows[0] && rows[0].votes ? rows[0] : null;
     const voters = new Set(poll.votes.map((v) => v.name)).size;
     const img = await renderCard({
-      kicker: winner ? 'UITSLAG STEMRONDE' : 'STEM MEE',
+      kicker: winner ? 'Uitslag stemronde' : 'Stem mee',
       title: winner ? `${shortName(winner.title)} wint!` : poll.title,
       rows: rows.map((r) => ({ label: shortName(r.title), votes: voters ? r.votes : null })),
       footer: winner ? `${voters} mensen stemden` : poll.closes_at ? `Stemmen kan tot en met ${fmtDate(poll.closes_at)}` : 'Tik om te stemmen',
@@ -177,7 +174,7 @@ router.get('/og/site.jpg', async (req, res, next) => {
   try {
     const locs = db.prepare("SELECT i.title, i.image FROM items i JOIN sections s ON s.id = i.section_id WHERE s.kind = 'map' ORDER BY i.is_best DESC, i.likes DESC, i.id").all();
     const img = await renderCard({
-      kicker: 'VAKANTIE PLANNEN',
+      kicker: 'Vakantie plannen',
       title: setting('site_title') || 'Onze vakantie',
       rows: locs.slice(0, 4).map((l) => ({ label: shortName(l.title), votes: null })),
       footer: 'Kies samen bestemming, datum, vlucht en hotel',
