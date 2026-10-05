@@ -1297,3 +1297,7 @@ button.chip:hover { background: var(--navy-soft); }
   .cat { min-height: 36px; padding: 0 13px; font-size: .875rem; }
   .idea-cats { gap: 6px; }
 }
+.pkg-pp { display: grid; justify-items: end; text-align: right; line-height: 1.2; }
+.pkg-pp strong { font-size: 1.125rem; color: var(--brand); }
+.pkg-pp small { font-size: .75rem; color: var(--muted); }
+.idea-opts label small { font-weight: 400; color: var(--muted); }
