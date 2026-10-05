@@ -2460,11 +2460,25 @@
     mid: { label: 'Middenklasse', what: 'appartement of hotel', factor: 1 },
     luxe: { label: 'Luxe', what: 'villa of goed hotel', factor: 1.9 },
   };
+  // Regio per land, voor de keuze 'Waar'.
+  const REGIONS = [['all', 'Overal'], ['eu', 'Europa'], ['azie', 'Azië & Oceanië'], ['carib', 'Caraïben'], ['amerika', 'Amerika'], ['afrika', 'Afrika & Midden-Oosten']];
+  const REGION_OF = {
+    Thailand: 'azie', Vietnam: 'azie', Indonesië: 'azie', Singapore: 'azie', China: 'azie', 'Zuid-Korea': 'azie', Japan: 'azie',
+    Maleisië: 'azie', Filipijnen: 'azie', 'Sri Lanka': 'azie', Malediven: 'azie', India: 'azie', Australië: 'azie',
+    Curaçao: 'carib', Aruba: 'carib', Bonaire: 'carib', 'Sint Maarten': 'carib', 'Dominicaanse Republiek': 'carib', Jamaica: 'carib',
+    Cuba: 'carib', Barbados: 'carib', "Bahama's": 'carib',
+    'Verenigde Staten': 'amerika', Mexico: 'amerika', Brazilië: 'amerika', Argentinië: 'amerika', 'Costa Rica': 'amerika',
+    Colombia: 'amerika', Peru: 'amerika', Canada: 'amerika',
+    Marokko: 'afrika', Egypte: 'afrika', Kaapverdië: 'afrika', Tanzania: 'afrika', 'Zuid-Afrika': 'afrika', Mauritius: 'afrika',
+    Seychellen: 'afrika', 'Verenigde Arabische Emiraten': 'afrika',
+  };
+  const regionOf = (d) => REGION_OF[d.c] || 'eu';
+  const PAGE = 12;
   const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
   const euro = (n) => `€ ${Math.round(n).toLocaleString('nl-NL')}`;
 
   let destinations = null;
-  const ideaCtx = { list: [], airports: new Map() };
+  const ideaCtx = { list: [], airports: new Map(), limit: PAGE };
 
   async function loadDestinations() {
     if (!destinations) destinations = await fetch('/data/bestemmingen.json').then((r) => r.json());
@@ -2480,6 +2494,7 @@
     const cats = (Array.isArray(p.cats) ? p.cats : []).filter((c) => CAT_LABEL[c]);
     return {
       cats, month: p.month || 'poll', days: +p.days || pollSettings().days, budget: +p.budget || 0,
+      region: REGIONS.some(([k]) => k === p.region) ? p.region : 'all',
       persons: Math.min(30, Math.max(1, +p.persons || defaultPersons())),
     };
   }
@@ -2517,7 +2532,9 @@
     }
     if (cats.some((c) => ['natuur', 'avontuur'].includes(c))) parts.push(t >= 12 && t <= 27 ? 1 : (t >= 6 && t < 12) || (t > 27 && t <= 31) ? 0.6 : 0.2);
     if (!parts.length) parts.push(t >= 16 && t <= 28 ? 1 : (t >= 10 && t < 16) || (t > 28 && t <= 32) ? 0.6 : 0.25);
-    return parts.reduce((a, b) => a + b, 0) / parts.length;
+    const score = parts.reduce((a, b) => a + b, 0) / parts.length;
+    // In het regenseizoen (moesson, orkanen) is het warm maar nat: minder geschikt.
+    return isRainy(d, m) ? score * 0.5 : score;
   }
 
   // Kosten: vlucht p.p. plus verblijf. Met meer mensen deel je een appartement of villa en wordt
@@ -2536,12 +2553,14 @@
     return { ...calc('budget'), over: true };
   }
 
+  const isRainy = (d, m) => m !== null && Array.isArray(d.r) && d.r.includes(m);
   const tagsOf = (d) => (d.h <= 50 ? [...d.t, 'goedkoop'] : d.t);
 
   function rankIdeas(p) {
     const m = ideaMonth(p);
     const wish = p.cats.filter((c) => c !== 'kort' && c !== 'ver');
-    return destinations.map((d) => {
+    const ranked = destinations.map((d) => {
+      if (p.region !== 'all' && regionOf(d) !== p.region) return null;
       const km = distanceKm(HOME, [d.lat, d.lng]);
       const hours = km / 800 + 0.5;
       if (p.cats.includes('kort') && hours > 3.5) return null;
@@ -2557,7 +2576,17 @@
       let score = weather === null ? match : 0.6 * match + 0.4 * weather;
       if (cost.over) score -= 0.15;
       return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), pin: nearbyPin(d) };
-    }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP).slice(0, 6);
+    }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP);
+    // Spreiding: bovenaan hooguit twee per land, de rest schuift door naar achteren.
+    const perCountry = new Map();
+    const first = [];
+    const later = [];
+    for (const x of ranked) {
+      const n = perCountry.get(x.d.c) || 0;
+      (n < 2 ? first : later).push(x);
+      perCountry.set(x.d.c, n + 1);
+    }
+    return [...first, ...later];
   }
 
   function monthOptions(p) {
@@ -2590,7 +2619,11 @@
           </span>
         </label>
         <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
-        <label>Budget p.p. <small>(incl. verblijf)</small><span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
+        <label><span>Budget p.p. <small>incl. verblijf</small></span><span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
+      </div>
+      <p class="mini-label idea-cats-label">Waar naartoe?</p>
+      <div class="idea-cats idea-regions" role="radiogroup" aria-label="Regio">
+        ${REGIONS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-region="${k}" aria-checked="${p.region === k}" aria-pressed="${p.region === k}">${esc(label)}</button>`).join('')}
       </div>
       <p class="mini-label idea-cats-label">Waar hebben jullie zin in?</p>
       <div class="idea-cats" role="group" aria-label="Waar hebben jullie zin in?">
@@ -2604,12 +2637,14 @@
     if (!box) return;
     try { await loadDestinations(); } catch { box.innerHTML = '<p class="hint">De bestemmingen konden niet geladen worden.</p>'; return; }
     const p = ideaPrefs();
-    ideaCtx.list = rankIdeas(p);
+    const all = rankIdeas(p);
+    ideaCtx.list = all.slice(0, ideaCtx.limit);
     const m = ideaMonth(p);
     box.innerHTML = `
       ${!p.cats.length ? '<p class="hint">Nog niets aangetikt: dit zijn bestemmingen met lekker weer in die periode. Tik hierboven aan waar jullie zin in hebben voor betere tips.</p>' : ''}
       ${ideaCtx.list.length ? ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')
         : '<div class="empty"><p>Geen bestemming die bij alles past. Haal een wens weg of verhoog het budget.</p></div>'}
+      ${all.length > ideaCtx.list.length ? `<button type="button" class="btn block idea-more" data-idea-more>Meer bestemmingen tonen (nog ${all.length - ideaCtx.list.length})</button>` : ''}
       ${ideaCtx.list.length ? `<p class="fineprint">Prijzen zijn een indicatie: vlucht retour per persoon, verblijf voor ${p.persons} ${p.persons === 1 ? 'persoon' : 'personen'} (met meer mensen deel je een appartement of villa). De echte prijs zie je via de links.</p>` : ''}`;
     ideaCtx.list.forEach((x, i) => fillPackage(x, i));
     ideaCtx.list.forEach((x, i) => loadWikiImage(x.d, i));
@@ -2631,6 +2666,7 @@
           <div class="pkg-why">
             ${x.matched.map((c) => `<span class="chip">${esc(CAT_LABEL[c])}</span>`).join('')}
             ${m !== null ? `<span class="chip weather">± ${d.temp[m]}° in ${MONTHS[m]}</span>` : ''}
+            ${isRainy(d, m) ? '<span class="chip rain">Regenseizoen</span>' : ''}
           </div>
           <div class="pkg-block">
             <div class="pkg-line">${ic('plane')}<span><strong>Vlucht</strong> <span class="pkg-flight">vanaf Schiphol · ± ${flightTime(x.km)}</span></span></div>
@@ -2782,8 +2818,26 @@
 
   // Bediening van de ideeën-tab.
   document.addEventListener('click', async (e) => {
-    const cat = e.target.closest('.idea-cats .cat');
+    const region = e.target.closest('[data-region]');
+    if (region) {
+      const p = ideaPrefs();
+      p.region = region.dataset.region;
+      saveIdeaPrefs(p);
+      $$('[data-region]').forEach((b) => { const on = b.dataset.region === p.region; b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-checked', String(on)); });
+      ideaCtx.limit = PAGE;
+      renderIdeaResults();
+      return;
+    }
+    if (e.target.closest('[data-idea-more]')) {
+      const y = window.scrollY;
+      ideaCtx.limit += PAGE;
+      await renderIdeaResults();
+      window.scrollTo({ top: y });
+      return;
+    }
+    const cat = e.target.closest('.idea-cats .cat[data-cat]');
     if (cat) {
+      ideaCtx.limit = PAGE;
       const p = ideaPrefs();
       const k = cat.dataset.cat;
       p.cats = p.cats.includes(k) ? p.cats.filter((c) => c !== k) : [...p.cats, k];

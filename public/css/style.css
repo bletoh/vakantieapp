@@ -1301,3 +1301,6 @@ button.chip:hover { background: var(--navy-soft); }
 .pkg-pp strong { font-size: 1.125rem; color: var(--brand); }
 .pkg-pp small { font-size: .75rem; color: var(--muted); }
 .idea-opts label small { font-weight: 400; color: var(--muted); }
+.pkg-why .chip.rain { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
+.idea-regions .cat[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+.idea-more { grid-column: 1 / -1; min-height: 48px; }
