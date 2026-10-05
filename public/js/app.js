@@ -959,9 +959,14 @@
             <div id="map" class="map" role="region" aria-label="Kaart met bestemmingen. Tik op de kaart om een pin te prikken, of gebruik het zoekveld."></div>
             <div class="map-hint" id="mapHint" aria-hidden="true">Tik op de kaart om een pin te prikken</div>
           </div>
-          <aside class="planner" id="planner" aria-label="Bestemmingen en planning"></aside>
+          <div class="dest-sheet" id="destSheet">
+            <button type="button" class="sheet-grip" id="destGrip" aria-expanded="false" aria-controls="planner" aria-label="Lijst met bestemmingen uitklappen"><span aria-hidden="true"></span></button>
+            <aside class="planner" id="planner" aria-label="Bestemmingen en planning"></aside>
+          </div>
         </div>`;
+      listOpen = false;
       mountMap();
+      sheetSwipe($('#destGrip'), { up: () => setListOpen(true), down: () => setListOpen(false), tap: () => setListOpen(!listOpen) });
     } else {
       drawMapData();
     }
@@ -969,6 +974,45 @@
     const pin = pinFromHash();
     if (pin && (!pinCtx || pinCtx.locId !== pin.id || !pinDialog.open)) openPin(pin.id, { fly: true });
   }
+
+  /* --- mobiel: de kaart vult het scherm, de lijst schuift er als paneel overheen --- */
+
+  const isPhone = () => window.matchMedia('(max-width: 600px)').matches;
+  let listOpen = false;
+
+  function setListOpen(open) {
+    listOpen = open;
+    const sheet = $('#destSheet');
+    if (!sheet) return;
+    sheet.classList.toggle('open', open);
+    const grip = $('#destGrip');
+    grip.setAttribute('aria-expanded', String(open));
+    grip.setAttribute('aria-label', open ? 'Lijst met bestemmingen inklappen' : 'Lijst met bestemmingen uitklappen');
+    if (!open) $('#planner').scrollTop = 0;
+  }
+
+  // Omhoog of omlaag vegen over een greep; een tik (of Enter) doet `tap`.
+  function sheetSwipe(el, { up, down, tap }) {
+    if (!el) return;
+    let y0 = null;
+    let swiped = false;
+    el.addEventListener('pointerdown', (e) => { y0 = e.clientY; swiped = false; });
+    el.addEventListener('pointerup', (e) => {
+      if (y0 === null) return;
+      const dy = e.clientY - y0;
+      y0 = null;
+      if (Math.abs(dy) < 24) return;
+      swiped = true;
+      (dy < 0 ? up : down)();
+    });
+    el.addEventListener('pointercancel', () => { y0 = null; });
+    if (tap) el.addEventListener('click', () => { if (!swiped) tap(); swiped = false; });
+  }
+
+  // In het uitgeklapte lijstpaneel: tik op de kop klapt het weer in.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest && e.target.closest('.dest-sheet .planner-head h2') && isPhone()) setListOpen(!listOpen);
+  });
 
   /* --- zijpaneel / lijst onder de kaart --- */
 
@@ -1176,6 +1220,12 @@
     let clickTimer = null;
     map.on('click', (e) => {
       clearTimeout(clickTimer);
+      // Op de telefoon ligt er een paneel over de kaart: eerst tikken sluit dat, pas daarna prik je.
+      if (isPhone() && (listOpen || pinDialog.open)) {
+        if (pinDialog.open) closePinSheet();
+        setListOpen(false);
+        return;
+      }
       clickTimer = setTimeout(() => addPinAt(e.latlng), 280);
     });
     map.on('dblclick zoomstart movestart', () => clearTimeout(clickTimer));
@@ -1208,7 +1258,7 @@
         icon: pinIcon(it), draggable: true, autoPan: true, title: `${it.title}: reis plannen`, riseOnHover: true,
       })
         .addTo(dataLayer)
-        .bindTooltip(label, { permanent: true, interactive: true, direction: 'top', className: 'pin-label' });
+        .bindTooltip(label, { permanent: true, interactive: true, direction: 'top', className: 'pin-label', bubblingMouseEvents: false });
       m.on('click', () => openPin(it.id));
       m.getTooltip().on('click', () => openPin(it.id));
       m.on('dragend', async () => {
@@ -1228,7 +1278,7 @@
       for (const st of sectionsOfKind(kind)) {
         for (const h of st.items) {
           if (!hasPos(h) || !h.location_id) continue;
-          L.circleMarker([h.lat, h.lng], { radius: 6, weight: 2, color: '#fff', fillColor: DOT_COLORS[kind], fillOpacity: 1 })
+          L.circleMarker([h.lat, h.lng], { radius: 7, weight: 2, color: '#fff', fillColor: DOT_COLORS[kind], fillOpacity: 1, bubblingMouseEvents: false })
             .addTo(dataLayer).bindTooltip(`${st.icon} ${esc(h.title)}`, { direction: 'top', offset: [0, -4] })
             .on('click', () => openItemDialog(h));
         }
@@ -1393,11 +1443,14 @@
     input.addEventListener('blur', () => setTimeout(() => {
       if (document.activeElement !== input) showResults([]);
     }, 150));
+    // Bij neerdrukken alleen het zoekveld actief houden; kiezen pas bij de klik zelf,
+    // anders valt die klik door op de kaart eronder en komt er een tweede pin bij.
     $('#placeResults').addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-place]')) e.preventDefault();
+    });
+    $('#placeResults').addEventListener('click', (e) => {
       const li = e.target.closest('[data-place]');
-      if (!li) return;
-      e.preventDefault();
-      choosePlace(searchResults[+li.dataset.place]);
+      if (li) choosePlace(searchResults[+li.dataset.place]);
     });
   }
 
@@ -1453,8 +1506,8 @@
     if (near) { openPin(near.id, { fly: true }); return; }
     // Een land of regio past in beeld; een stad of eiland zoomt in tot zichtbaar is wat er in de buurt ligt.
     const e = Array.isArray(r.extent) && r.extent.length === 4 ? r.extent : null;
-    if (map && e) map.flyToBounds([[e[3], e[0]], [e[1], e[2]]], { paddingTopLeft: [40, 120], paddingBottomRight: [40, 40], maxZoom: 10, duration: reducedMotion() ? 0 : 1.2 });
-    else if (map) map.flyTo([r.lat, r.lng], 9, { duration: reducedMotion() ? 0 : 1.2 });
+    if (map && e) map.flyToBounds([[e[3], e[0]], [e[1], e[2]]], { paddingTopLeft: [40, 120], paddingBottomRight: [40, 40 + sheetOverlap()], maxZoom: 10, duration: reducedMotion() ? 0 : 1.2 });
+    else if (map) flyToVisible([r.lat, r.lng], 9);
     await addPinAt({ lat: r.lat, lng: r.lng }, [r.name, r.country !== r.name ? r.country : ''].filter(Boolean).join(', '), { fly: !map });
   }
 
@@ -1692,8 +1745,29 @@
     if (!loc) return;
     if (currentRoute() !== 'kaart') { location.hash = `#pin-${id}`; return; }
     setHashQuietly(`#pin-${id}`);
-    if (fly && map && hasPos(loc)) map.flyTo([loc.lat, loc.lng], Math.max(map.getZoom(), 8), { duration: reducedMotion() ? 0 : 0.8 });
+    if (fly && map && hasPos(loc)) flyToVisible([loc.lat, loc.lng], Math.max(map.getZoom(), 8));
+    setListOpen(false);
     openPinSheet(loc);
+  }
+
+  // Hoeveel pixels van de kaart het planpaneel op de telefoon bedekt.
+  function sheetOverlap() {
+    if (!map || !isPhone()) return 0;
+    const box = map.getContainer().getBoundingClientRect();
+    return Math.max(0, Math.round(box.bottom - window.innerHeight * (1 - BOTTOM_SHEET)));
+  }
+
+  // Vlieg naar een plek zodat die midden in het stuk kaart staat dat niet onder het planpaneel ligt.
+  function flyToVisible(latlng, zoom) {
+    let target = L.latLng(latlng);
+    if (isPhone()) {
+      const box = map.getContainer().getBoundingClientRect();
+      const sheetTop = window.innerHeight * (1 - BOTTOM_SHEET);
+      const want = (box.top + 72 + sheetTop) / 2; // tussen zoekveld en paneel
+      const dy = (box.top + box.height / 2) - want;
+      target = map.unproject(map.project(target, zoom).add([0, dy]), zoom);
+    }
+    map.flyTo(target, zoom, { duration: reducedMotion() ? 0 : 0.8 });
   }
 
   function openPinSheet(loc) {
@@ -1709,9 +1783,12 @@
     store.remove('returnPin');
     if (!pinDialog.open) {
       pinReturnFocus = document.activeElement;
-      const side = isWide() && currentRoute() === 'kaart';
-      pinDialog.classList.toggle('side', side);
-      if (side) { placeSideSheet(); pinDialog.show(); } else pinDialog.showModal();
+      const mode = sheetMode();
+      pinDialog.classList.toggle('side', mode === 'side');
+      pinDialog.classList.toggle('bottom', mode === 'bottom');
+      setPinFull(false);
+      document.body.classList.toggle('pin-bottom', mode === 'bottom');
+      if (mode === 'side') { placeSideSheet(); pinDialog.show(); } else if (mode === 'bottom') pinDialog.show(); else pinDialog.showModal();
       $('#pinTitle').focus({ preventScroll: true });
     }
     renderPinSheet();
@@ -1727,8 +1804,33 @@
     if (pinDialog.open) pinDialog.close();
   }
 
+  // Breed scherm: naast de kaart. Telefoon: half over de kaart, zodat pin en stipjes zichtbaar blijven.
+  const BOTTOM_SHEET = 0.56;
+  function sheetMode() {
+    if (currentRoute() !== 'kaart') return 'modal';
+    return isWide() ? 'side' : isPhone() ? 'bottom' : 'modal';
+  }
+  const currentMode = () => (pinDialog.classList.contains('side') ? 'side' : pinDialog.classList.contains('bottom') ? 'bottom' : 'modal');
+
+  function setPinFull(full) {
+    pinDialog.classList.toggle('full', full);
+    const grip = $('#pinGrip');
+    grip.setAttribute('aria-expanded', String(full));
+    grip.setAttribute('aria-label', full ? 'Planpaneel kleiner maken, kaart tonen' : 'Planpaneel groter maken');
+  }
+  sheetSwipe($('#pinGrip'), {
+    up: () => setPinFull(true),
+    down: () => (pinDialog.classList.contains('full') ? setPinFull(false) : closePinSheet()),
+    tap: () => setPinFull(!pinDialog.classList.contains('full')),
+  });
+  sheetSwipe($('.sheet-head', pinDialog), {
+    up: () => { if (currentMode() === 'bottom') setPinFull(true); },
+    down: () => { if (currentMode() !== 'bottom') return; if (pinDialog.classList.contains('full')) setPinFull(false); else closePinSheet(); },
+  });
+
   pinDialog.addEventListener('close', () => {
     pinCtx = null;
+    document.body.classList.remove('pin-bottom');
     if (/^#pin-\d+$/.test(location.hash)) setHashQuietly('#kaart');
     refreshPinMarkers();
     if (pinReturnFocus && pinReturnFocus.isConnected) pinReturnFocus.focus({ preventScroll: true });
@@ -1737,7 +1839,7 @@
 
   // Niet-modale zijbalk (breed scherm) sluit ook met Escape.
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && pinDialog.open && pinDialog.classList.contains('side') && !$('dialog[open]:not(#pinDialog)')) {
+    if (e.key === 'Escape' && pinDialog.open && currentMode() !== 'modal' && !$('dialog[open]:not(#pinDialog)')) {
       closePinSheet();
     }
   });
@@ -1754,10 +1856,11 @@
   }
   window.addEventListener('resize', () => {
     if (!pinDialog.open) return;
-    if (pinDialog.classList.contains('side')) {
-      if (isWide()) placeSideSheet();
-      else { const ctx = pinCtx; pinDialog.close(); if (ctx) openPin(ctx.locId, { fly: false }); }
-    }
+    if (sheetMode() !== currentMode()) {
+      const ctx = pinCtx;
+      pinDialog.close();
+      if (ctx) openPin(ctx.locId, { fly: false });
+    } else if (currentMode() === 'side') placeSideSheet();
   });
   window.addEventListener('scroll', () => { if (pinDialog.open && pinDialog.classList.contains('side')) placeSideSheet(); }, { passive: true });
 

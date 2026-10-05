@@ -21,6 +21,9 @@ Een blogachtige website waarmee je je vrienden laat zien wat de beste vakantiepl
   - *Herinneren* maakt een WhatsApp-bericht met wie er nog niet heeft gestemd. Na het sluiten deel je de uitslag op dezelfde manier. De winnaar wordt de beste keuze op de kaart (rode pin).
   - De app kan zelf geen WhatsApp-berichten versturen: de knoppen openen WhatsApp met het bericht al ingevuld, en jij tikt op versturen.
 - **Mobiel**: de tabs staan als balk onderaan, binnen bereik van je duim, en er is geen titel meer die ruimte inneemt.
+  - De kaart vult het hele scherm. De bestemmingen liggen als paneel onderaan; veeg het greepje omhoog (of tik erop) voor de hele lijst.
+  - Het planpaneel van een pin bedekt maar de helft van het scherm, zodat je de pin en de stipjes van hotels en activiteiten blijft zien. Veeg omhoog voor het hele scherm, omlaag om te sluiten.
+  - Ligt er een paneel over de kaart, dan sluit een tik op de kaart dat paneel eerst; zo prik je niet per ongeluk een pin.
 - **Toegankelijk.** Zoeken werkt helemaal met het toetsenbord (pijltjes en Enter). Pinnen bereik je met Tab en open je met Enter. De nummers op de pinnen komen overeen met de lijst. Het paneel sluit met Escape, de app werkt op mobiel en heeft een automatische dark mode.
 - **Tabs**: naast Kaart, Datum, Reizen en Stemmen kun je zelf tabs toevoegen (＋) en aanpassen (naam, icoon, intro, prijs tonen, volgorde). Activiteiten en Eten & drinken kun je ook als lijst bekijken.
 - **Foto's** bij een suggestie of bestemming: uploaden vanaf je telefoon (automatisch verkleind) of een link plakken.
