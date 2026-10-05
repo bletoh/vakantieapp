@@ -1884,7 +1884,7 @@
     if (patch.remove) ids.delete(patch.remove);
     const body = {
       title: trip ? trip.title : `Reis naar ${shortName(loc.title)}`,
-      note: trip ? trip.note || '' : '',
+      note: 'note' in patch ? patch.note : trip ? trip.note || '' : '',
       added_by: trip ? trip.added_by || '' : store.get('name'),
       start_date: 'start_date' in patch ? patch.start_date : (trip && trip.start_date) || '',
       end_date: 'end_date' in patch ? patch.end_date : (trip && trip.end_date) || '',
@@ -2445,35 +2445,43 @@
     openItemDialog(findItem(pinCtx.locId));
   });
 
-  /* ---------- ideeën: vakantiepakketten op basis van wensen ---------- */
+  /* ---------- ideeën: vakantiepakketten (vlucht + schatting verblijf) voor de groep ---------- */
 
+  // Categorieën voor een vriendengroep. 'goedkoop' volgt uit de prijzen; 'kort' en 'ver' uit de vliegtijd.
   const IDEA_CATS = [
-    ['strand', 'Strand'], ['zon', 'Zon'], ['stad', 'Stedentrip'], ['cultuur', 'Cultuur & historie'],
-    ['natuur', 'Natuur'], ['wandelen', 'Wandelen'], ['eten', 'Lekker eten'], ['nachtleven', 'Uitgaan'],
-    ['rust', 'Rust'], ['familie', 'Met kinderen'], ['romantisch', 'Romantisch'], ['avontuur', 'Avontuur'],
-    ['eiland', 'Eiland'], ['duiken', 'Duiken & snorkelen'], ['allin', 'All-inclusive'], ['wintersport', 'Wintersport'],
-    ['kort', 'Korte vlucht (< 3 uur)'], ['ver', 'Verre reis'],
+    ['nachtleven', 'Feesten & clubs'], ['strand', 'Strand & beachclubs'], ['zon', 'Zon'], ['stad', 'Stedentrip'],
+    ['goedkoop', 'Goedkoop bier & eten'], ['eten', 'Lekker eten'], ['avontuur', 'Actie & avontuur'], ['watersport', 'Watersport & surfen'],
+    ['eiland', 'Eiland'], ['natuur', 'Natuur & hiken'], ['allin', 'All-inclusive'], ['wintersport', 'Wintersport & après-ski'],
+    ['cultuur', 'Beetje cultuur'], ['kort', 'Korte vlucht (< 3 uur)'], ['ver', 'Verre reis'],
   ];
   const CAT_LABEL = Object.fromEntries(IDEA_CATS);
   const LEVELS = {
-    budget: { label: 'Voordelig', factor: 0.55 },
-    mid: { label: 'Middenklasse', factor: 1 },
-    luxe: { label: 'Luxe', factor: 1.9 },
+    budget: { label: 'Voordelig', what: 'hostel of simpel appartement', factor: 0.55 },
+    mid: { label: 'Middenklasse', what: 'appartement of hotel', factor: 1 },
+    luxe: { label: 'Luxe', what: 'villa of goed hotel', factor: 1.9 },
   };
   const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+  const euro = (n) => `€ ${Math.round(n).toLocaleString('nl-NL')}`;
 
   let destinations = null;
-  const ideaCtx = { list: [], hotels: new Map(), airports: new Map(), choice: new Map(), busy: false };
+  const ideaCtx = { list: [], airports: new Map() };
 
   async function loadDestinations() {
     if (!destinations) destinations = await fetch('/data/bestemmingen.json').then((r) => r.json());
     return destinations;
   }
 
+  // Standaard zoveel personen als er namen bekend zijn (datumprikker, stemrondes), anders vier.
+  const defaultPersons = () => (knownPeople().length >= 2 ? knownPeople().length : 4);
+
   function ideaPrefs() {
     let p = {};
     try { p = JSON.parse(store.get('ideas') || '{}'); } catch { /* standaard */ }
-    return { cats: Array.isArray(p.cats) ? p.cats : [], month: p.month || 'poll', days: +p.days || pollSettings().days, budget: +p.budget || 0 };
+    const cats = (Array.isArray(p.cats) ? p.cats : []).filter((c) => CAT_LABEL[c]);
+    return {
+      cats, month: p.month || 'poll', days: +p.days || pollSettings().days, budget: +p.budget || 0,
+      persons: Math.min(30, Math.max(1, +p.persons || defaultPersons())),
+    };
   }
   const saveIdeaPrefs = (p) => store.set('ideas', JSON.stringify(p));
 
@@ -2504,22 +2512,31 @@
     const t = d.temp[m];
     const parts = [];
     if (cats.includes('wintersport')) parts.push(d.t.includes('wintersport') && [11, 0, 1, 2, 3].includes(m) ? 1 : 0);
-    if (cats.includes('strand') || cats.includes('zon') || cats.includes('duiken')) {
+    if (cats.some((c) => ['strand', 'zon', 'watersport', 'eiland'].includes(c))) {
       parts.push(t >= 26 && t <= 33 ? 1 : t > 33 && t <= 36 ? 0.6 : t > 36 ? 0.25 : t >= 23 ? 0.7 : t >= 20 ? 0.35 : 0);
     }
-    if (cats.some((c) => ['natuur', 'wandelen', 'avontuur'].includes(c))) parts.push(t >= 12 && t <= 25 ? 1 : (t >= 6 && t < 12) || (t > 25 && t <= 30) ? 0.6 : 0.2);
+    if (cats.some((c) => ['natuur', 'avontuur'].includes(c))) parts.push(t >= 12 && t <= 27 ? 1 : (t >= 6 && t < 12) || (t > 27 && t <= 31) ? 0.6 : 0.2);
     if (!parts.length) parts.push(t >= 16 && t <= 28 ? 1 : (t >= 10 && t < 16) || (t > 28 && t <= 32) ? 0.6 : 0.25);
     return parts.reduce((a, b) => a + b, 0) / parts.length;
   }
 
-  // Kosten per persoon: vlucht + nachten × prijs per nacht voor het niveau dat in het budget past.
+  // Kosten: vlucht p.p. plus verblijf. Met meer mensen deel je een appartement of villa en wordt
+  // het per persoon goedkoper; alleen betaal je een hele kamer.
   function ideaCost(d, p) {
+    const n = p.persons;
     const nights = Math.max(1, p.days - 1);
-    const est = (level) => Math.round(d.f + nights * d.h * LEVELS[level].factor);
-    if (!p.budget) return { level: 'mid', total: est('mid'), nights, over: false };
-    for (const level of ['luxe', 'mid', 'budget']) if (est(level) <= p.budget) return { level, total: est(level), nights, over: false };
-    return { level: 'budget', total: est('budget'), nights, over: true };
+    const share = n === 1 ? 1.6 : n >= 6 ? 0.8 : n >= 4 ? 0.9 : 1;
+    const calc = (level) => {
+      const nightPP = d.h * LEVELS[level].factor * share;
+      const stayPP = nightPP * nights;
+      return { level, nights, persons: n, nightPP, stayPP, stayGroup: stayPP * n, flightPP: d.f, totalPP: d.f + stayPP, totalGroup: (d.f + stayPP) * n };
+    };
+    if (!p.budget) return { ...calc('mid'), over: false };
+    for (const level of ['luxe', 'mid', 'budget']) { const c = calc(level); if (c.totalPP <= p.budget) return { ...c, over: false }; }
+    return { ...calc('budget'), over: true };
   }
+
+  const tagsOf = (d) => (d.h <= 50 ? [...d.t, 'goedkoop'] : d.t);
 
   function rankIdeas(p) {
     const m = ideaMonth(p);
@@ -2529,17 +2546,18 @@
       const hours = km / 800 + 0.5;
       if (p.cats.includes('kort') && hours > 3.5) return null;
       if (p.cats.includes('ver') && hours < 6) return null;
-      const matched = wish.filter((c) => d.t.includes(c));
+      const tags = tagsOf(d);
+      const matched = wish.filter((c) => tags.includes(c));
       if (wish.length && !matched.length) return null;
-      if (wish.includes('wintersport') && !d.t.includes('wintersport')) return null;
+      if (wish.includes('wintersport') && !tags.includes('wintersport')) return null;
       const cost = ideaCost(d, p);
-      if (cost.over && cost.total > p.budget * 1.15) return null;
+      if (cost.over && cost.totalPP > p.budget * 1.15) return null;
       const match = wish.length ? matched.length / wish.length : 0.6;
       const weather = weatherScore(d, m, wish);
       let score = weather === null ? match : 0.6 * match + 0.4 * weather;
       if (cost.over) score -= 0.15;
       return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), pin: nearbyPin(d) };
-    }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.total - b.cost.total).slice(0, 6);
+    }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP).slice(0, 6);
   }
 
   function monthOptions(p) {
@@ -2560,15 +2578,23 @@
     return `
       <div class="section-head">
         <h2>Ideeën</h2>
-        <p class="section-intro">Tik aan wat jullie zoeken. De app stelt vakantiepakketten samen met vlucht en verblijf; met één tik zet je er een op de kaart.</p>
-      </div>
-      <div class="idea-cats" role="group" aria-label="Wat zoeken jullie?">
-        ${IDEA_CATS.map(([k, label]) => `<button type="button" class="cat" data-cat="${k}" aria-pressed="${p.cats.includes(k)}">${esc(label)}</button>`).join('')}
+        <p class="section-intro">Met hoeveel zijn jullie en waar hebben jullie zin in? Je krijgt bestemmingen met een vlucht vanaf Schiphol en een schatting van het verblijf voor de hele groep.</p>
       </div>
       <div class="idea-opts">
-        <label>Wanneer<select id="ideaMonth">${monthOptions(p)}</select></label>
+        <label class="idea-when">Wanneer<select id="ideaMonth">${monthOptions(p)}</select></label>
+        <label>Personen
+          <span class="stepper">
+            <button type="button" data-persons="-1" aria-label="Eén persoon minder">−</button>
+            <input id="ideaPersons" type="number" min="1" max="30" inputmode="numeric" value="${p.persons}">
+            <button type="button" data-persons="1" aria-label="Eén persoon meer">+</button>
+          </span>
+        </label>
         <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
-        <label>Budget p.p.<span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen maximum" value="${p.budget || ''}"></span></label>
+        <label>Budget p.p.<span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
+      </div>
+      <p class="mini-label idea-cats-label">Waar hebben jullie zin in?</p>
+      <div class="idea-cats" role="group" aria-label="Waar hebben jullie zin in?">
+        ${IDEA_CATS.map(([k, label]) => `<button type="button" class="cat" data-cat="${k}" aria-pressed="${p.cats.includes(k)}">${esc(label)}</button>`).join('')}
       </div>
       <div id="ideaResults" class="idea-results" aria-live="polite"><p class="hint loading-dots">Bestemmingen laden</p></div>`;
   }
@@ -2581,35 +2607,43 @@
     ideaCtx.list = rankIdeas(p);
     const m = ideaMonth(p);
     box.innerHTML = `
-      ${!p.cats.length ? '<p class="hint">Nog niets aangetikt: dit zijn bestemmingen met fijn weer in die periode. Tik hierboven aan wat jullie zoeken voor betere tips.</p>' : ''}
+      ${!p.cats.length ? '<p class="hint">Nog niets aangetikt: dit zijn bestemmingen met lekker weer in die periode. Tik hierboven aan waar jullie zin in hebben voor betere tips.</p>' : ''}
       ${ideaCtx.list.length ? ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')
-        : '<div class="empty"><p>Geen pakket dat bij alles past. Haal een wens weg of verhoog het budget.</p></div>'}
-      ${ideaCtx.list.length ? '<p class="fineprint">Prijzen zijn een indicatie (vlucht retour en verblijf per persoon, uitgaande van twee per kamer). De echte prijs zie je via de links. Hotelgegevens: © OpenStreetMap-bijdragers.</p>' : ''}`;
+        : '<div class="empty"><p>Geen bestemming die bij alles past. Haal een wens weg of verhoog het budget.</p></div>'}
+      ${ideaCtx.list.length ? `<p class="fineprint">Prijzen zijn een indicatie: vlucht retour per persoon, verblijf voor ${p.persons} ${p.persons === 1 ? 'persoon' : 'personen'} (met meer mensen deel je een appartement of villa). De echte prijs zie je via de links.</p>` : ''}`;
     ideaCtx.list.forEach((x, i) => fillPackage(x, i));
     ideaCtx.list.forEach((x, i) => loadWikiImage(x.d, i));
   }
 
   function packageHtml(x, i, p, m) {
     const { d, cost } = x;
-    const hours = flightTime(x.km);
+    const n = cost.persons;
+    const trip = ideaTrip();
     return `
       <article class="pkg" data-pkg="${i}">
         <div class="pkg-img"><span class="pkg-score">${Math.round(x.score * 100)}% match</span></div>
         <div class="pkg-body">
           <div class="pkg-head">
             <h3>${esc(d.n)}${d.c !== d.n ? ` <small>${esc(d.c)}</small>` : ''}</h3>
-            ${x.pin ? `<span class="pkg-on">Staat al op de kaart</span>` : ''}
+            ${x.pin ? '<span class="pkg-on">Staat al op de kaart</span>' : ''}
           </div>
           <div class="pkg-why">
             ${x.matched.map((c) => `<span class="chip">${esc(CAT_LABEL[c])}</span>`).join('')}
             ${m !== null ? `<span class="chip weather">± ${d.temp[m]}° in ${MONTHS[m]}</span>` : ''}
           </div>
-          <div class="pkg-line">${ic('plane')}<span class="pkg-flight">Vlucht vanaf Schiphol · ± ${hours} · ± € ${d.f} retour</span></div>
-          <div class="pkg-line">${ic('bed')}<span>${LEVELS[cost.level].label} verblijf · ± € ${Math.round(d.h * LEVELS[cost.level].factor)} p.p. per nacht</span></div>
-          <ul class="pkg-hotels" aria-label="Verblijf kiezen"><li class="hint loading-dots">Verblijven zoeken</li></ul>
+          <div class="pkg-block">
+            <div class="pkg-line">${ic('plane')}<span><strong>Vlucht</strong> <span class="pkg-flight">vanaf Schiphol · ± ${flightTime(x.km)}</span></span></div>
+            <div class="pkg-price"><span>± ${euro(cost.flightPP)} p.p. retour</span><span>${euro(cost.flightPP * n)} voor ${n}</span></div>
+            <p class="pkg-links pkg-flight-links"></p>
+          </div>
+          <div class="pkg-block">
+            <div class="pkg-line">${ic('bed')}<span><strong>Verblijf</strong> · ${LEVELS[cost.level].label.toLowerCase()} (${LEVELS[cost.level].what}), ${cost.nights} ${cost.nights === 1 ? 'nacht' : 'nachten'}</span></div>
+            <div class="pkg-price"><span>± ${euro(cost.nightPP)} p.p. per nacht</span><span>${euro(cost.stayGroup)} voor ${n}</span></div>
+            <p class="pkg-links"><a href="${bookingGroupUrl(d, trip, n)}" target="_blank" rel="noopener">Verblijf zoeken voor ${n} ${n === 1 ? 'persoon' : 'personen'} ↗</a></p>
+          </div>
           <div class="pkg-foot">
-            <div class="pkg-total"><strong>± € ${cost.total} p.p.</strong>
-              <small>${p.days} dagen · vlucht + ${cost.nights} ${cost.nights === 1 ? 'nacht' : 'nachten'}${cost.over ? ' · <span class="warn">net boven budget</span>' : ''}</small></div>
+            <div class="pkg-total"><strong>± ${euro(cost.totalPP)} p.p.</strong>
+              <small>± ${euro(cost.totalGroup)} voor de groep van ${n} · ${p.days} dagen${cost.over ? ' · <span class="warn">net boven budget</span>' : ''}</small></div>
             ${x.pin ? `<a class="btn" href="#pin-${x.pin.id}">Bekijk op de kaart</a>`
               : `<button type="button" class="btn primary" data-idea-add="${i}">${ic('pin')} Zet op de kaart</button>`}
           </div>
@@ -2660,58 +2694,29 @@
     }
   }
 
-  // Verblijven die bij het niveau passen: soort en sterren, daarna afstand tot het centrum.
-  function pickHotels(hotels, level) {
-    const fit = (h) => {
-      const s = h.stars || 0;
-      if (level === 'budget') return (['Hostel', 'Pension', 'Appartement', 'Motel'].includes(h.type) ? 2 : 0) + (s && s <= 3 ? 1 : 0) - (s >= 4 ? 2 : 0);
-      if (level === 'luxe') return (h.type === 'Resort' ? 2 : 0) + (s >= 5 ? 3 : s >= 4 ? 2 : 0) - (['Hostel', 'Motel'].includes(h.type) ? 3 : 0);
-      return (h.type === 'Hotel' || h.type === 'Appartement' ? 1 : 0) + (s === 3 || s === 4 ? 2 : 0) - (h.type === 'Hostel' ? 2 : 0);
-    };
-    return [...hotels].sort((a, b) => fit(b) - fit(a) || (groupReview(b.name) ? 1 : 0) - (groupReview(a.name) ? 1 : 0) || a.km - b.km).slice(0, 3);
+  // Booking-zoekopdracht voor de hele groep (kamers voor twee, datums als die bekend zijn).
+  function bookingGroupUrl(d, trip, n) {
+    const place = d.n.replace(/\s*\(.*\)$/, '');
+    const qs = new URLSearchParams({ ss: d.c && d.c !== d.n ? `${place}, ${d.c}` : place, group_adults: n, no_rooms: Math.max(1, Math.ceil(n / 2)), group_children: 0 });
+    if (trip && trip.start_date) { qs.set('checkin', trip.start_date); qs.set('checkout', trip.end_date > trip.start_date ? trip.end_date : addDays(trip.start_date, 1)); }
+    return `https://www.booking.com/searchresults.nl.html?${qs}`;
   }
 
+  // Het dichtstbijzijnde vliegveld (lijst op de server, dus snel) met zoeklinks voor de hele groep.
   async function fillPackage(x, i) {
-    const loc = { lat: x.d.lat, lng: x.d.lng, title: ideaTitle(x.d) };
     const key = x.d.n;
-    const [airports, hotels] = await Promise.all([
-      ideaCtx.airports.get(key) || findAirports(loc).catch(() => []),
-      ideaCtx.hotels.get(key) || findHotels(loc).catch(() => null),
-    ]);
+    const airports = ideaCtx.airports.get(key) || await findAirports({ lat: x.d.lat, lng: x.d.lng }).catch(() => []);
     ideaCtx.airports.set(key, airports);
-    if (hotels) ideaCtx.hotels.set(key, hotels);
     const card = $(`.pkg[data-pkg="${i}"]`);
     if (!card || ideaCtx.list[i] !== x) return;
     const a = airports[0];
-    if (a) {
-      $('.pkg-flight', card).innerHTML = `${HOME_CODE} → ${esc(a.iata)} · ± ${flightTime(distanceKm(HOME, a.pos))} · ± € ${x.d.f} retour ·
-        <a href="${flightsUrl(a.iata, ideaTrip(x))}" target="_blank" rel="noopener">Vluchten ↗</a>`;
-    }
-    const list = $('.pkg-hotels', card);
-    if (!hotels) { list.innerHTML = '<li class="hint">Verblijven konden niet worden opgehaald. Probeer het zo nog eens.</li>'; return; }
-    const picks = pickHotels(hotels, x.cost.level);
-    x.hotelPicks = picks;
-    if (!picks.length) { list.innerHTML = '<li class="hint">Geen verblijven gevonden in de buurt.</li>'; return; }
-    const chosen = Math.min(ideaCtx.choice.get(key) || 0, picks.length - 1);
-    const trip = ideaTrip(x);
-    list.innerHTML = picks.map((h, j) => {
-      const g = groupReview(h.name);
-      const city = h.city || x.d.n;
-      return `<li>
-        <label class="pkg-hotel${j === chosen ? ' on' : ''}">
-          <input type="radio" name="pkg-${i}" value="${j}" data-pkg-hotel="${i}"${j === chosen ? ' checked' : ''}>
-          <span class="pkg-hotel-main">
-            <strong>${esc(h.name)}</strong>
-            <small>${h.stars ? `${'★'.repeat(Math.min(h.stars, 5))} · ` : ''}${esc(h.type)} · ${kmText(h.km)} van het centrum</small>
-            ${g ? `<span class="group-review">${ic('users')} Groep: ${g.rating ? `${'★'.repeat(g.rating)} ` : ''}${g.text ? `“${esc(g.text)}”` : ''}${g.by ? ` · ${esc(g.by)}` : ''}</span>` : ''}
-            <span class="result-links">Reviews:
-              <a href="${bookingUrl(`${h.name} ${city}`, trip)}" target="_blank" rel="noopener">Booking ↗</a>
-              <a href="${googleReviewsUrl(h.name, city)}" target="_blank" rel="noopener">Google ↗</a>
-            </span>
-          </span>
-        </label>
-      </li>`;
-    }).join('');
+    if (!a) return;
+    const n = x.cost.persons;
+    const trip = ideaTrip();
+    $('.pkg-flight', card).textContent = `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))}`;
+    $('.pkg-flight-links', card).innerHTML = `
+      <a href="${flightsUrl(a.iata, trip)}" target="_blank" rel="noopener">Google Flights ↗</a>
+      <a href="${skyscannerUrl(a.iata, trip)}?adultsv2=${n}" target="_blank" rel="noopener">Skyscanner voor ${n} ↗</a>`;
   }
 
   const ideaTitle = (d) => (d.c && d.c !== d.n ? `${d.n}, ${d.c}` : d.n);
@@ -2734,12 +2739,13 @@
     return dts ? { start_date: dts.start_date, end_date: dts.end_date } : null;
   }
 
-  // Eén tik: bestemming als pin, vlucht en verblijf gekoppeld, en een reis met datums als die bekend zijn.
+  // Eén tik: bestemming als pin met de vlucht en een reis; de schatting voor het verblijf staat in de toelichting.
   async function addIdea(i) {
     const x = ideaCtx.list[i];
     if (!x) return;
     const p = ideaPrefs();
     const by = store.get('name');
+    const c = x.cost;
     let loc = nearbyPin(x.d);
     if (!loc) {
       const section = mapSection();
@@ -2748,39 +2754,26 @@
       await reload();
       loc = findItem(id);
     }
-    const trip = ideaTrip(x);
+    const trip = ideaTrip();
     const a = (ideaCtx.airports.get(x.d.n) || [])[0];
     if (a && !linkedOfKind(loc.id, 'flight').length) {
       const s = await ensureSection('flight');
       await api(`/sections/${s.id}/items`, 'POST', {
         title: `Amsterdam → ${a.name} (${a.iata})`,
         subtitle: `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen`,
-        body: `Indicatie: ± € ${x.d.f} retour per persoon. Zoek de echte prijs op via de link.`,
-        price: `± € ${x.d.f}`,
+        body: `Indicatie: ± ${euro(c.flightPP)} retour per persoon (± ${euro(c.flightPP * c.persons)} voor ${c.persons}). Zoek de echte prijs op via de link.`,
+        price: `± ${euro(c.flightPP)} p.p.`,
         link: flightsUrl(a.iata, trip),
         location_id: loc.id,
         added_by: by,
       });
     }
-    const h = (x.hotelPicks || [])[ideaCtx.choice.get(x.d.n) || 0];
-    if (h && !linkedOfKind(loc.id, 'stay').some(({ it }) => it.title === h.name)) {
-      const s = await ensureSection('stay');
-      await api(`/sections/${s.id}/items`, 'POST', {
-        title: h.name,
-        subtitle: [h.stars ? `${h.stars}★` : '', h.type, h.city].filter(Boolean).join(' · '),
-        body: [h.street && `${h.street}${h.city ? ', ' + h.city : ''}`, `${kmText(h.km)} van het centrum.`].filter(Boolean).join('\n'),
-        rating: h.stars && h.stars <= 5 ? h.stars : null,
-        price: `± € ${Math.round(x.d.h * LEVELS[x.cost.level].factor * x.cost.nights)} p.p.`,
-        link: h.website || h.osm,
-        lat: h.pos[0],
-        lng: h.pos[1],
-        location_id: loc.id,
-        added_by: by,
-      });
-    }
     await reload();
-    const dts = ideaDates(p);
-    await syncTrip(findItem(loc.id), dts || {});
+    const note = `Schatting verblijf (${LEVELS[c.level].label.toLowerCase()}, ${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}): `
+      + `± ${euro(c.stayGroup)} voor ${c.persons} ${c.persons === 1 ? 'persoon' : 'personen'} (± ${euro(c.stayPP)} p.p.). `
+      + `Totaal met vlucht ± ${euro(c.totalPP)} p.p.`;
+    const existing = tripsFor(loc.id)[0];
+    await syncTrip(findItem(loc.id), { ...(ideaDates(p) || {}), ...(!existing || !existing.note ? { note } : {}) });
     toast(`${x.d.n} staat op de kaart ✓`);
     location.hash = `#pin-${loc.id}`;
   }
@@ -2799,6 +2792,13 @@
       renderIdeaResults();
       return;
     }
+    const step = e.target.closest('[data-persons]');
+    if (step) {
+      const input = $('#ideaPersons');
+      input.value = Math.min(30, Math.max(1, (parseInt(input.value, 10) || 1) + +step.dataset.persons));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
     const add = e.target.closest('[data-idea-add]');
     if (add) {
       add.disabled = true;
@@ -2807,29 +2807,24 @@
     }
   });
   document.addEventListener('change', (e) => {
-    const radio = e.target.closest('[data-pkg-hotel]');
-    if (radio) {
-      const x = ideaCtx.list[+radio.dataset.pkgHotel];
-      if (x) ideaCtx.choice.set(x.d.n, +radio.value);
-      $$(`[name="${radio.name}"]`).forEach((r) => r.closest('.pkg-hotel').classList.toggle('on', r.checked));
-      return;
-    }
     if (e.target.id === 'ideaMonth') {
       const p = ideaPrefs(); p.month = e.target.value; saveIdeaPrefs(p); renderIdeaResults();
     }
   });
   let ideaTimer = null;
   document.addEventListener('input', (e) => {
-    if (e.target.id !== 'ideaDays' && e.target.id !== 'ideaBudget') return;
+    if (!['ideaDays', 'ideaBudget', 'ideaPersons'].includes(e.target.id)) return;
     clearTimeout(ideaTimer);
     ideaTimer = setTimeout(() => {
       const p = ideaPrefs();
       const days = parseInt($('#ideaDays').value, 10);
       p.days = days >= 2 && days <= 30 ? days : pollSettings().days;
       p.budget = Math.max(0, parseInt($('#ideaBudget').value, 10) || 0);
+      const persons = parseInt($('#ideaPersons').value, 10);
+      p.persons = persons >= 1 && persons <= 30 ? persons : defaultPersons();
       saveIdeaPrefs(p);
       renderIdeaResults();
-    }, 350);
+    }, 300);
   });
 
   // Vanuit de datumprikker: kies voor welke bestemming de gekozen periode is.

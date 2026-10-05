@@ -185,40 +185,4 @@ function nearby(kind, lat, lng) {
   return job;
 }
 
-// Is er een verse cache voor deze plek?
-function isCached(kind, lat, lng) {
-  const key = `${kind}|${(+lat).toFixed(3)}|${(+lng).toFixed(3)}`;
-  return !!db.prepare(`SELECT 1 FROM nearby_cache WHERE key = ? AND fetched_at > datetime('now', '-${TTL_DAYS - 1} days')`).get(key);
-}
-
-// Hotels voor alle bestemmingen in de ideeën-tab alvast ophalen, rustig één voor één,
-// zodat de tab meteen pakketten met verblijven laat zien. Draait bij het opstarten en daarna dagelijks.
-function prewarmHotels(places) {
-  let busy = false;
-  const run = async () => {
-    if (busy) return;
-    busy = true;
-    let n = 0;
-    try {
-      for (const { lat, lng } of places) {
-        if (isCached('hotels', lat, lng)) {
-          // Wel in de cache, maar nog alleen de snelle Photon-lijst: Overpass opnieuw proberen voor sterren.
-          const la = (+lat).toFixed(3);
-          const ln = (+lng).toFixed(3);
-          const key = `hotels|${la}|${ln}`;
-          const row = db.prepare('SELECT data FROM nearby_cache WHERE key = ?').get(key);
-          const els = row ? JSON.parse(row.data) : [];
-          if (els.some((el) => el.photon)) { enrichHotels(key, +la, +ln, els); await wait(3000); }
-          continue;
-        }
-        try { await nearby('hotels', lat, lng); n++; } catch (err) { console.error('vooraf ophalen', err.message); }
-        await wait(3000);
-      }
-    } finally { busy = false; }
-    if (n) console.log(`Hotels vooraf opgehaald voor ${n} bestemmingen`);
-  };
-  setTimeout(run, 15000);
-  setInterval(run, 24 * 60 * 60 * 1000).unref();
-}
-
-module.exports = { nearby, prewarmHotels };
+module.exports = { nearby };

@@ -1231,7 +1231,7 @@ button.chip:hover { background: var(--navy-soft); }
 .cat[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .cat:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
-.idea-opts { display: grid; grid-template-columns: 2fr 1fr 1.4fr; gap: 12px; max-width: 640px; margin: 18px 0 8px; }
+.idea-opts { display: grid; grid-template-columns: 1.6fr 1.2fr .8fr 1.2fr; gap: 12px; max-width: 760px; margin: 18px 0 8px; }
 .idea-opts label { display: grid; gap: 6px; font-size: .8125rem; font-weight: 600; }
 .idea-opts select, .idea-opts input {
   font: inherit; font-size: 16px; color: var(--ink); width: 100%; min-height: 44px; padding: 8px 12px;
@@ -1240,7 +1240,20 @@ button.chip:hover { background: var(--navy-soft); }
 .idea-opts .euro { position: relative; display: block; }
 .idea-opts .euro::before { content: '€'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 500; }
 .idea-opts .euro input { padding-left: 28px; }
-@media (max-width: 520px) { .idea-opts { grid-template-columns: 1fr 1fr; } .idea-opts label:first-child { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .idea-opts { grid-template-columns: 1fr 1fr; } .idea-opts .idea-when { grid-column: 1 / -1; } }
+.stepper { display: flex; align-items: stretch; }
+.stepper input { text-align: center; border-radius: 0 !important; border-left: none !important; border-right: none !important; -moz-appearance: textfield; }
+.stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.stepper button { flex: none; width: 44px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font-size: 1.25rem; font-weight: 600; }
+.stepper button:first-child { border-radius: 10px 0 0 10px; }
+.stepper button:last-child { border-radius: 0 10px 10px 0; }
+.pkg-block { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.pkg-block .pkg-line strong { font-weight: 600; }
+.pkg-price { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-left: 30px; font-size: .875rem; color: var(--muted); }
+.pkg-price span:last-child { color: var(--ink); font-weight: 600; }
+.pkg-links { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 2px 0 0; padding-left: 30px; font-size: .875rem; font-weight: 600; }
+.pkg-links:empty { display: none; }
+.pkg-links a { color: var(--ink); }
 
 .idea-results { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); margin-top: 16px; }
 .idea-results > .hint, .idea-results > .empty, .idea-results > .fineprint { grid-column: 1 / -1; }
@@ -1263,16 +1276,6 @@ button.chip:hover { background: var(--navy-soft); }
 .pkg-line { display: flex; align-items: flex-start; gap: 10px; font-size: .9375rem; }
 .pkg-line .ic { margin-top: 2px; color: var(--muted); }
 .pkg-line a { font-weight: 600; }
-.pkg-hotels { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.pkg-hotel {
-  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
-  border: 1px solid var(--line); border-radius: 12px; transition: border-color .15s, box-shadow .15s;
-}
-.pkg-hotel.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
-.pkg-hotel input { margin: 4px 0 0; accent-color: var(--brand); width: 18px; height: 18px; flex: none; }
-.pkg-hotel-main { display: grid; gap: 2px; min-width: 0; }
-.pkg-hotel-main strong { font-weight: 600; overflow-wrap: anywhere; }
-.pkg-hotel-main small { color: var(--muted); font-size: .8125rem; }
 .group-review { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: .8125rem; color: var(--good); font-weight: 500; }
 .group-review .ic { width: 14px; height: 14px; }
 .pkg-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--line); margin-top: 4px; }
@@ -1287,4 +1290,10 @@ button.chip:hover { background: var(--navy-soft); }
   .tab > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .tab.add { flex: 0 0 40px; }
   .idea-results { grid-template-columns: 1fr; }
+}
+.idea-cats-label { margin: 18px 0 8px; }
+.idea-opts { margin-top: 4px; }
+@media (max-width: 600px) {
+  .cat { min-height: 36px; padding: 0 13px; font-size: .875rem; }
+  .idea-cats { gap: 6px; }
 }
