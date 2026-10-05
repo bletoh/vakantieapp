@@ -22,7 +22,7 @@ function pick(body, fields) {
   return out;
 }
 
-function normalizeItem(data) {
+function normalizeItem(data, teamId) {
   if ('rating' in data) {
     const r = parseInt(data.rating, 10);
     data.rating = r >= 1 && r <= 5 ? r : null;
@@ -35,12 +35,24 @@ function normalizeItem(data) {
   }
   if ('location_id' in data) {
     const id = parseInt(data.location_id, 10);
-    data.location_id = id && db.prepare('SELECT 1 FROM items WHERE id = ?').get(id) ? id : null;
+    data.location_id = id && itemOfTeam(teamId, id) ? id : null;
   }
   for (const k of Object.keys(data)) {
     if (typeof data[k] === 'string') data[k] = data[k].trim();
   }
   return data;
+}
+
+// Alles hieronder werkt binnen de actieve groep (req.team, gezet door requireTeam).
+const sectionOfTeam = (teamId, id) => db.prepare('SELECT * FROM sections WHERE id = ? AND team_id = ?').get(id, teamId);
+const itemOfTeam = (teamId, id) => db.prepare('SELECT i.* FROM items i JOIN sections s ON s.id = i.section_id WHERE i.id = ? AND s.team_id = ?').get(id, teamId);
+const tripOfTeam = (teamId, id) => db.prepare('SELECT * FROM trips WHERE id = ? AND team_id = ?').get(id, teamId);
+const pollOfTeam = (teamId, id) => db.getPolls(teamId).find((p) => p.id === +id);
+
+function notFound(what) {
+  const err = new Error(`${what} niet gevonden`);
+  err.status = 404;
+  return err;
 }
 
 function updateRow(table, id, data) {
@@ -50,33 +62,45 @@ function updateRow(table, id, data) {
   db.prepare(sql).run({ ...data, id });
 }
 
-function getContent() {
+function getContent(team, user) {
   const settings = {};
-  for (const r of db.prepare('SELECT key, value FROM settings').all()) settings[r.key] = r.value;
-  const sections = db.prepare('SELECT * FROM sections ORDER BY position, id').all();
-  const items = db.prepare('SELECT * FROM items ORDER BY position, id').all();
+  for (const r of db.prepare('SELECT key, value FROM team_settings WHERE team_id = ?').all(team.id)) settings[r.key] = r.value;
+  settings.site_title = team.name;
+  const sections = db.prepare('SELECT * FROM sections WHERE team_id = ? ORDER BY position, id').all(team.id);
+  const items = db.prepare('SELECT i.* FROM items i JOIN sections s ON s.id = i.section_id WHERE s.team_id = ? ORDER BY i.position, i.id').all(team.id);
   for (const s of sections) s.items = items.filter((i) => i.section_id === s.id);
-  const trips = db.prepare('SELECT * FROM trips ORDER BY id').all();
-  const picks = db.prepare('SELECT trip_id, item_id FROM trip_picks').all();
+  const trips = db.prepare('SELECT * FROM trips WHERE team_id = ? ORDER BY id').all(team.id);
+  const picks = db.prepare('SELECT p.trip_id, p.item_id FROM trip_picks p JOIN trips t ON t.id = p.trip_id WHERE t.team_id = ?').all(team.id);
   for (const t of trips) t.item_ids = picks.filter((p) => p.trip_id === t.id).map((p) => p.item_id);
-  const availability = db.prepare('SELECT name, date FROM available_days ORDER BY name, date').all();
-  return { settings, sections, trips, availability, polls: db.getPolls() };
+  const availability = db.prepare('SELECT name, date FROM available_days WHERE team_id = ? ORDER BY name, date').all(team.id);
+  const members = db.prepare(`
+    SELECT u.id, u.name, m.role, m.likes, m.dislikes, m.note, m.joined_at FROM team_members m JOIN users u ON u.id = m.user_id
+    WHERE m.team_id = ? ORDER BY u.name COLLATE NOCASE`).all(team.id)
+    .map((m) => ({ ...m, likes: JSON.parse(m.likes || '[]'), dislikes: JSON.parse(m.dislikes || '[]') }));
+  const reactions = db.prepare('SELECT user_id, dest, value FROM dest_reactions WHERE team_id = ?').all(team.id);
+  return {
+    team: { id: team.id, name: team.name, invite_code: team.invite_code, role: team.role },
+    me: user, settings, sections, trips, availability, polls: db.getPolls(team.id), members, reactions,
+  };
 }
 
 router.get('/content', (req, res) => {
-  res.json(getContent());
+  res.json(getContent(req.team, req.user));
 });
 
 /* ---------- settings ---------- */
 
 router.put('/settings', (req, res) => {
   const upsert = db.prepare(`
-    INSERT INTO settings (key, value) VALUES (?, ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    INSERT INTO team_settings (team_id, key, value) VALUES (?, ?, ?)
+    ON CONFLICT(team_id, key) DO UPDATE SET value = excluded.value
   `);
   for (const key of SETTING_KEYS) {
-    if (req.body[key] !== undefined) upsert.run(key, String(req.body[key]).trim());
+    if (req.body[key] !== undefined) upsert.run(req.team.id, key, String(req.body[key]).trim());
   }
+  // De titel is de naam van de groep.
+  const title = String(req.body.site_title || '').trim().slice(0, 60);
+  if (title) db.prepare('UPDATE teams SET name = ? WHERE id = ?').run(title, req.team.id);
   res.json({ ok: true });
 });
 
@@ -86,21 +110,22 @@ router.post('/sections', (req, res) => {
   const { title = 'Nieuwe tab', icon = '⭐', intro = '' } = req.body;
   const showPrice = req.body.show_price ? 1 : 0;
   const kind = SECTION_KINDS.includes(req.body.kind) ? req.body.kind : '';
-  const pos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM sections').get().p;
+  const pos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM sections WHERE team_id = ?').get(req.team.id).p;
   const { lastInsertRowid } = db
-    .prepare('INSERT INTO sections (title, icon, intro, position, show_price, kind) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(String(title).trim() || 'Nieuwe tab', icon, intro, pos, showPrice, kind);
+    .prepare('INSERT INTO sections (team_id, title, icon, intro, position, show_price, kind) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(req.team.id, String(title).trim() || 'Nieuwe tab', icon, intro, pos, showPrice, kind);
   res.json({ id: lastInsertRowid });
 });
 
 router.put('/sections/reorder', (req, res) => {
   const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
-  const stmt = db.prepare('UPDATE sections SET position = ? WHERE id = ?');
-  db.transaction(() => ids.forEach((id, i) => stmt.run(i, id)))();
+  const stmt = db.prepare('UPDATE sections SET position = ? WHERE id = ? AND team_id = ?');
+  db.transaction(() => ids.forEach((id, i) => stmt.run(i, id, req.team.id)))();
   res.json({ ok: true });
 });
 
 router.put('/sections/:id', (req, res) => {
+  if (!sectionOfTeam(req.team.id, req.params.id)) throw notFound('Tab');
   const data = pick(req.body, SECTION_FIELDS);
   if ('show_price' in data) data.show_price = data.show_price ? 1 : 0;
   if ('kind' in data && !SECTION_KINDS.includes(data.kind)) data.kind = '';
@@ -112,17 +137,19 @@ router.put('/sections/:id', (req, res) => {
 });
 
 router.delete('/sections/:id', (req, res) => {
-  db.prepare('DELETE FROM sections WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM sections WHERE id = ? AND team_id = ?').run(req.params.id, req.team.id);
   res.json({ ok: true });
 });
 
 /* ---------- items ---------- */
 
 router.post('/sections/:id/items', (req, res) => {
-  const section = db.prepare('SELECT id FROM sections WHERE id = ?').get(req.params.id);
+  const section = sectionOfTeam(req.team.id, req.params.id);
   if (!section) return res.status(404).json({ error: 'Tab niet gevonden' });
-  const data = normalizeItem(pick(req.body, ITEM_FIELDS));
+  const data = normalizeItem(pick(req.body, ITEM_FIELDS), req.team.id);
   if (!data.title) data.title = 'Nieuwe optie';
+  // Wie iets toevoegt, staat er automatisch bij.
+  data.added_by = req.user.name;
   const pos = db
     .prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM items WHERE section_id = ?')
     .get(section.id).p;
@@ -130,18 +157,22 @@ router.post('/sections/:id/items', (req, res) => {
   const { lastInsertRowid } = db
     .prepare(`INSERT INTO items (${cols.join(', ')}) VALUES (${cols.map((c) => '@' + c).join(', ')})`)
     .run({ ...data, section_id: section.id, position: pos });
+  if (section.kind === 'map') db.postEvent(req.team.id, req.user.id, `heeft ${data.title} op de kaart gezet`, 'item', lastInsertRowid);
   res.json({ id: lastInsertRowid });
 });
 
 router.put('/sections/:id/items/reorder', (req, res) => {
   const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+  if (!sectionOfTeam(req.team.id, req.params.id)) throw notFound('Tab');
   const stmt = db.prepare('UPDATE items SET position = ? WHERE id = ? AND section_id = ?');
   db.transaction(() => ids.forEach((id, i) => stmt.run(i, id, req.params.id)))();
   res.json({ ok: true });
 });
 
 router.put('/items/:id', (req, res) => {
-  const data = normalizeItem(pick(req.body, ITEM_FIELDS));
+  if (!itemOfTeam(req.team.id, req.params.id)) throw notFound('Optie');
+  const data = normalizeItem(pick(req.body, ITEM_FIELDS), req.team.id);
+  delete data.added_by;
   if (data.title !== undefined && !data.title) {
     return res.status(400).json({ error: 'Titel mag niet leeg zijn' });
   }
@@ -150,7 +181,7 @@ router.put('/items/:id', (req, res) => {
 });
 
 router.put('/items/:id/best', (req, res) => {
-  const item = db.prepare('SELECT id, section_id, is_best FROM items WHERE id = ?').get(req.params.id);
+  const item = itemOfTeam(req.team.id, req.params.id);
   if (!item) return res.status(404).json({ error: 'Niet gevonden' });
   db.transaction(() => {
     db.prepare('UPDATE items SET is_best = 0 WHERE section_id = ?').run(item.section_id);
@@ -160,6 +191,7 @@ router.put('/items/:id/best', (req, res) => {
 });
 
 router.post('/items/:id/like', (req, res) => {
+  if (!itemOfTeam(req.team.id, req.params.id)) throw notFound('Optie');
   const delta = req.body.delta === -1 ? -1 : 1;
   db.prepare('UPDATE items SET likes = MAX(0, likes + ?) WHERE id = ?').run(delta, req.params.id);
   const row = db.prepare('SELECT likes FROM items WHERE id = ?').get(req.params.id);
@@ -167,13 +199,14 @@ router.post('/items/:id/like', (req, res) => {
 });
 
 router.delete('/items/:id', (req, res) => {
+  if (!itemOfTeam(req.team.id, req.params.id)) throw notFound('Optie');
   db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 
 /* ---------- trips ---------- */
 
-function saveTrip(id, body) {
+function saveTrip(teamId, id, body, user) {
   const title = String(body.title || '').trim();
   if (!title) {
     const err = new Error('Geef de reis een naam');
@@ -181,7 +214,6 @@ function saveTrip(id, body) {
     throw err;
   }
   const note = String(body.note || '').trim();
-  const addedBy = String(body.added_by || '').trim();
   let start = /^\d{4}-\d{2}-\d{2}$/.test(body.start_date || '') ? body.start_date : null;
   let end = /^\d{4}-\d{2}-\d{2}$/.test(body.end_date || '') ? body.end_date : null;
   if (start && !end) end = start;
@@ -189,20 +221,21 @@ function saveTrip(id, body) {
   if (start && end && end < start) [start, end] = [end, start];
   const itemIds = (Array.isArray(body.item_ids) ? body.item_ids : [])
     .map((n) => parseInt(n, 10))
-    .filter((n) => db.prepare('SELECT 1 FROM items WHERE id = ?').get(n));
+    .filter((n) => itemOfTeam(teamId, n));
 
   return db.transaction(() => {
     if (id) {
-      const res = db.prepare('UPDATE trips SET title = ?, note = ?, added_by = ?, start_date = ?, end_date = ? WHERE id = ?')
-        .run(title, note, addedBy, start, end, id);
+      const res = db.prepare('UPDATE trips SET title = ?, note = ?, start_date = ?, end_date = ? WHERE id = ? AND team_id = ?')
+        .run(title, note, start, end, id, teamId);
       if (!res.changes) {
         const err = new Error('Reis niet gevonden');
         err.status = 404;
         throw err;
       }
     } else {
-      id = db.prepare('INSERT INTO trips (title, note, added_by, start_date, end_date, share_slug) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(title, note, addedBy, start, end, db.shareSlug()).lastInsertRowid;
+      id = db.prepare('INSERT INTO trips (team_id, title, note, added_by, start_date, end_date, share_slug) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(teamId, title, note, user.name, start, end, db.shareSlug()).lastInsertRowid;
+      db.postEvent(teamId, user.id, `stelt een reis voor: ${title}`, 'trip', id);
     }
     db.prepare('DELETE FROM trip_picks WHERE trip_id = ?').run(id);
     const insert = db.prepare('INSERT OR IGNORE INTO trip_picks (trip_id, item_id) VALUES (?, ?)');
@@ -212,15 +245,16 @@ function saveTrip(id, body) {
 }
 
 router.post('/trips', (req, res) => {
-  res.json({ id: saveTrip(null, req.body) });
+  res.json({ id: saveTrip(req.team.id, null, req.body, req.user) });
 });
 
 router.put('/trips/:id', (req, res) => {
-  saveTrip(parseInt(req.params.id, 10), req.body);
+  saveTrip(req.team.id, parseInt(req.params.id, 10), req.body, req.user);
   res.json({ ok: true });
 });
 
 router.post('/trips/:id/like', (req, res) => {
+  if (!tripOfTeam(req.team.id, req.params.id)) throw notFound('Reis');
   const delta = req.body.delta === -1 ? -1 : 1;
   db.prepare('UPDATE trips SET likes = MAX(0, likes + ?) WHERE id = ?').run(delta, req.params.id);
   const row = db.prepare('SELECT likes FROM trips WHERE id = ?').get(req.params.id);
@@ -228,7 +262,7 @@ router.post('/trips/:id/like', (req, res) => {
 });
 
 router.delete('/trips/:id', (req, res) => {
-  db.prepare('DELETE FROM trips WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM trips WHERE id = ? AND team_id = ?').run(req.params.id, req.team.id);
   res.json({ ok: true });
 });
 
@@ -238,33 +272,38 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Zet één of meer dagen aan of uit voor een persoon.
 router.put('/availability', (req, res) => {
-  const name = String(req.body.name || '').trim().slice(0, 40);
-  if (!name) return res.status(400).json({ error: 'Vul eerst je naam in' });
+  const { name } = req.user;
   const dates = (Array.isArray(req.body.dates) ? req.body.dates : [req.body.date])
     .filter((d) => ISO_DATE.test(String(d)));
-  const add = db.prepare('INSERT OR IGNORE INTO available_days (name, date) VALUES (?, ?)');
-  const remove = db.prepare('DELETE FROM available_days WHERE name = ? AND date = ?');
+  const add = db.prepare('INSERT OR IGNORE INTO available_days (team_id, name, date) VALUES (?, ?, ?)');
+  const remove = db.prepare('DELETE FROM available_days WHERE team_id = ? AND name = ? AND date = ?');
   db.transaction(() => {
-    for (const d of dates) (req.body.available ? add : remove).run(name, d);
+    for (const d of dates) (req.body.available ? add : remove).run(req.team.id, name, d);
   })();
   res.json({ ok: true });
 });
 
+// Je eigen dagen wissen mag altijd; die van een ander alleen als beheerder of als het geen lid (meer) is.
 router.delete('/availability/:name', (req, res) => {
-  db.prepare('DELETE FROM available_days WHERE name = ?').run(req.params.name);
+  const name = req.params.name;
+  const isMember = db.prepare('SELECT 1 FROM team_members m JOIN users u ON u.id = m.user_id WHERE m.team_id = ? AND u.name = ?').get(req.team.id, name);
+  if (name.toLowerCase() !== req.user.name.toLowerCase() && isMember && req.team.role !== 'admin') {
+    return res.status(403).json({ error: 'Alleen een beheerder kan de dagen van een ander wissen' });
+  }
+  db.prepare('DELETE FROM available_days WHERE team_id = ? AND name = ?').run(req.team.id, name);
   res.json({ ok: true });
 });
 
 /* ---------- stemronde ---------- */
 
-function pollBody(body) {
+function pollBody(teamId, body) {
   const title = String(body.title || '').trim().slice(0, 80) || 'Waar gaan we heen?';
   const closesAt = ISO_DATE.test(body.closes_at || '') ? body.closes_at : null;
   const participants = (Array.isArray(body.participants) ? body.participants : String(body.participants || '').split(/[\n,]/))
     .map((n) => String(n).trim().slice(0, 40)).filter(Boolean);
   const itemIds = (Array.isArray(body.item_ids) ? body.item_ids : [])
     .map((n) => parseInt(n, 10))
-    .filter((n) => db.prepare("SELECT 1 FROM items i JOIN sections s ON s.id = i.section_id WHERE i.id = ? AND s.kind = 'map'").get(n));
+    .filter((n) => db.prepare("SELECT 1 FROM items i JOIN sections s ON s.id = i.section_id WHERE i.id = ? AND s.kind = 'map' AND s.team_id = ?").get(n, teamId));
   return { title, closesAt, participants: [...new Set(participants)].join('\n'), itemIds };
 }
 
@@ -277,25 +316,26 @@ function setPollOptions(id, itemIds) {
 }
 
 router.post('/polls', (req, res) => {
-  const p = pollBody(req.body);
+  const p = pollBody(req.team.id, req.body);
   if (p.itemIds.length < 2) return res.status(400).json({ error: 'Kies minstens twee bestemmingen' });
   const slug = crypto.randomBytes(5).toString('base64url').replace(/[-_]/g, 'x').slice(0, 7);
   const id = db.transaction(() => {
-    const newId = db.prepare('INSERT INTO polls (slug, title, closes_at, participants, created_by) VALUES (?, ?, ?, ?, ?)')
-      .run(slug, p.title, p.closesAt, p.participants, String(req.body.created_by || '').trim().slice(0, 40)).lastInsertRowid;
+    const newId = db.prepare('INSERT INTO polls (team_id, slug, title, closes_at, participants, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(req.team.id, slug, p.title, p.closesAt, p.participants, req.user.name).lastInsertRowid;
     setPollOptions(newId, p.itemIds);
+    db.postEvent(req.team.id, req.user.id, `is een stemronde begonnen: ${p.title}`, 'poll', newId);
     return newId;
   })();
   res.json({ id, slug });
 });
 
 router.put('/polls/:id', (req, res) => {
-  const poll = db.prepare('SELECT * FROM polls WHERE id = ?').get(req.params.id);
+  const poll = db.prepare('SELECT * FROM polls WHERE id = ? AND team_id = ?').get(req.params.id, req.team.id);
   if (!poll) return res.status(404).json({ error: 'Stemronde niet gevonden' });
   db.transaction(() => {
     if ('closed' in req.body) db.prepare('UPDATE polls SET closed = ? WHERE id = ?').run(req.body.closed ? 1 : 0, poll.id);
     if ('title' in req.body || 'item_ids' in req.body || 'closes_at' in req.body || 'participants' in req.body) {
-      const p = pollBody({ title: poll.title, closes_at: poll.closes_at, participants: poll.participants, ...req.body });
+      const p = pollBody(req.team.id, { title: poll.title, closes_at: poll.closes_at, participants: poll.participants, ...req.body });
       db.prepare('UPDATE polls SET title = ?, closes_at = ?, participants = ? WHERE id = ?').run(p.title, p.closesAt, p.participants, poll.id);
       if ('item_ids' in req.body) {
         if (p.itemIds.length < 2) {
@@ -311,16 +351,15 @@ router.put('/polls/:id', (req, res) => {
 });
 
 router.delete('/polls/:id', (req, res) => {
-  db.prepare('DELETE FROM polls WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM polls WHERE id = ? AND team_id = ?').run(req.params.id, req.team.id);
   res.json({ ok: true });
 });
 
 router.put('/polls/:id/vote', (req, res) => {
-  const poll = db.getPolls().find((p) => p.id === +req.params.id);
+  const poll = pollOfTeam(req.team.id, req.params.id);
   if (!poll) return res.status(404).json({ error: 'Stemronde niet gevonden' });
   if (poll.is_closed) return res.status(400).json({ error: 'Deze stemronde is gesloten' });
-  const name = String(req.body.name || '').trim().slice(0, 40);
-  if (!name) return res.status(400).json({ error: 'Vul eerst je naam in' });
+  const { name } = req.user;
   const itemId = parseInt(req.body.item_id, 10);
   if (!itemId) {
     db.prepare('DELETE FROM poll_votes WHERE poll_id = ? AND name = ?').run(poll.id, name);

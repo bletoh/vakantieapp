@@ -4,7 +4,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-  const state = { settings: {}, sections: [], trips: [], availability: [], polls: [] };
+  const state = { settings: {}, sections: [], trips: [], availability: [], polls: [], team: null, members: [], reactions: [] };
 
   /* ---------- helpers ---------- */
 
@@ -28,13 +28,19 @@
   }
 
   async function api(path, method = 'GET', body) {
-    const res = await fetch('/api' + path, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const headers = body ? { 'Content-Type': 'application/json' } : {};
+    if (session.teamId) headers['X-Team'] = String(session.teamId);
+    const res = await fetch('/api' + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Er ging iets mis');
+    if (!res.ok) {
+      const err = new Error(data.error || 'Er ging iets mis');
+      err.status = res.status;
+      err.code = data.code;
+      // Uitgelogd of niet meer in de groep: terug naar het beginscherm.
+      if (res.status === 401 && !path.startsWith('/auth/')) showAuth();
+      else if (data.code === 'no-team') leaveTeamView();
+      throw err;
+    }
     return data;
   }
 
@@ -73,6 +79,10 @@
       try { localStorage.removeItem(key); } catch { /* ignore */ }
     },
   };
+
+  // Ingelogde gebruiker en actieve groep.
+  const session = { user: null, teams: [], teamId: null };
+  const myName = () => (session.user ? session.user.name : '');
 
   const liked = (() => {
     let set;
@@ -113,6 +123,11 @@
     plus: '<path d="M12 5v14M5 12h14"/>',
     compass: '<circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/>',
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+    chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    menu: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+    thumbUp: '<path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 18.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/>',
+    thumbDown: '<path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 5.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
   };
   const ic = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
   const KIND_ICONS = { map: 'pin', flight: 'plane', stay: 'bed', do: 'sparkles', eat: 'utensils' };
@@ -152,6 +167,12 @@
     state.trips = data.trips || [];
     state.availability = data.availability || [];
     state.polls = data.polls || [];
+    state.team = data.team;
+    state.members = data.members || [];
+    state.reactions = data.reactions || [];
+    session.user = data.me || session.user;
+    const own = session.teams.find((t) => t.id === data.team.id);
+    if (own) own.name = data.team.name;
     render();
     if (pinCtx && pinDialog.open) renderPinSheet();
   }
@@ -165,6 +186,8 @@
     if (h === '#stem' || /^#stem-\w+$/.test(h)) return 'stem';
     if (h === '#datum') return 'datum';
     if (h === '#ideeen') return 'ideeen';
+    if (h === '#chat') return 'chat';
+    if (h === '#groep') return 'groep';
     if (h === '#kaart' || /^#pin-\d+$/.test(h)) return mapSection() ? 'kaart' : fallbackRoute();
     const m = /^#tab-(\d+)$/.exec(h);
     if (m && findSection(+m[1])) return findSection(+m[1]).kind === 'map' ? 'kaart' : +m[1];
@@ -188,6 +211,8 @@
   }
 
   window.addEventListener('hashchange', () => {
+    // Op het inlog- of groepenscherm is er nog geen groep om te tonen.
+    if (!session.teamId || !state.team) return;
     renderTabs();
     renderPanel();
     if (currentRoute() !== 'kaart') {
@@ -209,7 +234,7 @@
   }
 
   function render() {
-    const title = state.settings.site_title || 'Vakantie';
+    const title = (state.team && state.team.name) || 'Vakantie';
     document.title = title;
     $('#brand').textContent = title;
     renderTabs();
@@ -220,19 +245,43 @@
     return `<a class="tab${active ? ' active' : ''}${extra}" href="${href}"${active ? ' aria-current="page"' : ''}>${label}</a>`;
   }
 
+  // Stemrondes waarop jij nog niet stemde.
+  const pollsToVote = () => openPolls().filter((p) => !p.votes.some((v) => v.name.toLowerCase() === myName().toLowerCase()));
+  // Vluchten en overnachtingen beheer je via de pinnen op de kaart; die tabs tonen we niet.
+  const listSections = () => {
+    const map = mapSection();
+    return state.sections.filter((s) => s.kind !== 'map' && !(map && (s.kind === 'flight' || s.kind === 'stay')));
+  };
+  const listTabIcon = (s) => (KIND_ICONS[s.kind] ? kindIcon(s.kind) : s.icon ? `<span class="tab-emoji" aria-hidden="true">${esc(s.icon)}</span>` : '');
+  const badge = (n) => (n ? ` <span class="tab-badge">${n > 99 ? '99+' : n}</span>` : '');
+
   function renderTabs() {
     const route = currentRoute();
     const nav = $('#tabs');
-    // Vluchten en overnachtingen beheer je via de pinnen op de kaart; die tabs tonen we niet.
     const map = mapSection();
-    const lists = state.sections.filter((s) => s.kind !== 'map' && !(map && (s.kind === 'flight' || s.kind === 'stay')));
+    const lists = listSections();
+    const vote = pollsToVote().length;
+    if (isPhone()) {
+      // Telefoon: vaste balk met vijf knoppen; de rest staat onder Meer.
+      const inMore = route === 'datum' || route === 'stem' || route === 'groep' || typeof route === 'number';
+      nav.innerHTML = (map ? tabLink('#kaart', `${ic('map')} <span>${esc(map.title)}</span>`, route === 'kaart', ' tab-map') : '')
+        + tabLink('#ideeen', `${ic('compass')} <span>Ideeën</span>`, route === 'ideeen')
+        + tabLink('#chat', `${ic('chat')} <span>Chat</span>`, route === 'chat', ' tab-chat')
+        + tabLink('#reizen', `${ic('suitcase')} <span>Reizen</span>`, route === 'reizen')
+        + `<button type="button" class="tab tab-more${inMore ? ' active' : ''}" data-more aria-haspopup="dialog">${ic('menu')} <span>Meer</span>${badge(vote + unreadElsewhere())}</button>`;
+      updateBadges();
+      return;
+    }
     nav.innerHTML = (map ? tabLink('#kaart', `${ic('map')} <span>${esc(map.title)}</span>`, route === 'kaart', ' tab-map') : '')
+      + tabLink('#chat', `${ic('chat')} <span>Chat</span>`, route === 'chat', ' tab-chat')
       + tabLink('#ideeen', `${ic('compass')} <span>Ideeën</span>`, route === 'ideeen')
       + tabLink('#datum', `${ic('calendar')} <span>Datum</span>`, route === 'datum')
       + tabLink('#reizen', `${ic('suitcase')} <span>Reizen</span>`, route === 'reizen')
-      + tabLink('#stem', `${ic('vote')} <span>Stemmen</span>${openPolls().length ? ` <span class="tab-badge">${openPolls().length}</span>` : ''}`, route === 'stem')
-      + lists.map((s) => tabLink(`#tab-${s.id}`, `${KIND_ICONS[s.kind] ? kindIcon(s.kind) : s.icon ? `<span class="tab-emoji" aria-hidden="true">${esc(s.icon)}</span>` : ''} <span>${esc(s.title)}</span>`, route === s.id)).join('')
+      + tabLink('#stem', `${ic('vote')} <span>Stemmen</span>${badge(vote)}`, route === 'stem')
+      + lists.map((s) => tabLink(`#tab-${s.id}`, `${listTabIcon(s)} <span>${esc(s.title)}</span>`, route === s.id)).join('')
+      + tabLink('#groep', `${ic('users')} <span>Groep</span>`, route === 'groep', ' tab-group')
       + `<button type="button" class="tab add" data-action="add-section" aria-label="Tab toevoegen">${ic('plus')}</button>`;
+    updateBadges();
     const active = $('.tab.active', nav);
     if (active) {
       const left = active.offsetLeft - nav.clientWidth / 2 + active.clientWidth / 2;
@@ -240,15 +289,52 @@
     }
   }
 
+  // Meer-paneel op de telefoon: je groep, groep wisselen en de overige onderdelen.
+  function openMoreSheet() {
+    const route = currentRoute();
+    const vote = pollsToVote().length;
+    const row = (href, icon, label, sub, active, extra = '') => `<a class="more-row${active ? ' on' : ''}" href="${href}" data-close><span class="more-ic">${icon}</span><span class="more-text"><strong>${label}</strong>${sub ? `<small>${sub}</small>` : ''}</span>${extra}</a>`;
+    const others = session.teams.filter((t) => t.id !== session.teamId);
+    $('#moreBody').innerHTML = `
+      <a class="more-team" href="#groep" data-close>${avatar(state.team.name, 'team')}<span><small>Jouw groep</small><strong>${esc(state.team.name)}</strong>
+        <small>${state.members.length} ${state.members.length === 1 ? 'lid' : 'leden'} · uitnodigen en voorkeuren</small></span><span class="when-go" aria-hidden="true">→</span></a>
+      <div class="more-grid">
+        ${row('#stem', ic('vote'), 'Stemmen', vote ? `${vote} open voor jou` : `${openPolls().length} open`, route === 'stem', badge(vote))}
+        ${row('#datum', ic('calendar'), 'Datum', 'Wanneer kan iedereen?', route === 'datum')}
+        ${listSections().map((s) => row(`#tab-${s.id}`, listTabIcon(s), esc(s.title), `${s.items.length} ${s.items.length === 1 ? 'optie' : 'opties'}`, route === s.id)).join('')}
+        <button type="button" class="more-row" data-action="add-section"><span class="more-ic">${ic('plus')}</span><span class="more-text"><strong>Tab toevoegen</strong><small>Eigen lijstje, bijv. budget of inpaklijst</small></span></button>
+      </div>
+      ${others.length ? `<div class="label">Andere groepen</div><div class="team-list">${others.map((t) => `
+        <button type="button" class="team-row" data-team-open="${t.id}">${avatar(t.name, 'team')}<span><strong>${esc(t.name)}</strong><small>${t.members} ${t.members === 1 ? 'lid' : 'leden'}</small></span>${t.unread ? `<span class="tab-badge">${t.unread}</span>` : ''}<span class="when-go" aria-hidden="true">→</span></button>`).join('')}</div>` : ''}`;
+    $('#moreDialog').showModal();
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-more]')) { openMoreSheet(); return; }
+    // Een keuze in het Meer-paneel sluit het paneel.
+    if (e.target.closest('#moreDialog [data-team-open], #moreDialog [data-action]')) $('#moreDialog').close();
+  });
+
+  // Van telefoon naar breder scherm (of andersom draaien): andere tabbalk.
+  window.matchMedia('(max-width: 600px)').addEventListener('change', () => { if (session.teamId) renderTabs(); });
+
   function renderPanel() {
     const route = currentRoute();
     const panel = $('#panel');
     document.body.classList.toggle('route-map', route === 'kaart');
+    document.body.classList.toggle('route-chat', route === 'chat');
     if (route !== 'kaart') {
       unmountMap();
       if (pinDialog.open) closePinSheet();
     }
     if (route === 'kaart') { renderMapView(); return; }
+    if (route === 'chat') {
+      if (!$('#chatLog')) panel.innerHTML = chatHtml();
+      renderChat();
+      markRead();
+      return;
+    }
+    if (route === 'groep') { panel.innerHTML = groupHtml(); return; }
     if (route === 'reizen') { panel.innerHTML = tripsHtml(); return; }
     if (route === 'stem') { panel.innerHTML = stemHtml(); return; }
     if (route === 'datum') { panel.innerHTML = pollHtml(); return; }
@@ -314,7 +400,7 @@
           ${it.is_best ? '<span class="badge-best">Beste keuze</span>' : ''}
           ${it.subtitle ? `<div class="card-sub">${esc(it.subtitle)}</div>` : ''}
           <h3 class="card-title">${esc(it.title)}</h3>
-          ${it.added_by ? `<div class="added-by">Voorgesteld door ${esc(it.added_by)}</div>` : ''}
+          ${it.added_by ? `<div class="added-by">${avatar(it.added_by)}Voorgesteld door ${esc(it.added_by)}</div>` : ''}
           ${linkChipsHtml(it)}
           ${(price || it.rating) ? `
             <div class="card-meta">
@@ -393,7 +479,7 @@
         <div class="card-body">
           <span class="card-hint" aria-hidden="true">Aanpassen</span>
           <h3 class="card-title">${esc(t.title)}</h3>
-          ${t.added_by ? `<div class="added-by">Voorgesteld door ${esc(t.added_by)}</div>` : ''}
+          ${t.added_by ? `<div class="added-by">${avatar(t.added_by)}Voorgesteld door ${esc(t.added_by)}</div>` : ''}
           ${tripDatesHtml(t)}
           ${picks.length ? `<ul class="trip-picks">${picks.map(({ s, it }) => `
             <li><a class="trip-pick" href="${tripPickHref(s, it)}">
@@ -505,7 +591,7 @@
   function pollHtml() {
     const cfg = pollSettings();
     const byName = availabilityMap();
-    const me = store.get('name').trim();
+    const me = myName().trim();
     const mine = byName.get(me) || new Set();
     const people = [...byName.keys()].sort((a, b) => a.localeCompare(b, 'nl'));
     const best = bestWindows(byName, cfg);
@@ -609,46 +695,15 @@
         <div class="label">Ingevuld door</div>
         <ul class="people">${people.map((n) => `
           <li><span>${esc(n)}</span><small>${byName.get(n).size} dagen</small>
-            <button type="button" class="text-btn" data-action="remove-person" data-name="${esc(n)}">Verwijderen</button></li>`).join('')}
+            ${canRemovePerson(n) ? `<button type="button" class="text-btn" data-action="remove-person" data-name="${esc(n)}">Wissen</button>` : ''}</li>`).join('')}
         </ul>` : ''}`;
   }
 
-  // Wie vult er in? Bekende namen zijn één tik; een nieuwe naam typ je één keer.
-  let whoOpen = false;
-  function whoHtml(me, people) {
-    if (me && !whoOpen) {
-      return `<div class="who who-set">
-        <span>Je vult in als <strong>${esc(me)}</strong></span>
-        <button type="button" class="text-btn" data-who-change>Iemand anders?</button>
-      </div>`;
-    }
-    const names = [...new Set([...people, ...knownPeople()])].filter((n) => n && n !== me).sort((a, b) => a.localeCompare(b, 'nl'));
-    return `<div class="who" id="who">
-      <p class="who-q">Wie ben jij?</p>
-      ${names.length ? `<div class="who-chips">${names.map((n) => `<button type="button" class="chip-btn" data-who="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
-      <form class="who-new" data-who-form>
-        <label class="sr-only" for="pollName">${names.length ? 'Of typ een nieuwe naam' : 'Je naam'}</label>
-        <input id="pollName" maxlength="40" autocomplete="given-name" placeholder="${names.length ? 'Nieuwe naam' : 'Je naam'}" enterkeyhint="done">
-        <button type="submit" class="btn primary">Verder</button>
-      </form>
-    </div>`;
+  // Je vult altijd in als jezelf (je account).
+  const whoOpen = false;
+  function whoHtml(me) {
+    return `<div class="who who-set"><span>Je vult in als <strong>${esc(me)}</strong></span></div>`;
   }
-
-  function chooseWho(name) {
-    name = String(name || '').trim();
-    if (!name) return;
-    store.set('name', name);
-    whoOpen = false;
-    renderPanel();
-    const cal = $('#kalender');
-    if (cal) cal.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
-  }
-
-  document.addEventListener('submit', (e) => {
-    if (!e.target.matches('[data-who-form]')) return;
-    e.preventDefault();
-    chooseWho($('#pollName').value);
-  });
 
   function weekNumber(iso) {
     const d = toDate(iso);
@@ -658,16 +713,7 @@
   }
 
   function pollName() {
-    const name = whoOpen ? '' : store.get('name').trim();
-    if (!name) {
-      toast('Kies eerst wie je bent', true);
-      const who = $('#who');
-      if (who) who.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
-      const input = $('#pollName');
-      if (input && !$('.chip-btn')) input.focus({ preventScroll: true });
-      return '';
-    }
-    return name;
+    return myName();
   }
 
   async function setAvailable(dates, available) {
@@ -694,7 +740,7 @@
   let paint = null;
   document.addEventListener('pointerdown', (e) => {
     const day = e.target.closest && e.target.closest('.months [data-day]');
-    if (!day || day.disabled || e.button > 0 || !store.get('name').trim() || whoOpen) return;
+    if (!day || day.disabled || e.button > 0 || !myName().trim() || whoOpen) return;
     paint = { on: day.getAttribute('aria-pressed') !== 'true', days: new Set([day.dataset.day]), moved: false, id: e.pointerId };
     if (day.hasPointerCapture && day.hasPointerCapture(e.pointerId)) day.releasePointerCapture(e.pointerId);
   });
@@ -727,15 +773,6 @@
   let suppressDayClick = false;
 
   document.addEventListener('click', (e) => {
-    const who = e.target.closest('[data-who]');
-    if (who) { chooseWho(who.dataset.who); return; }
-    if (e.target.closest('[data-who-change]')) {
-      whoOpen = true;
-      renderPanel();
-      const first = $('#who .chip-btn') || $('#pollName');
-      if (first) first.focus();
-      return;
-    }
     const fill = e.target.closest('[data-fill]');
     if (fill) {
       const cfg = pollSettings();
@@ -753,7 +790,7 @@
     const wk = e.target.closest('[data-week]');
     if (wk && !wk.disabled) {
       const dates = wk.dataset.week.split(',').filter(Boolean);
-      const mine = availabilityMap().get(store.get('name').trim()) || new Set();
+      const mine = availabilityMap().get(myName().trim()) || new Set();
       setAvailable(dates, !dates.every((d) => mine.has(d)));
     }
   });
@@ -861,7 +898,6 @@
     for (const f of ['title', 'subtitle', 'price', 'rating', 'body', 'pros', 'cons', 'link', 'added_by']) {
       itemForm.elements[f].value = item ? (item[f] ?? '') : '';
     }
-    if (!item) itemForm.elements.added_by.value = store.get('name');
     itemForm.elements.is_best.checked = itemCtx.wasBest;
     $('#itemDelete').hidden = !item;
     $('#priceField').hidden = !(section && section.show_price);
@@ -890,7 +926,7 @@
     data.lat = itemCtx.lat;
     data.lng = itemCtx.lng;
     if ($('#locationField').hidden) delete data.location_id;
-    if (data.added_by) store.set('name', data.added_by.trim());
+    delete data.added_by;
     try {
       const isNew = !itemCtx.id;
       const id = isNew
@@ -1237,7 +1273,8 @@
         <h2>Bestemmingen${locs.length ? ` <span class="count-pill">${locs.length}</span>` : ''}</h2>
         <button type="button" class="text-btn" data-action="edit-section" data-id="${s.id}">Tab bewerken</button>
       </div>
-      ${locs.length ? `<ol class="dest-list">${locs.map(destRowHtml).join('')}</ol>` : `
+      ${whoFilterHtml()}
+      ${locs.length ? `<ol class="dest-list">${locs.filter(visibleOnMap).map(destRowHtml).join('')}</ol>` : `
         <ol class="onboarding">
           <li><strong>Kies een plek.</strong> Zoek bovenaan de kaart, of tik ergens op de kaart.</li>
           <li><strong>Plan de reis.</strong> Kies een datum uit de datumprikker, een vlucht en een hotel in de buurt.</li>
@@ -1293,7 +1330,7 @@
     const active = pinCtx && pinCtx.locId === item.id && pinDialog.open;
     return L.divIcon({
       className: 'pin-icon',
-      html: `<div class="pin${item.is_best ? ' best' : ''}${active ? ' active' : ''}"><span>${n}</span></div>`,
+      html: `<div class="pin${item.is_best ? ' best' : ''}${active ? ' active' : ''}"><span>${n}</span>${item.added_by ? `<i class="pin-av" style="--c:${colorOf(item.added_by)}">${esc(initialOf(item.added_by))}</i>` : ''}</div>`,
       iconSize: [32, 42],
       iconAnchor: [16, 42],
       tooltipAnchor: [0, -40],
@@ -1411,9 +1448,9 @@
     if (!map || !dataLayer) return;
     dataLayer.clearLayers();
     markers = {};
-    for (const it of locations().filter(hasPos)) {
+    for (const it of locations().filter(hasPos).filter(visibleOnMap)) {
       const t = tripsFor(it.id)[0];
-      const label = `${esc(it.title)}${t && t.start_date ? `<small>${shortRange(t.start_date, t.end_date)}</small>` : ''}`;
+      const label = `${esc(it.title)}${t && t.start_date ? `<small>${shortRange(t.start_date, t.end_date)}</small>` : it.added_by ? `<small>${esc(it.added_by)}</small>` : ''}`;
       const m = L.marker([it.lat, it.lng], {
         icon: pinIcon(it), draggable: true, autoPan: true, title: `${it.title}: reis plannen`, riseOnHover: true,
       })
@@ -1457,7 +1494,7 @@
     const { lat, lng } = latlng.wrap ? latlng.wrap() : latlng;
     try {
       const { id } = await api(`/sections/${section.id}/items`, 'POST', {
-        title: title || 'Nieuwe plek', lat, lng, added_by: store.get('name'),
+        title: title || 'Nieuwe plek', lat, lng, added_by: myName(),
       });
       await reload();
       openPin(id, { fly });
@@ -1885,7 +1922,7 @@
     const body = {
       title: trip ? trip.title : `Reis naar ${shortName(loc.title)}`,
       note: 'note' in patch ? patch.note : trip ? trip.note || '' : '',
-      added_by: trip ? trip.added_by || '' : store.get('name'),
+      added_by: trip ? trip.added_by || '' : myName(),
       start_date: 'start_date' in patch ? patch.start_date : (trip && trip.start_date) || '',
       end_date: 'end_date' in patch ? patch.end_date : (trip && trip.end_date) || '',
       item_ids: [...ids],
@@ -2099,7 +2136,7 @@
     const dated = t && t.start_date;
     const conflicts = p.conflicts || [];
     const known = byName.size > 0 && p.conflicts !== null;
-    const me = store.get('name').trim();
+    const me = myName().trim();
     const summary = dated
       ? `${shortRange(t.start_date, t.end_date)}${conflicts.length ? ` · <span class="warn">${conflicts.length} kan niet</span>` : known ? ' · iedereen kan' : ''}`
       : 'Nog niet gekozen';
@@ -2237,7 +2274,7 @@
         ${img ? `<div class="plan-img"><img src="${esc(img)}" alt=""></div>` : ''}
         <div class="plan-meta">
           ${loc.subtitle ? `<span class="card-sub">${esc(loc.subtitle)}</span>` : ''}
-          ${loc.added_by ? `<span class="added-by">Voorgesteld door ${esc(loc.added_by)}</span>` : ''}
+          ${loc.added_by ? `<span class="added-by">${avatar(loc.added_by)}Gepind door ${esc(loc.added_by)}</span>` : ''}
           <span class="progress lg" role="img" aria-label="${p.done} van ${p.total} geregeld"><span style="width:${Math.round(p.done / p.total * 100)}%"></span></span>
           <span class="plan-status">${p.done === p.total ? '✓ Datum, vlucht en hotel geregeld' : `${p.done} van ${p.total} geregeld: datum, vlucht en hotel`}</span>
           ${p.done ? tripShareHtml(p.trip) : ''}
@@ -2379,7 +2416,7 @@
   });
 
   async function addSuggestion(loc, btn) {
-    const by = store.get('name');
+    const by = myName();
     if (btn.dataset.addAirport !== undefined) {
       const a = pinCtx.airports[+btn.dataset.addAirport];
       const section = await ensureSection('flight');
@@ -2572,6 +2609,7 @@
       const match = wish.length ? matched.length / wish.length : 0.6;
       const weather = weatherScore(d, m, wish);
       let score = weather === null ? match : 0.6 * match + 0.4 * weather;
+      score += groupScoreDelta(d, hours);
       if (cost.over) score -= 0.15;
       return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), pin: nearbyPin(d) };
     }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP);
@@ -2665,6 +2703,7 @@
             ${m !== null ? `<span class="chip weather">± ${d.temp[m]}° in ${MONTHS[m]}</span>` : ''}
             ${isRainy(d, m) ? '<span class="chip rain">Regenseizoen</span>' : ''}
           </div>
+          ${groupFeelHtml(x)}
           <div class="pkg-block">
             <div class="pkg-line">${ic('plane')}<span><strong>Vlucht</strong> <span class="pkg-flight">vanaf Schiphol · ± ${flightTime(x.km)}</span></span></div>
             <div class="pkg-price"><span>retour, ${n} ${n === 1 ? 'persoon' : 'personen'}</span><span>± ${euro(cost.flightPP * n)}</span></div>
@@ -2744,7 +2783,7 @@
     const x = ideaCtx.list[i];
     if (!x) return;
     const p = ideaPrefs();
-    const by = store.get('name');
+    const by = myName();
     const c = x.cost;
     let loc = nearbyPin(x.d);
     if (!loc) {
@@ -2931,14 +2970,15 @@
       for (const v of p.votes) names.add(v.name);
       for (const n of p.participants) names.add(n);
     }
-    const me = store.get('name').trim();
+    const me = myName().trim();
     if (me) names.add(me);
     return [...names].map((n) => n.trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, 'nl'));
   }
 
   function notVoted(poll) {
     const voted = new Set(poll.votes.map((v) => v.name.toLowerCase()));
-    return poll.participants.filter((n) => !voted.has(n.toLowerCase()));
+    const who = poll.participants.length ? poll.participants : state.members.map((m) => m.name);
+    return who.filter((n) => !voted.has(n.toLowerCase()));
   }
 
   const waLink = (text) => `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -3014,7 +3054,7 @@
   }
 
   function pollPageHtml(poll) {
-    const me = store.get('name').trim();
+    const me = myName().trim();
     const mine = poll.votes.find((v) => v.name.toLowerCase() === me.toLowerCase());
     const rows = tallyOf(poll);
     const total = poll.votes.length;
@@ -3036,10 +3076,6 @@
       </div>` : ''}
 
       ${!poll.is_closed ? `
-        <label class="poll-name">Jouw naam
-          <input id="voteName" value="${esc(me)}" maxlength="40" autocomplete="given-name" placeholder="Naam" list="peopleList">
-          <datalist id="peopleList">${poll.participants.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
-        </label>
         <p class="hint">${mine ? `Je stemde op <strong>${esc(shortName(findItem(mine.item_id)?.title))}</strong>. Tik op een andere bestemming om je stem te wijzigen.` : 'Tik op de bestemming waar jij heen wilt.'}</p>` : ''}
 
       <div class="options" role="radiogroup" aria-label="Bestemmingen">
@@ -3095,7 +3131,7 @@
 
   // Op de kaart: een open stemronde waarop jij nog niet stemde valt meteen op.
   function pollBannerHtml() {
-    const me = store.get('name').trim().toLowerCase();
+    const me = myName().trim().toLowerCase();
     const p = openPolls().find((x) => !me || !x.votes.some((v) => v.name.toLowerCase() === me));
     if (!p) return '';
     return `<a class="vote-strip" href="#stem-${esc(p.slug)}">
@@ -3114,32 +3150,18 @@
     }
     const btn = e.target.closest('[data-vote]');
     if (!btn || btn.disabled) return;
-    const poll = pollFromHash();
-    const input = $('#voteName');
-    const name = (input ? input.value : store.get('name')).trim();
-    if (!poll) return;
-    if (!name) {
-      toast('Vul eerst je naam in', true);
-      if (input) input.focus();
-      return;
-    }
-    store.set('name', name);
+    const poll = btn.dataset.poll ? findPoll(btn.dataset.poll) : pollFromHash();
+    const name = myName();
+    if (!poll || !name) return;
     const itemId = +btn.dataset.vote;
     const mine = poll.votes.find((v) => v.name.toLowerCase() === name.toLowerCase());
     const undo = mine && mine.item_id === itemId;
     btn.disabled = true;
     try {
-      await api(`/polls/${poll.id}/vote`, 'PUT', { name: mine ? mine.name : name, item_id: undo ? null : itemId });
+      await api(`/polls/${poll.id}/vote`, 'PUT', { item_id: undo ? null : itemId });
       await reload();
       toast(undo ? 'Stem ingetrokken' : `Gestemd op ${shortName(findItem(itemId).title)} ✓`);
     } catch (err) { btn.disabled = false; toast(err.message, true); }
-  });
-
-  document.addEventListener('change', (e) => {
-    if (e.target.id === 'voteName') {
-      store.set('name', e.target.value.trim());
-      renderPanel();
-    }
   });
 
   Object.assign(actions, {
@@ -3200,7 +3222,7 @@
       closes_at: f.closes_at.value,
       participants: f.participants.value,
       item_ids: $$('input[name="item"]:checked', pollRoundForm).map((el) => +el.value),
-      created_by: store.get('name'),
+      created_by: myName(),
     };
     if (data.item_ids.length < 2) { toast('Kies minstens twee bestemmingen', true); return; }
     try {
@@ -3252,7 +3274,7 @@
     $('#tripDialogTitle').textContent = trip ? 'Reis aanpassen' : 'Stel een reis voor';
     tripForm.elements.title.value = trip ? trip.title : '';
     tripForm.elements.note.value = trip ? trip.note || '' : '';
-    tripForm.elements.added_by.value = trip ? trip.added_by || '' : store.get('name');
+    tripForm.elements.added_by.value = trip ? trip.added_by || '' : myName();
     const chosen = trip ? trip.item_ids : [];
     const sections = state.sections.filter((s) => s.items.length);
     // Per tab een lijstje om aan te vinken; een reis kan meerdere activiteiten of restaurants hebben.
@@ -3298,12 +3320,10 @@
     const data = {
       title: tripForm.elements.title.value.trim(),
       note: tripForm.elements.note.value.trim(),
-      added_by: tripForm.elements.added_by.value.trim(),
       item_ids: $$('[data-pick]:checked', tripForm).map((el) => +el.value).filter(Boolean),
       start_date: tripForm.elements.start_date.value,
       end_date: tripForm.elements.end_date.value,
     };
-    if (data.added_by) store.set('name', data.added_by);
     try {
       if (tripCtx) await api(`/trips/${tripCtx.id}`, 'PUT', data);
       else await api('/trips', 'POST', data);
@@ -3478,9 +3498,766 @@
 
   $('#imageRemove').addEventListener('click', () => pickImage(''));
 
+  /* ---------- accounts, groepen en chat ---------- */
+
+  // Vaste kleur per persoon, zodat je op de kaart en in de chat snel ziet wie wat deed.
+  const PERSON_COLORS = ['#e0245e', '#0a7cff', '#008a05', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#4d7c0f', '#b45309', '#4f46e5'];
+  function colorOf(name) {
+    let h = 0;
+    for (const ch of String(name || '').toLowerCase()) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+    return PERSON_COLORS[h % PERSON_COLORS.length];
+  }
+  const initialOf = (name) => (String(name || '?').trim()[0] || '?').toUpperCase();
+  const avatar = (name, cls = '') => `<span class="av${cls ? ` ${cls}` : ''}" style="--c:${colorOf(name)}" aria-hidden="true">${esc(initialOf(name))}</span>`;
+  const isAdmin = () => !!(state.team && state.team.role === 'admin');
+  const memberNames = () => new Set(state.members.map((m) => m.name.toLowerCase()));
+  // Dagen wissen: van jezelf, als beheerder, of van een naam die geen lid (meer) is.
+  const canRemovePerson = (name) => name.toLowerCase() === myName().toLowerCase() || isAdmin() || !memberNames().has(name.toLowerCase());
+
+  let invite = null; // uitnodiging uit een /join/<code>-link: { code, id, name, members, member } of { code, error }
+
+  async function loadInvite() {
+    const code = store.get('pendingJoin');
+    if (!code) { invite = null; return; }
+    try { invite = { code, ...(await api(`/invite/${encodeURIComponent(code)}`)) }; } catch (err) { invite = { code, error: err.message }; }
+  }
+
+  function showGate(html) {
+    stopTicking();
+    document.body.classList.add('gate');
+    document.body.classList.remove('route-map', 'route-chat');
+    unmountMap();
+    $$('dialog[open]').forEach((d) => d.close());
+    $('#tabs').innerHTML = '';
+    $('#panel').innerHTML = `<div class="gate-wrap"><div class="gate-card">
+      <div class="gate-brand">${ic('compass')} Vakantieplanner</div>${html}</div></div>`;
+    document.title = 'Vakantieplanner';
+  }
+
+  function inviteNoteHtml() {
+    if (!invite) return '';
+    if (invite.error) return `<p class="form-error">${esc(invite.error)}</p>`;
+    const n = invite.members.length;
+    return `<div class="invite-note">${ic('users')}<span>Je bent uitgenodigd voor <strong>${esc(invite.name)}</strong>
+      ${n ? `<small>${esc(invite.members.slice(0, 4).join(', '))}${n > 4 ? ` en ${n - 4} anderen` : ''} ${n === 1 ? 'zit' : 'zitten'} er al in</small>` : ''}</span></div>`;
+  }
+
+  let authMode = 'login';
+  function showAuth(mode) {
+    session.user = null;
+    session.teamId = null;
+    authMode = mode || (invite && !invite.error ? 'register' : authMode);
+    const reg = authMode === 'register';
+    showGate(`
+      ${inviteNoteHtml()}
+      <div class="seg" role="group" aria-label="Inloggen of account maken">
+        <button type="button" data-auth-mode="register" aria-pressed="${reg}">Nieuw account</button>
+        <button type="button" data-auth-mode="login" aria-pressed="${!reg}">Inloggen</button>
+      </div>
+      <form id="authForm" class="gate-form" novalidate>
+        <label>Je naam<input name="name" maxlength="30" required autocomplete="username" autocapitalize="words" enterkeyhint="next"
+          placeholder="${reg ? 'Hoe noemen je vrienden je?' : ''}"></label>
+        <label>Wachtwoord<input name="password" type="password" minlength="6" required
+          autocomplete="${reg ? 'new-password' : 'current-password'}" enterkeyhint="go" placeholder="${reg ? 'Minstens 6 tekens' : ''}"></label>
+        <p class="form-error" id="authError" hidden></p>
+        <button type="submit" class="btn primary block">${reg ? 'Account maken' : 'Inloggen'}</button>
+      </form>
+      <p class="hint">${reg ? 'Je naam staat bij je pinnen, reizen, stemmen en berichten.' : 'Wachtwoord vergeten? Vraag de beheerder van je groep om een tijdelijk wachtwoord.'}</p>`);
+    const first = $('#authForm input[name="name"]');
+    if (first && !isPhone()) first.focus();
+  }
+
+  function teamsListHtml() {
+    return session.teams.map((t) => `
+      <button type="button" class="team-row${t.id === session.teamId ? ' on' : ''}" data-team-open="${t.id}">
+        ${avatar(t.name, 'team')}<span><strong>${esc(t.name)}</strong><small>${t.members} ${t.members === 1 ? 'lid' : 'leden'}${t.role === 'admin' ? ' · beheerder' : ''}</small></span>
+        ${t.unread ? `<span class="tab-badge">${t.unread}</span>` : ''}<span class="when-go" aria-hidden="true">→</span>
+      </button>`).join('');
+  }
+
+  function newTeamFormHtml() {
+    return `<form id="newTeamForm" class="gate-form inline-form">
+      <label>Nieuwe groep<input name="name" maxlength="60" required placeholder="Bijv. Zomervakantie 2027" enterkeyhint="done"></label>
+      <button type="submit" class="btn primary">Maken</button>
+    </form>`;
+  }
+
+  function showTeams() {
+    session.teamId = null;
+    const joinable = invite && !invite.error && !invite.member;
+    showGate(`
+      <h2 class="gate-title">Hoi ${esc(myName())}</h2>
+      ${joinable ? `${inviteNoteHtml()}<button type="button" class="btn primary block" data-join>Doe mee met ${esc(invite.name)}</button>`
+        : invite && invite.error ? inviteNoteHtml() : ''}
+      ${session.teams.length ? `<div class="label">Jouw groepen</div><div class="team-list">${teamsListHtml()}</div>`
+        : !joinable ? '<p class="hint">Je zit nog niet in een groep. Maak er een en stuur de uitnodigingslink naar je vrienden, of open de link die je van iemand kreeg.</p>' : ''}
+      ${newTeamFormHtml()}
+      <button type="button" class="text-btn" data-logout>Uitloggen</button>`);
+    if (invite && invite.error) { store.remove('pendingJoin'); invite = null; }
+  }
+
+  async function signedIn({ user, teams }) {
+    session.user = user;
+    session.teams = teams;
+    if (invite && !invite.error) {
+      if (invite.member || teams.some((t) => t.id === invite.id)) {
+        const id = invite.id;
+        store.remove('pendingJoin');
+        invite = null;
+        return enterTeam(id);
+      }
+      return showTeams();
+    }
+    const last = +store.get('team');
+    const t = teams.find((x) => x.id === last) || teams[0];
+    if (t) return enterTeam(t.id);
+    return showTeams();
+  }
+
+  async function enterTeam(id) {
+    session.teamId = id;
+    store.set('team', String(id));
+    document.body.classList.remove('gate');
+    chat.reset();
+    try {
+      await reload();
+    } catch (err) {
+      if (err.code !== 'no-team') $('#panel').innerHTML = `<div class="empty">Kon de groep niet laden: ${esc(err.message)}</div>`;
+      return;
+    }
+    startTicking();
+  }
+
+  async function switchTeam(id) {
+    if (id === session.teamId) { location.hash = '#kaart'; return; }
+    setHashQuietly('#kaart');
+    unmountMap();
+    $$('dialog[open]').forEach((d) => d.close());
+    await enterTeam(id);
+    toast(`Je zit nu in ${state.team.name}`);
+  }
+
+  // Niet (meer) in de groep: terug naar het overzicht van je groepen.
+  async function leaveTeamView() {
+    session.teamId = null;
+    store.remove('team');
+    let me;
+    try { me = await api('/auth/me'); } catch { return; }
+    if (!me.user) { showAuth('login'); return; }
+    session.teams = me.teams;
+    showTeams();
+  }
+
+  async function refreshTeams() {
+    try { session.teams = (await api('/auth/me')).teams; } catch { /* volgende keer */ }
+  }
+
+  document.addEventListener('click', async (e) => {
+    const mode = e.target.closest('[data-auth-mode]');
+    if (mode) { showAuth(mode.dataset.authMode); return; }
+    const open = e.target.closest('[data-team-open]');
+    if (open) { await switchTeam(+open.dataset.teamOpen); return; }
+    if (e.target.closest('[data-join]')) {
+      try {
+        const { id, teams } = await api(`/invite/${encodeURIComponent(invite.code)}`, 'POST');
+        session.teams = teams;
+        store.remove('pendingJoin');
+        invite = null;
+        await enterTeam(id);
+        location.hash = '#chat';
+        toast(`Welkom in ${state.team.name}!`);
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (e.target.closest('[data-logout]')) {
+      if (!confirm('Uitloggen?')) return;
+      await api('/auth/logout', 'POST').catch(() => {});
+      store.remove('team');
+      showAuth('login');
+    }
+  });
+
+  document.addEventListener('submit', async (e) => {
+    if (e.target.id === 'authForm') {
+      e.preventDefault();
+      const f = e.target;
+      const err = $('#authError');
+      const btn = $('button[type="submit"]', f);
+      btn.disabled = true;
+      try {
+        const res = await api(`/auth/${authMode === 'register' ? 'register' : 'login'}`, 'POST',
+          { name: f.elements.name.value.trim(), password: f.elements.password.value });
+        await signedIn(res);
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.hidden = false;
+        btn.disabled = false;
+      }
+      return;
+    }
+    if (e.target.id === 'newTeamForm') {
+      e.preventDefault();
+      const name = e.target.elements.name.value.trim();
+      if (!name) return;
+      try {
+        const { id, teams } = await api('/teams', 'POST', { name });
+        session.teams = teams;
+        await enterTeam(id);
+        location.hash = '#groep';
+        toast('Groep gemaakt ✓ Stuur nu de uitnodigingslink naar je vrienden.');
+      } catch (ex) { toast(ex.message, true); }
+    }
+  });
+
+  /* --- chat --- */
+
+  const chat = {
+    messages: [], lastId: 0, loaded: false,
+    reset() { this.messages = []; this.lastId = 0; this.loaded = false; },
+  };
+  let tickTimer = null;
+  let ticking = false;
+
+  function startTicking() {
+    stopTicking();
+    tick();
+    tickTimer = setInterval(() => { if (!document.hidden) tick(); }, 4000);
+  }
+  function stopTicking() { clearInterval(tickTimer); tickTimer = null; }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && tickTimer) tick(); });
+
+  let reloadTimer = null;
+  const reloadSoon = () => {
+    clearTimeout(reloadTimer);
+    // Niet verversen terwijl iemand iets invult; dat doen we daarna wel.
+    reloadTimer = setTimeout(() => (document.querySelector('dialog[open]') ? reloadSoon() : reload().catch(() => {})), 600);
+  };
+
+  async function tick() {
+    if (ticking || !session.teamId) return;
+    ticking = true;
+    const teamId = session.teamId;
+    try {
+      const [{ messages }, { teams }] = await Promise.all([
+        api(`/messages${chat.loaded ? `?after=${chat.lastId}` : ''}`),
+        api('/unread'),
+      ]);
+      if (teamId !== session.teamId) return;
+      const first = !chat.loaded;
+      const fresh = chat.loaded ? messages : [];
+      if (chat.loaded) chat.messages.push(...messages); else { chat.messages = messages; chat.loaded = true; }
+      if (messages.length) chat.lastId = messages[messages.length - 1].id;
+      for (const t of teams) { const own = session.teams.find((x) => x.id === t.id); if (own) own.unread = t.unread; }
+      // Iemand anders zette iets op de kaart, stelde een reis voor of begon een stemronde: inhoud verversen.
+      if (fresh.some((m) => m.kind === 'event' && m.user_id !== session.user.id)) reloadSoon();
+      if (currentRoute() === 'chat') {
+        if (first || fresh.length) renderChat();
+        markRead();
+      }
+      updateBadges();
+    } catch { /* volgende keer opnieuw */ } finally { ticking = false; }
+  }
+
+  function markRead() {
+    const team = session.teams.find((t) => t.id === session.teamId);
+    if (!chat.lastId || (team && !team.unread && team.readUpTo >= chat.lastId)) return;
+    if (team) { team.unread = 0; team.readUpTo = chat.lastId; }
+    api('/messages/read', 'PUT', { upto: chat.lastId }).catch(() => {});
+    updateBadges();
+  }
+
+  const unreadHere = () => (session.teams.find((t) => t.id === session.teamId) || {}).unread || 0;
+  const unreadElsewhere = () => session.teams.filter((t) => t.id !== session.teamId).reduce((n, t) => n + (t.unread || 0), 0);
+
+  function updateBadges() {
+    const more = (state.team ? pollsToVote().length : 0) + unreadElsewhere();
+    for (const [sel, n] of [['.tab-chat', unreadHere()], ['.tab-group', unreadElsewhere()], ['.tab-more', more]]) {
+      const tab = $(sel);
+      if (!tab) continue;
+      let b = $('.tab-badge', tab);
+      if (!n) { if (b) b.remove(); continue; }
+      if (!b) { b = document.createElement('span'); b.className = 'tab-badge'; tab.append(b); }
+      b.textContent = n > 99 ? '99+' : n;
+    }
+  }
+
+  const msgDate = (m) => new Date(m.created_at.replace(' ', 'T') + 'Z');
+  const timeOf = (m) => msgDate(m).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  function dayLabel(d) {
+    const today = new Date();
+    const y = new Date(); y.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Vandaag';
+    if (d.toDateString() === y.toDateString()) return 'Gisteren';
+    return d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  // Links in berichten klikbaar maken (tekst is al ge-escaped).
+  const linkify = (html) => html.replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+
+  function refHtml(m) {
+    if (m.ref_type === 'item') {
+      const it = findItem(m.ref_id);
+      if (!it) return '<div class="ref-card gone">Deze pin is verwijderd</div>';
+      const img = safeUrl(it.image);
+      return `<a class="ref-card" href="#pin-${it.id}">
+        <span class="ref-thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ic('pin')}</span>
+        <span><small>Pin ${pinNumber(it.id) || ''}</small><strong>${esc(it.title)}</strong>${it.added_by ? `<small>door ${esc(it.added_by)}</small>` : ''}</span>
+        <span class="when-go" aria-hidden="true">→</span></a>`;
+    }
+    if (m.ref_type === 'trip') {
+      const t = state.trips.find((x) => x.id === m.ref_id);
+      if (!t) return '<div class="ref-card gone">Deze reis is verwijderd</div>';
+      const loc = t.item_ids.map(findItem).find((it) => it && sectionOf(it) && sectionOf(it).kind === 'map');
+      const img = loc && safeUrl(loc.image);
+      const n = t.item_ids.length;
+      return `<div class="ref-card trip-ref">
+        <span class="ref-thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ic('suitcase')}</span>
+        <span><small>Reis${t.added_by ? ` · voorgesteld door ${esc(t.added_by)}` : ''}</small><strong>${esc(t.title)}</strong>
+          <small>${t.start_date ? esc(shortRange(t.start_date, t.end_date)) : 'Nog geen datum'} · ${n} ${n === 1 ? 'onderdeel' : 'onderdelen'} · ♥ ${t.likes}</small></span>
+        <span class="ref-actions">
+          ${loc ? `<a class="btn sm" href="#pin-${loc.id}">Op de kaart</a>` : ''}
+          <button type="button" class="btn sm ghost" data-trip-open="${t.id}">Bekijk</button>
+        </span></div>`;
+    }
+    if (m.ref_type === 'poll') {
+      const poll = state.polls.find((p) => p.id === m.ref_id);
+      if (!poll) return '<div class="ref-card gone">Deze stemronde is verwijderd</div>';
+      const rows = tallyOf(poll);
+      const mine = poll.votes.find((v) => v.name.toLowerCase() === myName().toLowerCase());
+      const max = Math.max(1, ...rows.map((r) => r.voters.length));
+      return `<div class="ref-card poll-ref">
+        <div class="poll-ref-head">${ic('vote')}<span><strong>${esc(poll.title)}</strong><small>${esc(deadlineText(poll))} · ${poll.votes.length} ${poll.votes.length === 1 ? 'stem' : 'stemmen'}</small></span></div>
+        <div class="poll-ref-options">${rows.map((r) => {
+          const on = mine && mine.item_id === r.it.id;
+          return `<button type="button" class="poll-ref-opt${on ? ' on' : ''}" data-vote="${r.it.id}" data-poll="${esc(poll.slug)}"${poll.is_closed ? ' disabled' : ''}
+            aria-pressed="${!!on}"><span class="bar" aria-hidden="true"><span style="width:${Math.round(r.voters.length / max * 100)}%"></span></span>
+            <span class="poll-ref-label">${on ? '✓ ' : ''}${esc(shortName(r.it.title))}</span><span class="poll-ref-n">${r.voters.length}</span></button>`;
+        }).join('')}</div>
+        <a class="text-btn" href="#stem-${esc(poll.slug)}">${poll.is_closed ? 'Uitslag bekijken' : 'Wie stemde wat?'}</a>
+      </div>`;
+    }
+    return '';
+  }
+
+  function msgHtml(m, prev) {
+    const d = msgDate(m);
+    const newDay = !prev || msgDate(prev).toDateString() !== d.toDateString();
+    const sep = newDay ? `<div class="msg-day"><span>${esc(dayLabel(d))}</span></div>` : '';
+    const name = m.name || 'Oud-lid';
+    if (m.kind === 'event') {
+      return `${sep}<div class="msg-event" data-msg="${m.id}">${avatar(name)}<span><strong>${esc(name)}</strong> ${esc(m.body)} <time>${timeOf(m)}</time></span></div>
+        ${m.ref_type ? `<div class="msg-event-ref">${refHtml(m)}</div>` : ''}`;
+    }
+    const mine = m.user_id === session.user.id;
+    const cont = !newDay && prev && prev.kind !== 'event' && prev.user_id === m.user_id && d - msgDate(prev) < 5 * 60e3;
+    return `${sep}<div class="msg${mine ? ' mine' : ''}${cont ? ' cont' : ''}" data-msg="${m.id}">
+      ${!mine && !cont ? avatar(name) : '<span class="av-space"></span>'}
+      <div class="bubble">
+        ${!mine && !cont ? `<span class="msg-name" style="color:${colorOf(name)}">${esc(name)}</span>` : ''}
+        ${m.body ? `<p>${linkify(esc(m.body)).replace(/\n/g, '<br>')}</p>` : ''}
+        ${m.ref_type ? refHtml(m) : ''}
+        <span class="msg-meta"><time>${timeOf(m)}</time>${mine || isAdmin() ? `<button type="button" class="msg-del" data-msg-del="${m.id}" aria-label="Bericht verwijderen">✕</button>` : ''}</span>
+      </div></div>`;
+  }
+
+  function chatHtml() {
+    return `
+      <div class="chat">
+        <div class="chat-head">
+          <div><h2>${esc(state.team.name)}</h2><small>${state.members.map((m) => esc(m.name)).join(', ')}</small></div>
+          <a class="btn sm ghost" href="#groep">${ic('users')} Groep</a>
+        </div>
+        <div class="chat-log" id="chatLog" aria-live="polite"></div>
+        <form class="chat-compose" id="chatForm">
+          <button type="button" class="icon-btn chat-attach" data-chat-share aria-label="Reis, pin of stemronde delen">${ic('plus')}</button>
+          <label for="chatInput" class="sr-only">Bericht</label>
+          <textarea id="chatInput" rows="1" maxlength="2000" placeholder="Bericht aan ${esc(state.team.name)}" enterkeyhint="send"></textarea>
+          <button type="submit" class="btn primary chat-send" aria-label="Versturen">${ic('send')}</button>
+        </form>
+      </div>`;
+  }
+
+  function renderChat() {
+    const log = $('#chatLog');
+    if (!log) return;
+    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    const top = log.scrollTop;
+    log.innerHTML = !chat.loaded ? '<p class="hint center">Laden…</p>'
+      : chat.messages.length ? chat.messages.map((m, i) => msgHtml(m, chat.messages[i - 1])).join('')
+      : `<div class="empty"><p>Nog geen berichten. Zeg hoi, of deel een reis, pin of stemronde met de ${ic('plus')}-knop.</p></div>`;
+    log.scrollTop = atBottom || !log.dataset.ready ? log.scrollHeight : top;
+    log.dataset.ready = '1';
+  }
+
+  function autosize(el) {
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  }
+
+  document.addEventListener('input', (e) => { if (e.target.id === 'chatInput') autosize(e.target); });
+  // Op de telefoon: tijdens het typen de tabbalk verbergen en de chat net zo hoog maken als wat boven het toetsenbord zichtbaar is.
+  document.addEventListener('focusin', (e) => { if (e.target.id === 'chatInput' && isPhone()) document.body.classList.add('typing'); });
+  document.addEventListener('focusout', (e) => { if (e.target.id === 'chatInput') document.body.classList.remove('typing'); });
+  if (window.visualViewport) {
+    const fit = () => {
+      document.documentElement.style.setProperty('--vvh', `${window.visualViewport.height}px`);
+      const log = $('#chatLog');
+      if (log && document.body.classList.contains('typing')) log.scrollTop = log.scrollHeight;
+    };
+    window.visualViewport.addEventListener('resize', fit);
+    fit();
+  }
+  document.addEventListener('keydown', (e) => {
+    // Enter verstuurt op een computer; op de telefoon geeft Enter een nieuwe regel.
+    if (e.target.id === 'chatInput' && e.key === 'Enter' && !e.shiftKey && !isPhone()) {
+      e.preventDefault();
+      $('#chatForm').requestSubmit();
+    }
+  });
+
+  async function sendMessage(body, ref) {
+    const { id } = await api('/messages', 'POST', { body, ...(ref || {}) });
+    chat.messages.push({ id, user_id: session.user.id, name: myName(), kind: 'text', body, ref_type: ref ? ref.ref_type : null,
+      ref_id: ref ? ref.ref_id : null, created_at: new Date().toISOString().slice(0, 19).replace('T', ' ') });
+    chat.lastId = Math.max(chat.lastId, id);
+    const log = $('#chatLog');
+    if (log) { renderChat(); log.scrollTop = log.scrollHeight; }
+  }
+
+  document.addEventListener('submit', async (e) => {
+    if (e.target.id !== 'chatForm') return;
+    e.preventDefault();
+    const input = $('#chatInput');
+    const body = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    autosize(input);
+    try { await sendMessage(body); } catch (err) { input.value = body; toast(err.message, true); }
+    if (!isPhone()) input.focus();
+  });
+
+  document.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-msg-del]');
+    if (del) {
+      if (!confirm('Dit bericht verwijderen?')) return;
+      const id = +del.dataset.msgDel;
+      try {
+        await api(`/messages/${id}`, 'DELETE');
+        chat.messages = chat.messages.filter((m) => m.id !== id);
+        renderChat();
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+    const tripOpen = e.target.closest('[data-trip-open]');
+    if (tripOpen) { openTripDialog(state.trips.find((t) => t.id === +tripOpen.dataset.tripOpen)); return; }
+    if (e.target.closest('[data-chat-share]')) { openShareDialog(); return; }
+    const share = e.target.closest('[data-share-ref]');
+    if (share) {
+      const [type, id] = share.dataset.shareRef.split(':');
+      const input = $('#chatInput');
+      const body = input ? input.value.trim() : '';
+      try {
+        await sendMessage(body, { ref_type: type, ref_id: +id });
+        if (input) { input.value = ''; autosize(input); }
+        $('#shareDialog').close();
+        if (currentRoute() !== 'chat') { location.hash = '#chat'; toast('Gedeeld in de chat ✓'); }
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (e.target.closest('[data-share-poll]')) {
+      $('#shareDialog').close();
+      openPollRoundDialog(null);
+    }
+  });
+
+  function openShareDialog() {
+    const locs = locations();
+    $('#shareBody').innerHTML = `
+      ${locs.length >= 2 ? `<button type="button" class="btn primary block" data-share-poll>${ic('vote')} Stemronde starten</button>` : ''}
+      ${state.trips.length ? `<div class="label">Reis delen</div><div class="link-list">${state.trips.map((t) => `
+        <button type="button" class="link-row" data-share-ref="trip:${t.id}">${ic('suitcase')}
+          <span><strong>${esc(t.title)}</strong><small>${t.start_date ? esc(shortRange(t.start_date, t.end_date)) : 'Nog geen datum'}${t.added_by ? ` · ${esc(t.added_by)}` : ''}</small></span></button>`).join('')}</div>` : ''}
+      ${locs.length ? `<div class="label">Pin delen</div><div class="link-list">${locs.map((l) => `
+        <button type="button" class="link-row" data-share-ref="item:${l.id}"><span class="dest-num">${pinNumber(l.id)}</span>
+          <span><strong>${esc(l.title)}</strong>${l.added_by ? `<small>door ${esc(l.added_by)}</small>` : ''}</span></button>`).join('')}</div>`
+        : '<p class="hint">Zet eerst een bestemming op de kaart; daarna kun je hem hier delen.</p>'}
+      ${state.polls.length ? `<div class="label">Stemronde delen</div><div class="link-list">${state.polls.map((p) => `
+        <button type="button" class="link-row" data-share-ref="poll:${p.id}">${ic('vote')}
+          <span><strong>${esc(p.title)}</strong><small>${esc(deadlineText(p))}</small></span></button>`).join('')}</div>` : ''}`;
+    $('#shareDialog').showModal();
+  }
+
+  /* --- groepspagina: leden, uitnodigen, voorkeuren --- */
+
+  const inviteUrl = () => `${location.origin}/join/${state.team.invite_code}`;
+
+  function prefChipsHtml(me) {
+    return IDEA_CATS.map(([k, label]) => {
+      const v = me.likes.includes(k) ? 'like' : me.dislikes.includes(k) ? 'dislike' : '';
+      return `<button type="button" class="pref${v ? ` ${v}` : ''}" data-pref="${k}" aria-label="${esc(label)}: ${v === 'like' ? 'vind ik leuk' : v === 'dislike' ? 'liever niet' : 'maakt niet uit'}">
+        <span aria-hidden="true">${v === 'like' ? '👍' : v === 'dislike' ? '👎' : ''}</span>${esc(label)}</button>`;
+    }).join('');
+  }
+
+  function memberPrefsText(m) {
+    const parts = [];
+    if (m.likes.length) parts.push(`👍 ${m.likes.map((c) => CAT_LABEL[c]).join(', ')}`);
+    if (m.dislikes.length) parts.push(`👎 ${m.dislikes.map((c) => CAT_LABEL[c]).join(', ')}`);
+    if (m.note) parts.push(`“${m.note}”`);
+    return parts.map(esc).join(' · ');
+  }
+
+  function groupHtml() {
+    const me = state.members.find((m) => m.id === session.user.id) || { likes: [], dislikes: [], note: '' };
+    const admin = isAdmin();
+    const others = session.teams.filter((t) => t.id !== session.teamId);
+    return `
+      <div class="section-head">
+        <span class="plan-kicker">Groep</span>
+        <h2>${esc(state.team.name)} ${admin ? '<button type="button" class="text-btn" data-group-rename>Naam wijzigen</button>' : ''}</h2>
+        <p class="section-intro">Alles in deze groep (kaart, reizen, stemrondes, datumprikker en chat) zien alleen de leden.</p>
+      </div>
+
+      <div class="share-card invite-card">
+        <strong>${ic('users')} Vrienden uitnodigen</strong>
+        <p>Iedereen met deze link kan een account maken en meedoen.</p>
+        <div class="invite-link"><input readonly value="${esc(inviteUrl())}" aria-label="Uitnodigingslink" onclick="this.select()"></div>
+        <div class="row-btns">
+          <button type="button" class="btn sm primary" data-invite-share>Link delen</button>
+          <a class="btn sm" href="https://wa.me/?text=${encodeURIComponent(`Doe mee met ${state.team.name} in de vakantieplanner: ${inviteUrl()}`)}" target="_blank" rel="noopener">WhatsApp</a>
+          <button type="button" class="btn sm ghost" data-copy="${esc(inviteUrl())}">Kopiëren</button>
+          ${admin ? '<button type="button" class="btn sm ghost" data-invite-new>Nieuwe link</button>' : ''}
+        </div>
+      </div>
+
+      <div class="label" id="voorkeuren">Mijn voorkeuren</div>
+      <p class="hint">Tik één keer voor 👍 (vind ik leuk), twee keer voor 👎 (liever niet). Bij Ideeën ziet iedereen dan welke bestemmingen bij de groep passen.</p>
+      <div class="prefs">${prefChipsHtml(me)}</div>
+      <label class="pref-note">Opmerking voor de groep <small>(optioneel)</small>
+        <input id="prefNote" maxlength="200" value="${esc(me.note)}" placeholder="Bijv. max € 800, liefst in augustus" enterkeyhint="done"></label>
+
+      <div class="label">Leden (${state.members.length})</div>
+      <ul class="members">${state.members.map((m) => `
+        <li>${avatar(m.name)}
+          <div class="member-main"><strong>${esc(m.name)}${m.id === session.user.id ? ' <small>(jij)</small>' : ''}</strong>
+            ${m.role === 'admin' ? '<span class="chip">Beheerder</span>' : ''}
+            ${memberPrefsText(m) ? `<small class="member-prefs">${memberPrefsText(m)}</small>` : '<small class="member-prefs">Nog geen voorkeuren</small>'}</div>
+          ${admin && m.id !== session.user.id ? `<details class="member-menu"><summary aria-label="Opties voor ${esc(m.name)}">⋯</summary><div>
+            <button type="button" data-member-role="${m.id}" data-role="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? 'Geen beheerder meer' : 'Maak beheerder'}</button>
+            <button type="button" data-member-reset="${m.id}">Tijdelijk wachtwoord maken</button>
+            <button type="button" class="danger" data-member-remove="${m.id}">Uit de groep halen</button></div></details>` : ''}
+        </li>`).join('')}</ul>
+
+      <div class="label">Mijn groepen</div>
+      ${others.length ? `<div class="team-list">${teamsListHtml().replace(/<button type="button" class="team-row on"[\s\S]*?<\/button>/, '')}</div>` : '<p class="hint">Je zit alleen in deze groep.</p>'}
+      <details class="new-team"><summary class="btn block">${ic('plus')} Nieuwe groep maken</summary>${newTeamFormHtml()}</details>
+
+      <div class="label">Account</div>
+      <div class="account-row">${avatar(myName())}<span>Ingelogd als <strong>${esc(myName())}</strong></span></div>
+      <div class="row-btns">
+        <button type="button" class="btn sm" data-password>Wachtwoord wijzigen</button>
+        <button type="button" class="btn sm ghost" data-logout>Uitloggen</button>
+        <button type="button" class="btn sm ghost danger" data-group-leave>Groep verlaten</button>
+      </div>`;
+  }
+
+  let prefTimer = null;
+  function savePrefs() {
+    const me = state.members.find((m) => m.id === session.user.id);
+    if (!me) return;
+    clearTimeout(prefTimer);
+    prefTimer = setTimeout(async () => {
+      try {
+        await api('/prefs', 'PUT', { likes: me.likes, dislikes: me.dislikes, note: me.note });
+        toast('Voorkeuren opgeslagen ✓');
+      } catch (err) { toast(err.message, true); }
+    }, 500);
+  }
+
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'prefNote') return;
+    const me = state.members.find((m) => m.id === session.user.id);
+    if (me) { me.note = e.target.value.trim(); savePrefs(); }
+  });
+
+  document.addEventListener('click', async (e) => {
+    const pref = e.target.closest('[data-pref]');
+    if (pref) {
+      const me = state.members.find((m) => m.id === session.user.id);
+      const k = pref.dataset.pref;
+      // neutraal → leuk → liever niet → neutraal
+      if (me.likes.includes(k)) { me.likes = me.likes.filter((c) => c !== k); me.dislikes.push(k); }
+      else if (me.dislikes.includes(k)) me.dislikes = me.dislikes.filter((c) => c !== k);
+      else me.likes.push(k);
+      $('.prefs').innerHTML = prefChipsHtml(me);
+      const row = $$('.members li').find((li) => li.querySelector('strong') && li.querySelector('strong').textContent.startsWith(me.name));
+      if (row) { const small = $('.member-prefs', row); if (small) small.innerHTML = memberPrefsText(me) || 'Nog geen voorkeuren'; }
+      savePrefs();
+      return;
+    }
+    if (e.target.closest('[data-invite-share]')) {
+      const url = inviteUrl();
+      if (navigator.share) {
+        try { await navigator.share({ title: state.team.name, text: `Doe mee met ${state.team.name} in de vakantieplanner`, url }); } catch { /* geannuleerd */ }
+      } else {
+        try { await navigator.clipboard.writeText(url); toast('Link gekopieerd ✓'); } catch { toast(url); }
+      }
+      return;
+    }
+    if (e.target.closest('[data-invite-new]')) {
+      if (!confirm('Nieuwe uitnodigingslink maken? De oude link werkt dan niet meer.')) return;
+      const { invite_code: code } = await api('/team/invite', 'POST');
+      state.team.invite_code = code;
+      renderPanel();
+      toast('Nieuwe link gemaakt ✓');
+      return;
+    }
+    if (e.target.closest('[data-group-rename]')) {
+      const name = prompt('Nieuwe naam van de groep', state.team.name);
+      if (!name || !name.trim()) return;
+      try { await api('/team', 'PUT', { name: name.trim() }); await refreshTeams(); await reload(); toast('Naam gewijzigd ✓'); } catch (err) { toast(err.message, true); }
+      return;
+    }
+    const role = e.target.closest('[data-member-role]');
+    if (role) {
+      try { await api(`/team/members/${role.dataset.memberRole}`, 'PUT', { role: role.dataset.role }); await reload(); } catch (err) { toast(err.message, true); }
+      return;
+    }
+    const reset = e.target.closest('[data-member-reset]');
+    if (reset) {
+      const m = state.members.find((x) => x.id === +reset.dataset.memberReset);
+      if (!confirm(`Een tijdelijk wachtwoord maken voor ${m.name}? Het oude wachtwoord werkt dan niet meer.`)) return;
+      try {
+        const { password } = await api(`/team/members/${m.id}/reset`, 'POST');
+        prompt(`Tijdelijk wachtwoord voor ${m.name}. Stuur het naar ${m.name}; die kan het daarna zelf wijzigen.`, password);
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+    const remove = e.target.closest('[data-member-remove]');
+    if (remove) {
+      const m = state.members.find((x) => x.id === +remove.dataset.memberRemove);
+      if (!confirm(`${m.name} uit de groep halen?`)) return;
+      try { await api(`/team/members/${m.id}`, 'DELETE'); await reload(); toast(`${m.name} is uit de groep`); } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (e.target.closest('[data-group-leave]')) {
+      if (!confirm(`Weet je zeker dat je ${state.team.name} wilt verlaten?`)) return;
+      try {
+        await api(`/team/members/${session.user.id}`, 'DELETE');
+        await leaveTeamView();
+        toast('Je hebt de groep verlaten');
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (e.target.closest('[data-password]')) {
+      const current = prompt('Je huidige wachtwoord');
+      if (current == null) return;
+      const next = prompt('Nieuw wachtwoord (minstens 6 tekens)');
+      if (next == null) return;
+      try { await api('/auth/password', 'PUT', { current, password: next }); toast('Wachtwoord gewijzigd ✓'); } catch (err) { toast(err.message, true); }
+    }
+  });
+
+  /* --- groepsvoorkeuren bij de ideeën --- */
+
+  // Per lid: duimpje bij deze bestemming, of een categorie die diegene leuk of juist niet leuk vindt.
+  function groupFeel(d, hours) {
+    const tags = [...tagsOf(d), ...(hours <= 3.5 ? ['kort'] : []), ...(hours >= 6 ? ['ver'] : [])];
+    const up = [];
+    const down = [];
+    let mine = 0;
+    for (const m of state.members) {
+      const r = state.reactions.find((x) => x.user_id === m.id && x.dest === d.n);
+      if (m.id === session.user.id && r) mine = r.value;
+      const bad = m.dislikes.filter((c) => tags.includes(c));
+      const good = m.likes.filter((c) => tags.includes(c));
+      if (r && r.value < 0) down.push({ name: m.name, why: 'duim omlaag' });
+      else if (r && r.value > 0) up.push({ name: m.name, why: '' });
+      else if (bad.length) down.push({ name: m.name, why: `liever geen ${bad.map((c) => CAT_LABEL[c].toLowerCase()).join(', ')}` });
+      else if (good.length) up.push({ name: m.name, why: good.map((c) => CAT_LABEL[c].toLowerCase()).join(', ') });
+    }
+    return { up, down, mine };
+  }
+
+  function groupFeelHtml(x) {
+    if (state.members.length < 1) return '';
+    const f = groupFeel(x.d, x.km / 800 + 0.5);
+    return `<div class="pkg-group">
+      <div class="feel">
+        ${f.down.map((p) => `<span class="feel-row down" title="${esc(p.why)}">${avatar(p.name)}<span><strong>${esc(p.name)}</strong> ${esc(p.why)}</span></span>`).join('')}
+        ${f.up.length ? `<span class="feel-row up">${f.up.slice(0, 5).map((p) => avatar(p.name)).join('')}<span>${esc(f.up.map((p) => p.name).join(', '))} ${f.up.length === 1 ? 'vindt' : 'vinden'} dit wat</span></span>` : ''}
+        ${!f.up.length && !f.down.length ? '<span class="feel-row none">Nog geen reacties uit de groep</span>' : ''}
+      </div>
+      <div class="react" role="group" aria-label="Jouw reactie">
+        <button type="button" class="react-btn${f.mine > 0 ? ' on' : ''}" data-react="1" data-dest="${esc(x.d.n)}" aria-pressed="${f.mine > 0}" aria-label="Leuk">${ic('thumbUp')}</button>
+        <button type="button" class="react-btn down${f.mine < 0 ? ' on' : ''}" data-react="-1" data-dest="${esc(x.d.n)}" aria-pressed="${f.mine < 0}" aria-label="Liever niet">${ic('thumbDown')}</button>
+      </div></div>`;
+  }
+
+  // Score bijstellen: wat de groep niet ziet zitten zakt, wat ze leuk vinden stijgt.
+  function groupScoreDelta(d, hours) {
+    const f = groupFeel(d, hours);
+    return Math.max(-0.3, -0.12 * f.down.length) + Math.min(0.15, 0.05 * f.up.length);
+  }
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-react]');
+    if (!btn) return;
+    const dest = btn.dataset.dest;
+    const value = btn.getAttribute('aria-pressed') === 'true' ? 0 : +btn.dataset.react;
+    state.reactions = state.reactions.filter((r) => !(r.user_id === session.user.id && r.dest === dest));
+    if (value) state.reactions.push({ user_id: session.user.id, dest, value });
+    const card = btn.closest('.pkg');
+    const x = card && ideaCtx.list[+card.dataset.pkg];
+    if (x) card.querySelector('.pkg-group').outerHTML = groupFeelHtml(x);
+    try { await api('/reactions', 'PUT', { dest, value }); } catch (err) { toast(err.message, true); }
+  });
+
+  /* --- wie heeft wat gepind: filter op de kaart --- */
+
+  let whoFilter = '';
+  const visibleOnMap = (it) => !whoFilter || (it.added_by || '').toLowerCase() === whoFilter.toLowerCase();
+
+  function whoFilterHtml() {
+    const counts = new Map();
+    for (const l of locations()) if (l.added_by) counts.set(l.added_by, (counts.get(l.added_by) || 0) + 1);
+    if (counts.size < 2 && !whoFilter) return '';
+    return `<div class="who-filter" role="group" aria-label="Pinnen van">
+      <button type="button" class="chip-btn${!whoFilter ? ' on' : ''}" data-who-filter="" aria-pressed="${!whoFilter}">Iedereen</button>
+      ${[...counts].sort((a, b) => b[1] - a[1]).map(([n, c]) => `<button type="button" class="chip-btn${whoFilter === n ? ' on' : ''}" data-who-filter="${esc(n)}" aria-pressed="${whoFilter === n}">${avatar(n)}${esc(n)} <small>${c}</small></button>`).join('')}
+    </div>`;
+  }
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-who-filter]');
+    if (!b) return;
+    whoFilter = b.dataset.whoFilter;
+    renderPanel();
+  });
+
   /* ---------- init ---------- */
 
-  reload().catch((err) => {
-    $('#panel').innerHTML = `<div class="empty">Kon de inhoud niet laden: ${esc(err.message)}</div>`;
+  async function boot() {
+    // Uitnodigingslink /join/<code>: onthouden tot je bent ingelogd.
+    const join = /^\/join\/([\w-]+)\/?$/.exec(location.pathname);
+    if (join) {
+      store.set('pendingJoin', join[1]);
+      history.replaceState(null, '', '/' + location.hash);
+    }
+    await loadInvite();
+    const me = await api('/auth/me');
+    if (!me.user) { showAuth(); return; }
+    await signedIn(me);
+    // Een gedeelde stemlink uit een andere groep van jou: daarheen gaan.
+    const m = /^#stem-(\w+)$/.exec(location.hash);
+    if (m && session.teamId && !findPoll(m[1])) {
+      try {
+        const { team_id: teamId } = await api(`/polls/slug/${m[1]}`);
+        if (teamId !== session.teamId) { await enterTeam(teamId); location.hash = `#stem-${m[1]}`; renderTabs(); renderPanel(); }
+      } catch (err) { toast(err.message, true); }
+    }
+  }
+
+  boot().catch((err) => {
+    $('#panel').innerHTML = `<div class="empty">Kon de app niet laden: ${esc(err.message)}</div>`;
   });
 })();

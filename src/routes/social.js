@@ -1,0 +1,260 @@
+// Accounts, groepen (met uitnodigingslink), voorkeuren en de groepschat.
+const express = require('express');
+const crypto = require('crypto');
+const db = require('../db');
+const auth = require('../auth');
+
+const router = express.Router();
+
+const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} ._'-]{0,29}$/u;
+
+function fail(status, message, code) {
+  const err = new Error(message);
+  err.status = status;
+  if (code) err.code = code;
+  return err;
+}
+
+function teamsOf(userId) {
+  return db.prepare(`
+    SELECT t.id, t.name, t.invite_code, m.role,
+      (SELECT COUNT(*) FROM team_members x WHERE x.team_id = t.id) AS members,
+      (SELECT COUNT(*) FROM messages g WHERE g.team_id = t.id AND g.id > m.last_read AND COALESCE(g.user_id, 0) != m.user_id) AS unread
+    FROM team_members m JOIN teams t ON t.id = m.team_id WHERE m.user_id = ? ORDER BY t.name COLLATE NOCASE`).all(userId);
+}
+
+function joinTeam(team, user) {
+  // Wie als eerste een groep zonder leden binnenkomt (de groep van vóór de accounts), wordt beheerder.
+  const empty = !db.prepare('SELECT 1 FROM team_members WHERE team_id = ?').get(team.id);
+  const res = db.prepare('INSERT OR IGNORE INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)')
+    .run(team.id, user.id, empty ? 'admin' : 'member');
+  if (res.changes) db.postEvent(team.id, user.id, 'doet nu mee met de groep');
+}
+
+/* ---------- account ---------- */
+
+router.post('/auth/register', (req, res) => {
+  const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
+  const password = String(req.body.password || '');
+  if (!NAME_RE.test(name)) throw fail(400, 'Kies een naam van 1 tot 30 letters of cijfers');
+  if (password.length < 6) throw fail(400, 'Kies een wachtwoord van minstens 6 tekens');
+  if (db.prepare('SELECT 1 FROM users WHERE name = ?').get(name)) throw fail(409, 'Deze naam is al bezet. Log in, of kies een andere naam.');
+  const id = db.prepare('INSERT INTO users (name, pass_hash) VALUES (?, ?)').run(name, auth.hashPassword(password)).lastInsertRowid;
+  auth.startSession(req, res, id);
+  res.json({ user: { id, name }, teams: [] });
+});
+
+router.post('/auth/login', (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const password = String(req.body.password || '');
+  const keys = [`n:${name.toLowerCase()}`, `ip:${req.ip}`];
+  if (auth.tooManyFails(keys)) throw fail(429, 'Te vaak een verkeerd wachtwoord. Probeer het over een kwartier opnieuw.');
+  const user = db.prepare('SELECT * FROM users WHERE name = ?').get(name);
+  if (!user || !auth.checkPassword(password, user.pass_hash)) {
+    auth.noteFail(keys);
+    throw fail(401, 'Naam of wachtwoord klopt niet');
+  }
+  auth.clearFails(keys);
+  auth.startSession(req, res, user.id);
+  res.json({ user: { id: user.id, name: user.name }, teams: teamsOf(user.id) });
+});
+
+router.post('/auth/logout', (req, res) => {
+  auth.endSession(req, res);
+  res.json({ ok: true });
+});
+
+// Voorbeeld van een uitnodiging (naam en aantal leden), ook zonder lid te zijn.
+router.get('/invite/:code', (req, res) => {
+  const team = db.prepare('SELECT id, name FROM teams WHERE invite_code = ?').get(String(req.params.code));
+  if (!team) throw fail(404, 'Deze uitnodigingslink werkt niet (meer). Vraag een nieuwe.');
+  const members = db.prepare('SELECT u.name FROM team_members m JOIN users u ON u.id = m.user_id WHERE m.team_id = ? ORDER BY m.joined_at').all(team.id).map((m) => m.name);
+  const user = auth.userFromRequest(req);
+  const member = !!(user && db.prepare('SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?').get(team.id, user.id));
+  res.json({ id: team.id, name: team.name, members, member });
+});
+
+// Wie ben ik? Zonder sessie gewoon `user: null` (geen foutmelding in de console).
+router.get('/auth/me', (req, res) => {
+  const user = auth.userFromRequest(req);
+  res.json({ user, teams: user ? teamsOf(user.id) : [] });
+});
+
+router.use(auth.requireUser);
+
+router.put('/auth/password', (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!auth.checkPassword(String(req.body.current || ''), user.pass_hash)) throw fail(400, 'Je huidige wachtwoord klopt niet');
+  const password = String(req.body.password || '');
+  if (password.length < 6) throw fail(400, 'Kies een wachtwoord van minstens 6 tekens');
+  db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(auth.hashPassword(password), user.id);
+  res.json({ ok: true });
+});
+
+/* ---------- groepen ---------- */
+
+router.post('/teams', (req, res) => {
+  const name = String(req.body.name || '').trim().slice(0, 60);
+  if (!name) throw fail(400, 'Geef de groep een naam');
+  const id = db.createTeam(name, req.user.id);
+  db.postEvent(id, req.user.id, `heeft de groep ${name} gemaakt`);
+  res.json({ id, teams: teamsOf(req.user.id) });
+});
+
+router.post('/invite/:code', (req, res) => {
+  const team = db.prepare('SELECT * FROM teams WHERE invite_code = ?').get(String(req.params.code));
+  if (!team) throw fail(404, 'Deze uitnodigingslink werkt niet (meer). Vraag een nieuwe.');
+  joinTeam(team, req.user);
+  res.json({ id: team.id, teams: teamsOf(req.user.id) });
+});
+
+// Vanaf hier geldt de actieve groep (header X-Team).
+const team = express.Router();
+team.use(auth.requireTeam);
+const adminOnly = (req) => { if (req.team.role !== 'admin') throw fail(403, 'Alleen een beheerder van de groep kan dit'); };
+
+team.put('/team', (req, res) => {
+  adminOnly(req);
+  const name = String(req.body.name || '').trim().slice(0, 60);
+  if (!name) throw fail(400, 'Geef de groep een naam');
+  db.prepare('UPDATE teams SET name = ? WHERE id = ?').run(name, req.team.id);
+  db.postEvent(req.team.id, req.user.id, `heeft de groep hernoemd naar ${name}`);
+  res.json({ ok: true });
+});
+
+// Nieuwe uitnodigingslink; de oude werkt dan niet meer.
+team.post('/team/invite', (req, res) => {
+  adminOnly(req);
+  const code = db.inviteCode();
+  db.prepare('UPDATE teams SET invite_code = ? WHERE id = ?').run(code, req.team.id);
+  res.json({ invite_code: code });
+});
+
+team.put('/team/members/:uid', (req, res) => {
+  adminOnly(req);
+  const uid = +req.params.uid;
+  const role = req.body.role === 'admin' ? 'admin' : 'member';
+  if (role === 'member' && uid === req.user.id
+    && db.prepare("SELECT COUNT(*) AS n FROM team_members WHERE team_id = ? AND role = 'admin'").get(req.team.id).n < 2) {
+    throw fail(400, 'Maak eerst iemand anders beheerder');
+  }
+  db.prepare('UPDATE team_members SET role = ? WHERE team_id = ? AND user_id = ?').run(role, req.team.id, uid);
+  res.json({ ok: true });
+});
+
+// Wachtwoord vergeten: een beheerder maakt een tijdelijk wachtwoord voor een lid.
+team.post('/team/members/:uid/reset', (req, res) => {
+  adminOnly(req);
+  const uid = +req.params.uid;
+  if (!db.prepare('SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?').get(req.team.id, uid)) throw fail(404, 'Lid niet gevonden');
+  const temp = crypto.randomBytes(6).toString('base64url').replace(/[-_]/g, 'x').slice(0, 8);
+  db.transaction(() => {
+    db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(auth.hashPassword(temp), uid);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(uid);
+  })();
+  res.json({ password: temp });
+});
+
+// Iemand uit de groep halen (beheerder) of zelf de groep verlaten.
+team.delete('/team/members/:uid', (req, res) => {
+  const uid = +req.params.uid;
+  if (uid !== req.user.id) adminOnly(req);
+  const admins = db.prepare("SELECT user_id FROM team_members WHERE team_id = ? AND role = 'admin'").all(req.team.id).map((r) => r.user_id);
+  const left = db.prepare('SELECT COUNT(*) AS n FROM team_members WHERE team_id = ?').get(req.team.id).n;
+  if (admins.length === 1 && admins[0] === uid && left > 1) throw fail(400, 'Maak eerst iemand anders beheerder');
+  const name = (db.prepare('SELECT name FROM users WHERE id = ?').get(uid) || {}).name;
+  db.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').run(req.team.id, uid);
+  if (name) db.postEvent(req.team.id, uid, uid === req.user.id ? 'heeft de groep verlaten' : `is uit de groep gehaald door ${req.user.name}`);
+  res.json({ ok: true });
+});
+
+/* ---------- voorkeuren ---------- */
+
+const CATS = ['nachtleven', 'strand', 'zon', 'stad', 'goedkoop', 'eten', 'avontuur', 'watersport', 'eiland', 'natuur', 'allin', 'wintersport', 'cultuur', 'kort', 'ver'];
+const catList = (v) => [...new Set((Array.isArray(v) ? v : []).filter((c) => CATS.includes(c)))];
+
+team.put('/prefs', (req, res) => {
+  const likes = catList(req.body.likes);
+  const dislikes = catList(req.body.dislikes).filter((c) => !likes.includes(c));
+  const note = String(req.body.note || '').trim().slice(0, 200);
+  db.prepare('UPDATE team_members SET likes = ?, dislikes = ?, note = ? WHERE team_id = ? AND user_id = ?')
+    .run(JSON.stringify(likes), JSON.stringify(dislikes), note, req.team.id, req.user.id);
+  res.json({ ok: true });
+});
+
+// Duim omhoog (1), omlaag (-1) of weg (0) bij een bestemming uit de ideeën.
+team.put('/reactions', (req, res) => {
+  const dest = String(req.body.dest || '').trim().slice(0, 80);
+  const value = [1, -1].includes(req.body.value) ? req.body.value : 0;
+  if (!dest) throw fail(400, 'Geen bestemming');
+  if (value) {
+    db.prepare(`INSERT INTO dest_reactions (team_id, user_id, dest, value) VALUES (?, ?, ?, ?)
+      ON CONFLICT(team_id, user_id, dest) DO UPDATE SET value = excluded.value`).run(req.team.id, req.user.id, dest, value);
+  } else {
+    db.prepare('DELETE FROM dest_reactions WHERE team_id = ? AND user_id = ? AND dest = ?').run(req.team.id, req.user.id, dest);
+  }
+  res.json({ ok: true });
+});
+
+/* ---------- chat ---------- */
+
+const REF_TYPES = { trip: 'trips', poll: 'polls' };
+
+function refOk(teamId, type, id) {
+  if (type === 'item') {
+    return !!db.prepare('SELECT 1 FROM items i JOIN sections s ON s.id = i.section_id WHERE i.id = ? AND s.team_id = ?').get(id, teamId);
+  }
+  return REF_TYPES[type] && !!db.prepare(`SELECT 1 FROM ${REF_TYPES[type]} WHERE id = ? AND team_id = ?`).get(id, teamId);
+}
+
+// Nieuwe berichten sinds `after`; zonder `after` de laatste 100.
+team.get('/messages', (req, res) => {
+  const after = parseInt(req.query.after, 10) || 0;
+  const rows = after
+    ? db.prepare(`SELECT g.*, u.name FROM messages g LEFT JOIN users u ON u.id = g.user_id
+        WHERE g.team_id = ? AND g.id > ? ORDER BY g.id LIMIT 200`).all(req.team.id, after)
+    : db.prepare(`SELECT * FROM (SELECT g.*, u.name FROM messages g LEFT JOIN users u ON u.id = g.user_id
+        WHERE g.team_id = ? ORDER BY g.id DESC LIMIT 100) ORDER BY id`).all(req.team.id);
+  res.json({ messages: rows });
+});
+
+team.post('/messages', (req, res) => {
+  const body = String(req.body.body || '').trim().slice(0, 2000);
+  const refType = ['trip', 'poll', 'item'].includes(req.body.ref_type) ? req.body.ref_type : null;
+  const refId = refType ? parseInt(req.body.ref_id, 10) : null;
+  if (refType && !refOk(req.team.id, refType, refId)) throw fail(400, 'Dit kun je niet delen in deze groep');
+  if (!body && !refType) throw fail(400, 'Typ eerst een bericht');
+  const id = db.prepare('INSERT INTO messages (team_id, user_id, kind, body, ref_type, ref_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(req.team.id, req.user.id, 'text', body, refType, refId).lastInsertRowid;
+  db.prepare('UPDATE team_members SET last_read = MAX(last_read, ?) WHERE team_id = ? AND user_id = ?').run(id, req.team.id, req.user.id);
+  res.json({ id });
+});
+
+team.delete('/messages/:id', (req, res) => {
+  const msg = db.prepare('SELECT * FROM messages WHERE id = ? AND team_id = ?').get(req.params.id, req.team.id);
+  if (!msg) throw fail(404, 'Bericht niet gevonden');
+  if (msg.user_id !== req.user.id && req.team.role !== 'admin') throw fail(403, 'Je kunt alleen je eigen berichten verwijderen');
+  db.prepare('DELETE FROM messages WHERE id = ?').run(msg.id);
+  res.json({ ok: true });
+});
+
+team.put('/messages/read', (req, res) => {
+  const upto = parseInt(req.body.upto, 10) || 0;
+  db.prepare('UPDATE team_members SET last_read = MAX(last_read, ?) WHERE team_id = ? AND user_id = ?').run(upto, req.team.id, req.user.id);
+  res.json({ ok: true });
+});
+
+// Hoeveel ongelezen berichten in elke groep (voor de badges), plus het nieuwste bericht-id van de actieve groep.
+router.get('/unread', (req, res) => {
+  res.json({ teams: teamsOf(req.user.id).map(({ id, unread }) => ({ id, unread })) });
+});
+
+// Een gedeelde stemlink: in welke van jouw groepen zit deze stemronde?
+router.get('/polls/slug/:slug', (req, res) => {
+  const row = db.prepare(`SELECT p.team_id FROM polls p JOIN team_members m ON m.team_id = p.team_id AND m.user_id = ?
+    WHERE p.slug = ?`).get(req.user.id, String(req.params.slug));
+  if (!row) throw fail(404, 'Deze stemronde hoort bij een groep waar je (nog) geen lid van bent');
+  res.json({ team_id: row.team_id });
+});
+
+module.exports = { router, team };
