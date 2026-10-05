@@ -91,7 +91,7 @@ function airportsNear(lat, lng, meters = 200000) {
 // Photon (komoot) geeft in één snelle vraag de dichtstbijzijnde plekken met een bepaalde OSM-tag.
 // Minder details dan Overpass (geen sterren of website), maar binnen een paar seconden en zelden druk.
 const PHOTON = {
-  hotels: { radius: 5, limit: 50, tags: ['tourism:hotel', 'tourism:guest_house', 'tourism:apartment', 'tourism:hostel', 'tourism:motel', 'leisure:resort'] },
+  hotels: { radius: 6, limit: 80, tags: ['tourism:hotel', 'tourism:guest_house', 'tourism:apartment', 'tourism:hostel', 'tourism:motel', 'leisure:resort'] },
   eat: { radius: 2, limit: 60, tags: ['amenity:restaurant', 'amenity:cafe', 'amenity:bar', 'amenity:ice_cream', 'amenity:pub'] },
   do: { radius: 8, limit: 60, tags: ['tourism:attraction', 'tourism:museum', 'tourism:viewpoint', 'tourism:theme_park', 'tourism:zoo',
     'tourism:aquarium', 'tourism:gallery', 'natural:beach', 'leisure:water_park', 'historic:castle', 'historic:ruins', 'historic:archaeological_site'] },
@@ -104,7 +104,8 @@ async function fetchPhoton(kind, lat, lng) {
   for (const t of cfg.tags) qs.append('osm_tag', t);
   const res = await fetch(`https://photon.komoot.io/reverse?${qs}`, {
     headers: { 'User-Agent': 'vakantieplanner (prive groepsapp)' },
-    signal: AbortSignal.timeout(12000),
+    // Photon is meestal binnen een paar seconden klaar, maar soms veel trager; niet te vroeg opgeven.
+    signal: AbortSignal.timeout(20000),
   });
   if (!res.ok) throw new Error(`photon: HTTP ${res.status}`);
   const data = await res.json();
@@ -116,7 +117,7 @@ async function fetchPhoton(kind, lat, lng) {
     if (p.street) tags['addr:street'] = p.street;
     if (p.housenumber) tags['addr:housenumber'] = p.housenumber;
     if (p.locality || p.city) tags['addr:city'] = p.locality || p.city;
-    return { type: OSM_TYPES[p.osm_type] || 'node', id: p.osm_id, lat: la, lon, tags };
+    return { type: OSM_TYPES[p.osm_type] || 'node', id: p.osm_id, lat: la, lon, tags, photon: true };
   });
 }
 
@@ -140,6 +141,30 @@ async function fetchNearby(kind, lat, lng) {
   return overpass();
 }
 
+function saveCache(key, els) {
+  db.prepare(`INSERT INTO nearby_cache (key, data, fetched_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`).run(key, JSON.stringify(els));
+}
+
+// Hotels van Photon hebben geen sterren of website. Daarom vragen we daarna op de achtergrond
+// Overpass en voegen we beide samen in de cache: de eerste keer snel, daarna meer hotels mét sterren.
+const enriching = new Set();
+const nameKey = (el) => String((el.tags && el.tags.name) || '').trim().toLowerCase();
+function enrichHotels(key, lat, lng, photonEls) {
+  if (enriching.has(key)) return;
+  enriching.add(key);
+  limited(() => fetchOverpass(QUERIES.hotels(lat, lng), MIRRORS.slice(0, 2)))
+    .then((overpassEls) => {
+      const rich = new Map(overpassEls.filter((el) => nameKey(el)).map((el) => [nameKey(el), el]));
+      const merged = photonEls.map((el) => rich.get(nameKey(el)) || el);
+      const seen = new Set(merged.map(nameKey));
+      for (const el of overpassEls) if (nameKey(el) && !seen.has(nameKey(el))) { merged.push(el); seen.add(nameKey(el)); }
+      saveCache(key, merged.map((el) => ({ ...el, photon: undefined })));
+    })
+    .catch((err) => console.error('hotels aanvullen', err.message))
+    .finally(() => enriching.delete(key));
+}
+
 function nearby(kind, lat, lng) {
   if (!QUERIES[kind]) throw Object.assign(new Error('Onbekende soort'), { status: 400 });
   if (kind === 'airports') return Promise.resolve(airportsNear(+lat, +lng));
@@ -151,8 +176,8 @@ function nearby(kind, lat, lng) {
   if (row) return Promise.resolve(JSON.parse(row.data));
   if (inFlight.has(key)) return inFlight.get(key);
   const job = fetchNearby(kind, +la, +ln).then((els) => {
-    db.prepare(`INSERT INTO nearby_cache (key, data, fetched_at) VALUES (?, ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`).run(key, JSON.stringify(els));
+    saveCache(key, els);
+    if (kind === 'hotels' && els.some((el) => el.photon)) enrichHotels(key, +la, +ln, els);
     return els;
   });
   inFlight.set(key, job);
@@ -160,4 +185,40 @@ function nearby(kind, lat, lng) {
   return job;
 }
 
-module.exports = { nearby };
+// Is er een verse cache voor deze plek?
+function isCached(kind, lat, lng) {
+  const key = `${kind}|${(+lat).toFixed(3)}|${(+lng).toFixed(3)}`;
+  return !!db.prepare(`SELECT 1 FROM nearby_cache WHERE key = ? AND fetched_at > datetime('now', '-${TTL_DAYS - 1} days')`).get(key);
+}
+
+// Hotels voor alle bestemmingen in de ideeën-tab alvast ophalen, rustig één voor één,
+// zodat de tab meteen pakketten met verblijven laat zien. Draait bij het opstarten en daarna dagelijks.
+function prewarmHotels(places) {
+  let busy = false;
+  const run = async () => {
+    if (busy) return;
+    busy = true;
+    let n = 0;
+    try {
+      for (const { lat, lng } of places) {
+        if (isCached('hotels', lat, lng)) {
+          // Wel in de cache, maar nog alleen de snelle Photon-lijst: Overpass opnieuw proberen voor sterren.
+          const la = (+lat).toFixed(3);
+          const ln = (+lng).toFixed(3);
+          const key = `hotels|${la}|${ln}`;
+          const row = db.prepare('SELECT data FROM nearby_cache WHERE key = ?').get(key);
+          const els = row ? JSON.parse(row.data) : [];
+          if (els.some((el) => el.photon)) { enrichHotels(key, +la, +ln, els); await wait(3000); }
+          continue;
+        }
+        try { await nearby('hotels', lat, lng); n++; } catch (err) { console.error('vooraf ophalen', err.message); }
+        await wait(3000);
+      }
+    } finally { busy = false; }
+    if (n) console.log(`Hotels vooraf opgehaald voor ${n} bestemmingen`);
+  };
+  setTimeout(run, 15000);
+  setInterval(run, 24 * 60 * 60 * 1000).unref();
+}
+
+module.exports = { nearby, prewarmHotels };

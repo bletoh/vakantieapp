@@ -25,4 +25,8 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Vakantieapp draait op poort ${PORT}`);
+  if (process.env.PREWARM !== '0') {
+    const places = require('../public/data/bestemmingen.json');
+    require('./nearby').prewarmHotels(places);
+  }
 });

@@ -111,6 +111,8 @@
     expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
     layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    compass: '<circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
   };
   const ic = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
   const KIND_ICONS = { map: 'pin', flight: 'plane', stay: 'bed', do: 'sparkles', eat: 'utensils' };
@@ -162,6 +164,7 @@
     if (h === '#reizen') return 'reizen';
     if (h === '#stem' || /^#stem-\w+$/.test(h)) return 'stem';
     if (h === '#datum') return 'datum';
+    if (h === '#ideeen') return 'ideeen';
     if (h === '#kaart' || /^#pin-\d+$/.test(h)) return mapSection() ? 'kaart' : fallbackRoute();
     const m = /^#tab-(\d+)$/.exec(h);
     if (m && findSection(+m[1])) return findSection(+m[1]).kind === 'map' ? 'kaart' : +m[1];
@@ -224,6 +227,7 @@
     const map = mapSection();
     const lists = state.sections.filter((s) => s.kind !== 'map' && !(map && (s.kind === 'flight' || s.kind === 'stay')));
     nav.innerHTML = (map ? tabLink('#kaart', `${ic('map')} <span>${esc(map.title)}</span>`, route === 'kaart', ' tab-map') : '')
+      + tabLink('#ideeen', `${ic('compass')} <span>Ideeën</span>`, route === 'ideeen')
       + tabLink('#datum', `${ic('calendar')} <span>Datum</span>`, route === 'datum')
       + tabLink('#reizen', `${ic('suitcase')} <span>Reizen</span>`, route === 'reizen')
       + tabLink('#stem', `${ic('vote')} <span>Stemmen</span>${openPolls().length ? ` <span class="tab-badge">${openPolls().length}</span>` : ''}`, route === 'stem')
@@ -248,6 +252,12 @@
     if (route === 'reizen') { panel.innerHTML = tripsHtml(); return; }
     if (route === 'stem') { panel.innerHTML = stemHtml(); return; }
     if (route === 'datum') { panel.innerHTML = pollHtml(); return; }
+    if (route === 'ideeen') {
+      // Niet opnieuw opbouwen als je net iets intypt (bijv. het budget); alleen de resultaten verversen.
+      if (!$('#ideaResults')) panel.innerHTML = ideasHtml();
+      renderIdeaResults();
+      return;
+    }
     const s = findSection(route);
     panel.innerHTML = s ? sectionHtml(s) : `
       <div class="empty">
@@ -2163,9 +2173,11 @@
         ${resultsHtml(hotels, 'data-add-hotel', titles, (h) => `
           <strong>${esc(h.name)}</strong>
           <small>${h.stars ? `${'★'.repeat(h.stars)} · ` : ''}${esc(h.type)} · ${kmText(h.km)}</small>
+          ${(() => { const g = groupReview(h.name); return g ? `<span class="group-review">${ic('users')} Groep: ${g.rating ? `${'★'.repeat(g.rating)} ` : ''}${g.text ? `“${esc(g.text)}”` : ''}${g.by ? ` · ${esc(g.by)}` : ''}</span>` : ''; })()}
           <span class="result-links">
             ${h.website ? `<a href="${esc(h.website)}" target="_blank" rel="noopener">Website ↗</a>` : ''}
-            <a href="${bookingUrl(`${h.name} ${h.city || shortName(loc.title)}`, p.trip)}" target="_blank" rel="noopener">Prijs op Booking ↗</a>
+            <a href="${bookingUrl(`${h.name} ${h.city || shortName(loc.title)}`, p.trip)}" target="_blank" rel="noopener">Reviews en prijs op Booking ↗</a>
+            <a href="${googleReviewsUrl(h.name, h.city || shortName(loc.title))}" target="_blank" rel="noopener">Google-reviews ↗</a>
           </span>`)}
         <p class="fineprint">Hotelgegevens: © OpenStreetMap-bijdragers.</p>`;
     } else {
@@ -2431,6 +2443,393 @@
 
   $('#pinEdit').addEventListener('click', () => {
     openItemDialog(findItem(pinCtx.locId));
+  });
+
+  /* ---------- ideeën: vakantiepakketten op basis van wensen ---------- */
+
+  const IDEA_CATS = [
+    ['strand', 'Strand'], ['zon', 'Zon'], ['stad', 'Stedentrip'], ['cultuur', 'Cultuur & historie'],
+    ['natuur', 'Natuur'], ['wandelen', 'Wandelen'], ['eten', 'Lekker eten'], ['nachtleven', 'Uitgaan'],
+    ['rust', 'Rust'], ['familie', 'Met kinderen'], ['romantisch', 'Romantisch'], ['avontuur', 'Avontuur'],
+    ['eiland', 'Eiland'], ['duiken', 'Duiken & snorkelen'], ['allin', 'All-inclusive'], ['wintersport', 'Wintersport'],
+    ['kort', 'Korte vlucht (< 3 uur)'], ['ver', 'Verre reis'],
+  ];
+  const CAT_LABEL = Object.fromEntries(IDEA_CATS);
+  const LEVELS = {
+    budget: { label: 'Voordelig', factor: 0.55 },
+    mid: { label: 'Middenklasse', factor: 1 },
+    luxe: { label: 'Luxe', factor: 1.9 },
+  };
+  const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+
+  let destinations = null;
+  const ideaCtx = { list: [], hotels: new Map(), airports: new Map(), choice: new Map(), busy: false };
+
+  async function loadDestinations() {
+    if (!destinations) destinations = await fetch('/data/bestemmingen.json').then((r) => r.json());
+    return destinations;
+  }
+
+  function ideaPrefs() {
+    let p = {};
+    try { p = JSON.parse(store.get('ideas') || '{}'); } catch { /* standaard */ }
+    return { cats: Array.isArray(p.cats) ? p.cats : [], month: p.month || 'poll', days: +p.days || pollSettings().days, budget: +p.budget || 0 };
+  }
+  const saveIdeaPrefs = (p) => store.set('ideas', JSON.stringify(p));
+
+  // Beste periode uit de datumprikker, als die er is.
+  const pollWindow = () => bestWindows(availabilityMap(), pollSettings())[0] || null;
+
+  // Welke maand telt mee voor het weer (0-11), of null.
+  function ideaMonth(p) {
+    if (p.month === 'any') return null;
+    if (p.month === 'poll') {
+      const w = pollWindow();
+      return w ? toDate(w.start).getUTCMonth() : toDate(pollSettings().start).getUTCMonth();
+    }
+    return toDate(`${p.month}-01`).getUTCMonth();
+  }
+
+  // Datums voor de reis als je een pakket op de kaart zet: de beste periode, als die in de gekozen maand valt.
+  function ideaDates(p) {
+    const w = pollWindow();
+    if (!w) return null;
+    if (p.month === 'poll' || p.month === 'any' || w.start.slice(0, 7) === p.month) return { start_date: w.start, end_date: w.end };
+    return null;
+  }
+
+  // Hoe fijn is het weer voor wat je zoekt (0-1)?
+  function weatherScore(d, m, cats) {
+    if (m === null) return null;
+    const t = d.temp[m];
+    const parts = [];
+    if (cats.includes('wintersport')) parts.push(d.t.includes('wintersport') && [11, 0, 1, 2, 3].includes(m) ? 1 : 0);
+    if (cats.includes('strand') || cats.includes('zon') || cats.includes('duiken')) {
+      parts.push(t >= 26 && t <= 33 ? 1 : t > 33 && t <= 36 ? 0.6 : t > 36 ? 0.25 : t >= 23 ? 0.7 : t >= 20 ? 0.35 : 0);
+    }
+    if (cats.some((c) => ['natuur', 'wandelen', 'avontuur'].includes(c))) parts.push(t >= 12 && t <= 25 ? 1 : (t >= 6 && t < 12) || (t > 25 && t <= 30) ? 0.6 : 0.2);
+    if (!parts.length) parts.push(t >= 16 && t <= 28 ? 1 : (t >= 10 && t < 16) || (t > 28 && t <= 32) ? 0.6 : 0.25);
+    return parts.reduce((a, b) => a + b, 0) / parts.length;
+  }
+
+  // Kosten per persoon: vlucht + nachten × prijs per nacht voor het niveau dat in het budget past.
+  function ideaCost(d, p) {
+    const nights = Math.max(1, p.days - 1);
+    const est = (level) => Math.round(d.f + nights * d.h * LEVELS[level].factor);
+    if (!p.budget) return { level: 'mid', total: est('mid'), nights, over: false };
+    for (const level of ['luxe', 'mid', 'budget']) if (est(level) <= p.budget) return { level, total: est(level), nights, over: false };
+    return { level: 'budget', total: est('budget'), nights, over: true };
+  }
+
+  function rankIdeas(p) {
+    const m = ideaMonth(p);
+    const wish = p.cats.filter((c) => c !== 'kort' && c !== 'ver');
+    return destinations.map((d) => {
+      const km = distanceKm(HOME, [d.lat, d.lng]);
+      const hours = km / 800 + 0.5;
+      if (p.cats.includes('kort') && hours > 3.5) return null;
+      if (p.cats.includes('ver') && hours < 6) return null;
+      const matched = wish.filter((c) => d.t.includes(c));
+      if (wish.length && !matched.length) return null;
+      if (wish.includes('wintersport') && !d.t.includes('wintersport')) return null;
+      const cost = ideaCost(d, p);
+      if (cost.over && cost.total > p.budget * 1.15) return null;
+      const match = wish.length ? matched.length / wish.length : 0.6;
+      const weather = weatherScore(d, m, wish);
+      let score = weather === null ? match : 0.6 * match + 0.4 * weather;
+      if (cost.over) score -= 0.15;
+      return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), pin: nearbyPin(d) };
+    }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.total - b.cost.total).slice(0, 6);
+  }
+
+  function monthOptions(p) {
+    const w = pollWindow();
+    const now = new Date();
+    const opts = [`<option value="poll"${p.month === 'poll' ? ' selected' : ''}>${w ? `Beste periode (${shortRange(w.start, w.end)})` : 'Periode van de datumprikker'}</option>`];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+      const v = isoOf(d).slice(0, 7);
+      opts.push(`<option value="${v}"${p.month === v ? ' selected' : ''}>${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}</option>`);
+    }
+    opts.push(`<option value="any"${p.month === 'any' ? ' selected' : ''}>Maakt niet uit</option>`);
+    return opts.join('');
+  }
+
+  function ideasHtml() {
+    const p = ideaPrefs();
+    return `
+      <div class="section-head">
+        <h2>Ideeën</h2>
+        <p class="section-intro">Tik aan wat jullie zoeken. De app stelt vakantiepakketten samen met vlucht en verblijf; met één tik zet je er een op de kaart.</p>
+      </div>
+      <div class="idea-cats" role="group" aria-label="Wat zoeken jullie?">
+        ${IDEA_CATS.map(([k, label]) => `<button type="button" class="cat" data-cat="${k}" aria-pressed="${p.cats.includes(k)}">${esc(label)}</button>`).join('')}
+      </div>
+      <div class="idea-opts">
+        <label>Wanneer<select id="ideaMonth">${monthOptions(p)}</select></label>
+        <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
+        <label>Budget p.p.<span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen maximum" value="${p.budget || ''}"></span></label>
+      </div>
+      <div id="ideaResults" class="idea-results" aria-live="polite"><p class="hint loading-dots">Bestemmingen laden</p></div>`;
+  }
+
+  async function renderIdeaResults() {
+    const box = $('#ideaResults');
+    if (!box) return;
+    try { await loadDestinations(); } catch { box.innerHTML = '<p class="hint">De bestemmingen konden niet geladen worden.</p>'; return; }
+    const p = ideaPrefs();
+    ideaCtx.list = rankIdeas(p);
+    const m = ideaMonth(p);
+    box.innerHTML = `
+      ${!p.cats.length ? '<p class="hint">Nog niets aangetikt: dit zijn bestemmingen met fijn weer in die periode. Tik hierboven aan wat jullie zoeken voor betere tips.</p>' : ''}
+      ${ideaCtx.list.length ? ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')
+        : '<div class="empty"><p>Geen pakket dat bij alles past. Haal een wens weg of verhoog het budget.</p></div>'}
+      ${ideaCtx.list.length ? '<p class="fineprint">Prijzen zijn een indicatie (vlucht retour en verblijf per persoon, uitgaande van twee per kamer). De echte prijs zie je via de links. Hotelgegevens: © OpenStreetMap-bijdragers.</p>' : ''}`;
+    ideaCtx.list.forEach((x, i) => fillPackage(x, i));
+    ideaCtx.list.forEach((x, i) => loadWikiImage(x.d, i));
+  }
+
+  function packageHtml(x, i, p, m) {
+    const { d, cost } = x;
+    const hours = flightTime(x.km);
+    return `
+      <article class="pkg" data-pkg="${i}">
+        <div class="pkg-img"><span class="pkg-score">${Math.round(x.score * 100)}% match</span></div>
+        <div class="pkg-body">
+          <div class="pkg-head">
+            <h3>${esc(d.n)}${d.c !== d.n ? ` <small>${esc(d.c)}</small>` : ''}</h3>
+            ${x.pin ? `<span class="pkg-on">Staat al op de kaart</span>` : ''}
+          </div>
+          <div class="pkg-why">
+            ${x.matched.map((c) => `<span class="chip">${esc(CAT_LABEL[c])}</span>`).join('')}
+            ${m !== null ? `<span class="chip weather">± ${d.temp[m]}° in ${MONTHS[m]}</span>` : ''}
+          </div>
+          <div class="pkg-line">${ic('plane')}<span class="pkg-flight">Vlucht vanaf Schiphol · ± ${hours} · ± € ${d.f} retour</span></div>
+          <div class="pkg-line">${ic('bed')}<span>${LEVELS[cost.level].label} verblijf · ± € ${Math.round(d.h * LEVELS[cost.level].factor)} p.p. per nacht</span></div>
+          <ul class="pkg-hotels" aria-label="Verblijf kiezen"><li class="hint loading-dots">Verblijven zoeken</li></ul>
+          <div class="pkg-foot">
+            <div class="pkg-total"><strong>± € ${cost.total} p.p.</strong>
+              <small>${p.days} dagen · vlucht + ${cost.nights} ${cost.nights === 1 ? 'nacht' : 'nachten'}${cost.over ? ' · <span class="warn">net boven budget</span>' : ''}</small></div>
+            ${x.pin ? `<a class="btn" href="#pin-${x.pin.id}">Bekijk op de kaart</a>`
+              : `<button type="button" class="btn primary" data-idea-add="${i}">${ic('pin')} Zet op de kaart</button>`}
+          </div>
+        </div>
+      </article>`;
+  }
+
+  // Foto van de bestemming via Wikipedia (gratis, zonder sleutel).
+  const wikiImages = new Map();
+  async function loadWikiImage(d, i) {
+    const key = d.w || d.n;
+    if (!wikiImages.has(key)) {
+      wikiImages.set(key, (async () => {
+        // Vlaggen, wapens en kaartjes (bijna altijd svg) overslaan: we willen een foto.
+        const isPhoto = (src) => src && !/\.svg|flag|vlag|coat_of_arms|wapen|locator|location|map/i.test(src);
+        for (const [lang, title] of [['nl', d.w], ['en', d.n], ['en', `${d.n}, ${d.c}`]]) {
+          if (!title) continue;
+          try {
+            const r = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+            if (!r.ok) continue;
+            const j = await r.json();
+            if (j.type === 'disambiguation') continue;
+            const src = (j.thumbnail && j.thumbnail.source) || (j.originalimage && j.originalimage.source);
+            if (isPhoto(src)) return src;
+          } catch { /* volgende proberen */ }
+        }
+        // Geen foto in de samenvatting: de eerste echte foto uit het artikel zelf.
+        for (const [lang, title] of [['en', d.n], ['nl', d.w]]) {
+          if (!title) continue;
+          try {
+            const r = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+            if (!r.ok) continue;
+            const items = (await r.json()).items || [];
+            const img = items.find((m) => m.type === 'image' && /\.jpe?g$/i.test(m.title || '') && isPhoto(m.title) && m.srcset && m.srcset.length);
+            if (img) return `https:${img.srcset[0].src}`.replace(/^https:https:/, 'https:');
+          } catch { /* volgende proberen */ }
+        }
+        return '';
+      })());
+    }
+    const src = await wikiImages.get(key);
+    const box = $(`.pkg[data-pkg="${i}"] .pkg-img`);
+    if (src && box && ideaCtx.list[i] && ideaCtx.list[i].d === d && !box.querySelector('img')) {
+      // Wikimedia levert alleen vaste breedtes (o.a. 500 en 960 pixels); andere maten geven een fout.
+      const at = (w) => (/\/\d+px-/.test(src) ? src.replace(/\/\d+px-/, `/${w}px-`) : src);
+      box.insertAdjacentHTML('afterbegin', `<img src="${esc(at(500))}" srcset="${esc(at(500))} 500w, ${esc(at(960))} 960w"
+        sizes="(max-width: 600px) 100vw, 380px" alt="" loading="lazy" onerror="this.remove()">`);
+    }
+  }
+
+  // Verblijven die bij het niveau passen: soort en sterren, daarna afstand tot het centrum.
+  function pickHotels(hotels, level) {
+    const fit = (h) => {
+      const s = h.stars || 0;
+      if (level === 'budget') return (['Hostel', 'Pension', 'Appartement', 'Motel'].includes(h.type) ? 2 : 0) + (s && s <= 3 ? 1 : 0) - (s >= 4 ? 2 : 0);
+      if (level === 'luxe') return (h.type === 'Resort' ? 2 : 0) + (s >= 5 ? 3 : s >= 4 ? 2 : 0) - (['Hostel', 'Motel'].includes(h.type) ? 3 : 0);
+      return (h.type === 'Hotel' || h.type === 'Appartement' ? 1 : 0) + (s === 3 || s === 4 ? 2 : 0) - (h.type === 'Hostel' ? 2 : 0);
+    };
+    return [...hotels].sort((a, b) => fit(b) - fit(a) || (groupReview(b.name) ? 1 : 0) - (groupReview(a.name) ? 1 : 0) || a.km - b.km).slice(0, 3);
+  }
+
+  async function fillPackage(x, i) {
+    const loc = { lat: x.d.lat, lng: x.d.lng, title: ideaTitle(x.d) };
+    const key = x.d.n;
+    const [airports, hotels] = await Promise.all([
+      ideaCtx.airports.get(key) || findAirports(loc).catch(() => []),
+      ideaCtx.hotels.get(key) || findHotels(loc).catch(() => null),
+    ]);
+    ideaCtx.airports.set(key, airports);
+    if (hotels) ideaCtx.hotels.set(key, hotels);
+    const card = $(`.pkg[data-pkg="${i}"]`);
+    if (!card || ideaCtx.list[i] !== x) return;
+    const a = airports[0];
+    if (a) {
+      $('.pkg-flight', card).innerHTML = `${HOME_CODE} → ${esc(a.iata)} · ± ${flightTime(distanceKm(HOME, a.pos))} · ± € ${x.d.f} retour ·
+        <a href="${flightsUrl(a.iata, ideaTrip(x))}" target="_blank" rel="noopener">Vluchten ↗</a>`;
+    }
+    const list = $('.pkg-hotels', card);
+    if (!hotels) { list.innerHTML = '<li class="hint">Verblijven konden niet worden opgehaald. Probeer het zo nog eens.</li>'; return; }
+    const picks = pickHotels(hotels, x.cost.level);
+    x.hotelPicks = picks;
+    if (!picks.length) { list.innerHTML = '<li class="hint">Geen verblijven gevonden in de buurt.</li>'; return; }
+    const chosen = Math.min(ideaCtx.choice.get(key) || 0, picks.length - 1);
+    const trip = ideaTrip(x);
+    list.innerHTML = picks.map((h, j) => {
+      const g = groupReview(h.name);
+      const city = h.city || x.d.n;
+      return `<li>
+        <label class="pkg-hotel${j === chosen ? ' on' : ''}">
+          <input type="radio" name="pkg-${i}" value="${j}" data-pkg-hotel="${i}"${j === chosen ? ' checked' : ''}>
+          <span class="pkg-hotel-main">
+            <strong>${esc(h.name)}</strong>
+            <small>${h.stars ? `${'★'.repeat(Math.min(h.stars, 5))} · ` : ''}${esc(h.type)} · ${kmText(h.km)} van het centrum</small>
+            ${g ? `<span class="group-review">${ic('users')} Groep: ${g.rating ? `${'★'.repeat(g.rating)} ` : ''}${g.text ? `“${esc(g.text)}”` : ''}${g.by ? ` · ${esc(g.by)}` : ''}</span>` : ''}
+            <span class="result-links">Reviews:
+              <a href="${bookingUrl(`${h.name} ${city}`, trip)}" target="_blank" rel="noopener">Booking ↗</a>
+              <a href="${googleReviewsUrl(h.name, city)}" target="_blank" rel="noopener">Google ↗</a>
+            </span>
+          </span>
+        </label>
+      </li>`;
+    }).join('');
+  }
+
+  const ideaTitle = (d) => (d.c && d.c !== d.n ? `${d.n}, ${d.c}` : d.n);
+  const googleReviewsUrl = (name, city) => `https://www.google.com/search?q=${encodeURIComponent(`${name} ${city} reviews`)}`;
+
+  // Oordeel van de groep over een verblijf dat al eens is toegevoegd (score, tekst en wie).
+  function groupReview(name) {
+    const n = String(name || '').trim().toLowerCase();
+    if (!n) return null;
+    for (const s of sectionsOfKind('stay')) {
+      const it = s.items.find((x) => x.title.trim().toLowerCase() === n && (x.rating || lines(x.pros).length));
+      if (it) return { rating: it.rating || 0, text: lines(it.pros)[0] || '', by: it.added_by || '' };
+    }
+    return null;
+  }
+
+  // Een reis-achtig object voor de zoeklinks (datums uit de datumprikker als die passen).
+  function ideaTrip() {
+    const dts = ideaDates(ideaPrefs());
+    return dts ? { start_date: dts.start_date, end_date: dts.end_date } : null;
+  }
+
+  // Eén tik: bestemming als pin, vlucht en verblijf gekoppeld, en een reis met datums als die bekend zijn.
+  async function addIdea(i) {
+    const x = ideaCtx.list[i];
+    if (!x) return;
+    const p = ideaPrefs();
+    const by = store.get('name');
+    let loc = nearbyPin(x.d);
+    if (!loc) {
+      const section = mapSection();
+      if (!section) throw new Error('Er is nog geen kaart-tab');
+      const { id } = await api(`/sections/${section.id}/items`, 'POST', { title: ideaTitle(x.d), lat: x.d.lat, lng: x.d.lng, added_by: by });
+      await reload();
+      loc = findItem(id);
+    }
+    const trip = ideaTrip(x);
+    const a = (ideaCtx.airports.get(x.d.n) || [])[0];
+    if (a && !linkedOfKind(loc.id, 'flight').length) {
+      const s = await ensureSection('flight');
+      await api(`/sections/${s.id}/items`, 'POST', {
+        title: `Amsterdam → ${a.name} (${a.iata})`,
+        subtitle: `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen`,
+        body: `Indicatie: ± € ${x.d.f} retour per persoon. Zoek de echte prijs op via de link.`,
+        price: `± € ${x.d.f}`,
+        link: flightsUrl(a.iata, trip),
+        location_id: loc.id,
+        added_by: by,
+      });
+    }
+    const h = (x.hotelPicks || [])[ideaCtx.choice.get(x.d.n) || 0];
+    if (h && !linkedOfKind(loc.id, 'stay').some(({ it }) => it.title === h.name)) {
+      const s = await ensureSection('stay');
+      await api(`/sections/${s.id}/items`, 'POST', {
+        title: h.name,
+        subtitle: [h.stars ? `${h.stars}★` : '', h.type, h.city].filter(Boolean).join(' · '),
+        body: [h.street && `${h.street}${h.city ? ', ' + h.city : ''}`, `${kmText(h.km)} van het centrum.`].filter(Boolean).join('\n'),
+        rating: h.stars && h.stars <= 5 ? h.stars : null,
+        price: `± € ${Math.round(x.d.h * LEVELS[x.cost.level].factor * x.cost.nights)} p.p.`,
+        link: h.website || h.osm,
+        lat: h.pos[0],
+        lng: h.pos[1],
+        location_id: loc.id,
+        added_by: by,
+      });
+    }
+    await reload();
+    const dts = ideaDates(p);
+    await syncTrip(findItem(loc.id), dts || {});
+    toast(`${x.d.n} staat op de kaart ✓`);
+    location.hash = `#pin-${loc.id}`;
+  }
+
+  // Bediening van de ideeën-tab.
+  document.addEventListener('click', async (e) => {
+    const cat = e.target.closest('.idea-cats .cat');
+    if (cat) {
+      const p = ideaPrefs();
+      const k = cat.dataset.cat;
+      p.cats = p.cats.includes(k) ? p.cats.filter((c) => c !== k) : [...p.cats, k];
+      if (k === 'kort') p.cats = p.cats.filter((c) => c !== 'ver');
+      if (k === 'ver') p.cats = p.cats.filter((c) => c !== 'kort');
+      saveIdeaPrefs(p);
+      $$('.idea-cats .cat').forEach((b) => b.setAttribute('aria-pressed', String(p.cats.includes(b.dataset.cat))));
+      renderIdeaResults();
+      return;
+    }
+    const add = e.target.closest('[data-idea-add]');
+    if (add) {
+      add.disabled = true;
+      add.innerHTML = 'Bezig…';
+      try { await addIdea(+add.dataset.ideaAdd); } catch (err) { toast(err.message, true); add.disabled = false; add.textContent = 'Zet op de kaart'; }
+    }
+  });
+  document.addEventListener('change', (e) => {
+    const radio = e.target.closest('[data-pkg-hotel]');
+    if (radio) {
+      const x = ideaCtx.list[+radio.dataset.pkgHotel];
+      if (x) ideaCtx.choice.set(x.d.n, +radio.value);
+      $$(`[name="${radio.name}"]`).forEach((r) => r.closest('.pkg-hotel').classList.toggle('on', r.checked));
+      return;
+    }
+    if (e.target.id === 'ideaMonth') {
+      const p = ideaPrefs(); p.month = e.target.value; saveIdeaPrefs(p); renderIdeaResults();
+    }
+  });
+  let ideaTimer = null;
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'ideaDays' && e.target.id !== 'ideaBudget') return;
+    clearTimeout(ideaTimer);
+    ideaTimer = setTimeout(() => {
+      const p = ideaPrefs();
+      const days = parseInt($('#ideaDays').value, 10);
+      p.days = days >= 2 && days <= 30 ? days : pollSettings().days;
+      p.budget = Math.max(0, parseInt($('#ideaBudget').value, 10) || 0);
+      saveIdeaPrefs(p);
+      renderIdeaResults();
+    }, 350);
   });
 
   // Vanuit de datumprikker: kies voor welke bestemming de gekozen periode is.
