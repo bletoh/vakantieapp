@@ -25,6 +25,7 @@ Een blogachtige website waarmee je je vrienden laat zien wat de beste vakantiepl
   - De panelen volgen je vinger tijdens het vegen en klikken bij loslaten vast in de dichtstbijzijnde stand.
   - Het planpaneel van een pin bedekt maar de helft van het scherm, zodat je de pin en de stipjes van hotels en activiteiten blijft zien. Veeg omhoog voor het hele scherm, omlaag om te sluiten.
   - Ligt er een paneel over de kaart, dan sluit een tik op de kaart dat paneel eerst; zo prik je niet per ongeluk een pin.
+- **Stijl**: strak en zakelijk: wit met grijstinten, één roze-rode accentkleur, het lettertype Inter, ronde hoeken en lijn-iconen. Waarschuwingen ("kan niet") hebben een eigen oranjerode kleur. Het voorbeeldplaatje voor WhatsApp gebruikt dezelfde stijl.
 - **Toegankelijk.** Zoeken werkt helemaal met het toetsenbord (pijltjes en Enter). Pinnen bereik je met Tab en open je met Enter. De nummers op de pinnen komen overeen met de lijst. Het paneel sluit met Escape, de app werkt op mobiel en heeft een automatische dark mode.
 - **Tabs**: naast Kaart, Datum, Reizen en Stemmen kun je zelf tabs toevoegen (＋) en aanpassen (naam, icoon, intro, prijs tonen, volgorde). Activiteiten en Eten & drinken kun je ook als lijst bekijken.
 - **Foto's** bij een suggestie of bestemming: uploaden vanaf je telefoon (automatisch verkleind) of een link plakken.

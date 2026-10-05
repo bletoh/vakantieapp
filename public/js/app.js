@@ -96,6 +96,27 @@
   };
   const PIN_KINDS = Object.keys(KINDS);
 
+  // Lijn-iconen (24×24, kleur volgt de tekst) in plaats van gekleurde emoji.
+  const ICONS = {
+    map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+    suitcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
+    vote: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+    bed: '<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>',
+    sparkles: '<path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/>',
+    utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
+    pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+    layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+  };
+  const ic = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+  const KIND_ICONS = { map: 'pin', flight: 'plane', stay: 'bed', do: 'sparkles', eat: 'utensils' };
+  // Vaste soorten krijgen een lijn-icoon; eigen tabs houden het icoon dat iemand zelf koos.
+  const kindIcon = (kind, own) => (KIND_ICONS[kind] ? ic(KIND_ICONS[kind]) : esc(own || ''));
+
   const findSection = (id) => state.sections.find((s) => s.id === id);
   const findItem = (id) => {
     for (const s of state.sections) {
@@ -202,12 +223,12 @@
     // Vluchten en overnachtingen beheer je via de pinnen op de kaart; die tabs tonen we niet.
     const map = mapSection();
     const lists = state.sections.filter((s) => s.kind !== 'map' && !(map && (s.kind === 'flight' || s.kind === 'stay')));
-    nav.innerHTML = (map ? tabLink('#kaart', `<span aria-hidden="true">🗺️</span> ${esc(map.title)}`, route === 'kaart', ' tab-map') : '')
-      + tabLink('#datum', '<span aria-hidden="true">📅</span> Datum', route === 'datum')
-      + tabLink('#reizen', '<span aria-hidden="true">🧳</span> Reizen', route === 'reizen')
-      + tabLink('#stem', `<span aria-hidden="true">🗳️</span> Stemmen${openPolls().length ? ` <span class="tab-badge">${openPolls().length}</span>` : ''}`, route === 'stem')
-      + lists.map((s) => tabLink(`#tab-${s.id}`, `${s.icon ? `<span aria-hidden="true">${esc(s.icon)}</span> ` : ''}${esc(s.title)}`, route === s.id)).join('')
-      + '<button type="button" class="tab add" data-action="add-section" aria-label="Tab toevoegen">＋</button>';
+    nav.innerHTML = (map ? tabLink('#kaart', `${ic('map')} <span>${esc(map.title)}</span>`, route === 'kaart', ' tab-map') : '')
+      + tabLink('#datum', `${ic('calendar')} <span>Datum</span>`, route === 'datum')
+      + tabLink('#reizen', `${ic('suitcase')} <span>Reizen</span>`, route === 'reizen')
+      + tabLink('#stem', `${ic('vote')} <span>Stemmen</span>${openPolls().length ? ` <span class="tab-badge">${openPolls().length}</span>` : ''}`, route === 'stem')
+      + lists.map((s) => tabLink(`#tab-${s.id}`, `${KIND_ICONS[s.kind] ? kindIcon(s.kind) : s.icon ? `<span class="tab-emoji" aria-hidden="true">${esc(s.icon)}</span>` : ''} <span>${esc(s.title)}</span>`, route === s.id)).join('')
+      + `<button type="button" class="tab add" data-action="add-section" aria-label="Tab toevoegen">${ic('plus')}</button>`;
     const active = $('.tab.active', nav);
     if (active) {
       const left = active.offsetLeft - nav.clientWidth / 2 + active.clientWidth / 2;
@@ -244,14 +265,14 @@
     return `
       <div class="section-head">
         <h2>
-          <span aria-hidden="true">${esc(s.icon)}</span>${esc(s.title)}
+          <span class="head-icon" aria-hidden="true">${kindIcon(s.kind, s.icon)}</span>${esc(s.title)}
           <button type="button" class="text-btn" data-action="edit-section" data-id="${s.id}">Tab bewerken</button>
         </h2>
         ${s.intro ? `<p class="section-intro">${esc(s.intro)}</p>` : ''}
         ${pinnable ? '<p class="section-intro">Tip: open een bestemming op de <a href="#kaart">kaart</a> om suggesties in de buurt te vinden en ze meteen aan de reis te koppelen.</p>' : ''}
       </div>
       <button type="button" class="add-cta" data-action="add-item" data-id="${s.id}">
-        <span class="add-cta-plus" aria-hidden="true">＋</span>
+        <span class="add-cta-plus">${ic('plus')}</span>
         <span>${esc(addLabel(s))}</span>
       </button>
       ${best ? cardHtml(best, s, true) : ''}
@@ -265,7 +286,7 @@
   function linkChipsHtml(it) {
     const loc = it.location_id && findItem(it.location_id);
     if (!loc) return '';
-    return `<div class="chips"><a class="chip" href="#pin-${loc.id}">📍 ${esc(loc.title)}</a></div>`;
+    return `<div class="chips"><a class="chip" href="#pin-${loc.id}">${ic('pin')} ${esc(loc.title)}</a></div>`;
   }
 
   function cardHtml(it, s, feature) {
@@ -315,7 +336,7 @@
         <p class="section-intro">Elke bestemming die je op de <a href="#kaart">kaart</a> plant, komt hier als reis te staan. Geef je favoriet een hartje.</p>
       </div>
       <div class="cta-row">
-        ${mapSection() ? `<a class="add-cta" href="#kaart"><span class="add-cta-plus" aria-hidden="true">🗺️</span><span>Plan een reis op de kaart</span></a>` : ''}
+        ${mapSection() ? `<a class="add-cta" href="#kaart"><span class="add-cta-plus">${ic('map')}</span><span>Plan een reis op de kaart</span></a>` : ''}
         <button type="button" class="btn ghost" data-action="add-trip">＋ Reis zonder kaart</button>
       </div>
       ${trips.length ? `<div class="grid">${trips.map(tripCardHtml).join('')}</div>`
@@ -350,7 +371,7 @@
           ${tripDatesHtml(t)}
           ${picks.length ? `<ul class="trip-picks">${picks.map(({ s, it }) => `
             <li><a class="trip-pick" href="${tripPickHref(s, it)}">
-              <span class="trip-pick-icon" aria-hidden="true">${esc(s.kind === 'map' ? '📍' : s.icon)}</span>
+              <span class="trip-pick-icon" aria-hidden="true">${kindIcon(s.kind, s.icon)}</span>
               <span class="trip-pick-text"><small>${esc(s.kind === 'map' ? 'Bestemming' : s.title)}</small>${esc(it.title)}
                 ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}</span>
             </a></li>`).join('')}</ul>` : ''}
@@ -912,7 +933,7 @@
 
   const HOME = [52.3105, 4.7683]; // Schiphol
   const HOME_CODE = 'AMS';
-  const DOT_COLORS = { stay: '#b8412c', do: '#3f6b3a', eat: '#c27a1a' };
+  const DOT_COLORS = { stay: '#e0245e', do: '#008a05', eat: '#d97706' };
   let map = null;
   let markers = {};
   let dataLayer = null;
@@ -951,7 +972,7 @@
           <div class="map-stage">
             <div class="map-search" role="search">
               <label for="placeSearch" class="sr-only">Zoek een bestemming</label>
-              <span class="map-search-icon" aria-hidden="true">⌕</span>
+              <span class="map-search-icon">${ic('search')}</span>
               <input id="placeSearch" type="search" placeholder="Zoek een stad, eiland of land…" autocomplete="off" spellcheck="false"
                 role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="placeResults">
               <ul id="placeResults" class="place-results" role="listbox" aria-label="Zoekresultaten" hidden></ul>
@@ -1124,12 +1145,12 @@
     const best = bestWindows(byName, cfg)[0];
     if (!byName.size) {
       return `<a class="when-strip" href="#datum">
-        <span class="when-icon" aria-hidden="true">📅</span>
+        <span class="when-icon">${ic('calendar')}</span>
         <span><strong>Wanneer kan iedereen?</strong><small>Vul de datumprikker in, dan zie je hier de beste week.</small></span>
         <span class="when-go" aria-hidden="true">→</span></a>`;
     }
     return `<a class="when-strip" href="#datum">
-      <span class="when-icon" aria-hidden="true">📅</span>
+      <span class="when-icon">${ic('calendar')}</span>
       <span>${best ? `<strong>Beste periode: ${shortRange(best.start, best.end)}</strong>
         <small>${best.full.length} van ${byName.size} kunnen alle ${cfg.days} dagen</small>`
         : '<strong>Nog geen periode waarin iedereen kan</strong><small>Bekijk de datumprikker</small>'}</span>
@@ -1156,10 +1177,10 @@
           <span class="dest-text">
             <strong>${esc(loc.title)}</strong>
             <span class="dest-steps">
-              ${stepChip('📅', t && t.start_date && !conflict, 'Datum', conflict ? `<span class="warn">${dateText}</span>` : dateText)}
-              ${stepChip('✈️', p.per.flight.length, 'Vlucht', p.per.flight.length ? '✓' : '–')}
-              ${stepChip('🏨', p.per.stay.length, 'Overnachting', p.per.stay.length ? '✓' : '–')}
-              ${p.per.do.length + p.per.eat.length ? stepChip('🎉', true, 'Activiteiten en eten', p.per.do.length + p.per.eat.length) : ''}
+              ${stepChip(ic('calendar'), t && t.start_date && !conflict, 'Datum', conflict ? `<span class="warn">${dateText}</span>` : dateText)}
+              ${stepChip(ic('plane'), p.per.flight.length, 'Vlucht', p.per.flight.length ? '✓' : '–')}
+              ${stepChip(ic('bed'), p.per.stay.length, 'Overnachting', p.per.stay.length ? '✓' : '–')}
+              ${p.per.do.length + p.per.eat.length ? stepChip(ic('sparkles'), true, 'Activiteiten en eten', p.per.do.length + p.per.eat.length) : ''}
             </span>
           </span>
           <span class="dest-go" aria-hidden="true">›</span>
@@ -1190,8 +1211,8 @@
           <li><strong>Plan de reis.</strong> Kies een datum uit de datumprikker, een vlucht en een hotel in de buurt.</li>
           <li><strong>Stem samen.</strong> Iedereen kan bestemmingen toevoegen en hartjes geven.</li>
         </ol>
-        <button type="button" class="btn primary block" data-action="focus-search">⌕ Zoek een bestemming</button>`}
-      ${locs.length >= 2 ? `<button type="button" class="btn block vote-cta" data-action="new-poll">🗳️ Laat de groep kiezen tussen ${locs.length} bestemmingen</button>` : ''}
+        <button type="button" class="btn primary block" data-action="focus-search">${ic('search')} Zoek een bestemming</button>`}
+      ${locs.length >= 2 ? `<button type="button" class="btn block vote-cta" data-action="new-poll">${ic('vote')} Laat de groep kiezen tussen ${locs.length} bestemmingen</button>` : ''}
       <div class="planner-foot">
         <button type="button" class="text-btn" data-action="add-place">＋ Bestemming toevoegen zonder kaart</button>
         ${locs.some(hasPos) ? '<button type="button" class="text-btn" data-action="map-fit">Toon alle pinnen</button>' : ''}
@@ -1200,7 +1221,7 @@
         <div class="label">Nog niet aan een bestemming gekoppeld</div>
         <ul class="linked">${loose.map(({ s: ls, it }) => `
           <li><button type="button" data-action="edit-item" data-id="${it.id}">
-            <span aria-hidden="true">${esc(ls.icon)}</span><span>${esc(it.title)}</span>
+            <span class="chosen-icon">${kindIcon(ls.kind, ls.icon)}</span><span>${esc(it.title)}</span>
             ${ls.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}
           </button></li>`).join('')}</ul>` : ''}`;
   }
@@ -1284,8 +1305,8 @@
       onAdd() {
         const box = L.DomUtil.create('div', 'leaflet-bar map-buttons');
         box.innerHTML = `
-          <a href="#" role="button" data-map="fit" title="Toon alle pinnen" aria-label="Toon alle pinnen">⤢</a>
-          <a href="#" role="button" data-map="layer" title="Toon satellietbeeld" aria-label="Satellietbeeld" aria-pressed="false">🛰️</a>`;
+          <a href="#" role="button" data-map="fit" title="Toon alle pinnen" aria-label="Toon alle pinnen">${ic('expand')}</a>
+          <a href="#" role="button" data-map="layer" title="Toon satellietbeeld" aria-label="Satellietbeeld" aria-pressed="false">${ic('layers')}</a>`;
         L.DomEvent.disableClickPropagation(box);
         L.DomEvent.on(box, 'click', (e) => {
           const a = e.target.closest('[data-map]');
@@ -1301,12 +1322,17 @@
     setBase(store.get('mapLayer') === 'sat');
 
     // Ver uitgezoomd: alleen nummers en namen, geen datums; heel ver: alleen nummers.
+    // Labels daarna opnieuw meten: een verborgen label (of een nog niet geladen lettertype)
+    // heeft een verkeerde breedte, en dan staat het label scheef over de pin.
     const zoomClass = () => {
+      if (!map) return;
       const z = map.getZoom();
       el.classList.toggle('zoom-far', z < 5);
       el.classList.toggle('zoom-world', z < 3.5);
+      for (const m of Object.values(markers)) { const t = m.getTooltip(); if (t) t.update(); }
     };
     map.on('zoomend', zoomClass);
+    if (document.fonts) document.fonts.ready.then(zoomClass);
 
     L.circleMarker(HOME, { radius: 6, color: '#fff', weight: 2, fillColor: '#f97316', fillOpacity: 1, interactive: false })
       .addTo(map).bindTooltip('🇳🇱 Thuis', { direction: 'top', offset: [0, -6] });
@@ -2013,7 +2039,7 @@
     return `<ul class="chosen">${list.map(({ s, it }) => `
       <li>
         <button type="button" class="chosen-main" data-action="edit-item" data-id="${it.id}">
-          <span aria-hidden="true">${esc(s.icon)}</span>
+          <span class="chosen-icon">${kindIcon(s.kind, s.icon)}</span>
           <span><strong>${esc(it.title)}</strong>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}</span>
           ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}
         </button>
@@ -2066,10 +2092,10 @@
         <label>Terug<input type="date" data-date="end" value="${esc(dated ? t.end_date : '')}"></label>
       </div>
       <div class="step-actions">
-        <a class="btn sm" href="#datum" data-go-poll>📅 ${me && byName.has(me) ? 'Jouw beschikbaarheid aanpassen' : 'Vul in wanneer jij kunt'}</a>
+        <a class="btn sm" href="#datum" data-go-poll>${ic('calendar')} ${me && byName.has(me) ? 'Jouw beschikbaarheid aanpassen' : 'Vul in wanneer jij kunt'}</a>
         ${dated ? '<button type="button" class="btn sm ghost" data-clear-dates>Datum wissen</button>' : ''}
       </div>`;
-    return stepHtml('when', '📅', 'Wanneer', summary, dated && !conflicts.length, body);
+    return stepHtml('when', ic('calendar'), 'Wanneer', summary, dated && !conflicts.length, body);
   }
 
   function resultsHtml(items, addAttr, titles, renderMain) {
@@ -2134,7 +2160,7 @@
     const summary = n ? chosen.map(({ it }) => esc(it.title)).slice(0, 2).join(', ') + (n > 2 ? ` en ${n - 2} meer` : '')
       : kind === 'flight' || kind === 'stay' ? 'Nog niet gekozen' : 'Optioneel';
     const nearbyLabel = { flight: 'Vliegvelden in de buurt', stay: 'Hotels in de buurt', do: 'Te doen in de buurt', eat: 'Eten in de buurt' }[kind];
-    return stepHtml(kind, k.icon, k.title, summary, n > 0, `
+    return stepHtml(kind, kindIcon(kind), k.title, summary, n > 0, `
       ${chosenHtml(chosen)}
       <div class="step-actions">${own}${ownNew}</div>
       <p class="mini-label">${nearbyLabel}</p>
@@ -2522,7 +2548,7 @@
         <h2>Stemmen</h2>
         <p class="section-intro">Laat de groep kiezen tussen bestemmingen. Deel de stemronde in de WhatsApp-groep; de link toont meteen een voorbeeld met de keuzes.</p>
       </div>
-      ${canMake ? `<button type="button" class="add-cta" data-action="new-poll"><span class="add-cta-plus" aria-hidden="true">🗳️</span><span>Nieuwe stemronde</span></button>`
+      ${canMake ? `<button type="button" class="add-cta" data-action="new-poll"><span class="add-cta-plus">${ic('vote')}</span><span>Nieuwe stemronde</span></button>`
         : `<p class="hint">Zet eerst minstens twee bestemmingen op de <a href="#kaart">kaart</a>, dan kun je de groep laten kiezen.</p>`}
       ${polls.length ? `<ul class="poll-list">${polls.map((p) => {
         const rows = tallyOf(p);
@@ -2541,11 +2567,11 @@
   function optionMetaHtml(loc) {
     const p = planOf(loc);
     const bits = [];
-    if (p.trip && p.trip.start_date) bits.push(`📅 ${shortRange(p.trip.start_date, p.trip.end_date)}`);
+    if (p.trip && p.trip.start_date) bits.push(`${ic('calendar')} ${shortRange(p.trip.start_date, p.trip.end_date)}`);
     const flight = p.per.flight.find(({ it }) => it.price);
     const stay = p.per.stay.find(({ it }) => it.price);
-    if (flight) bits.push(`✈️ ${esc(flight.it.price)}`);
-    if (stay) bits.push(`🏨 ${esc(stay.it.price)}`);
+    if (flight) bits.push(`${ic('plane')} ${esc(flight.it.price)}`);
+    if (stay) bits.push(`${ic('bed')} ${esc(stay.it.price)}`);
     return bits.length ? `<span class="option-meta">${bits.join(' · ')}</span>` : '';
   }
 
@@ -2635,7 +2661,7 @@
     const p = openPolls().find((x) => !me || !x.votes.some((v) => v.name.toLowerCase() === me));
     if (!p) return '';
     return `<a class="vote-strip" href="#stem-${esc(p.slug)}">
-      <span class="when-icon" aria-hidden="true">🗳️</span>
+      <span class="when-icon">${ic('vote')}</span>
       <span><strong>Stem mee: ${esc(p.title)}</strong><small>${esc(deadlineText(p))} · ${p.votes.length} ${p.votes.length === 1 ? 'stem' : 'stemmen'}</small></span>
       <span class="when-go" aria-hidden="true">→</span></a>`;
   }
@@ -2795,7 +2821,7 @@
     $('#tripPicks').innerHTML = sections.length ? sections.map((s) => {
       const items = sortedItems(s).sort((a, b) => chosen.includes(b.id) - chosen.includes(a.id));
       return `<fieldset class="pick-group">
-        <legend>${esc(s.kind === 'map' ? '📍' : s.icon)} ${esc(s.kind === 'map' ? 'Bestemming' : s.title)}</legend>
+        <legend>${kindIcon(s.kind, s.icon)} ${esc(s.kind === 'map' ? 'Bestemming' : s.title)}</legend>
         ${items.map((it) => {
           const loc = it.location_id && findItem(it.location_id);
           return `<label class="pick"><input type="checkbox" data-pick value="${it.id}"${chosen.includes(it.id) ? ' checked' : ''}>
