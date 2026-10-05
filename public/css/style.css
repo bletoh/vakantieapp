@@ -1012,3 +1012,21 @@ button.chip:hover { background: var(--navy-soft); }
   /* vliegveld/hotel kiezen: grotere knop voor de duim */
   .result .btn.sm { min-height: 40px; padding: 6px 12px; }
 }
+
+/* ---------- mobiel: bestemmingen als veegbare kaartjes in het ingeklapte paneel ---------- */
+
+@media (max-width: 600px) {
+  :root { --peek: 186px; }
+  .dest-sheet:not(.open) .dest-list {
+    position: relative; display: flex; gap: 10px;
+    margin: 0 -16px; padding: 2px 16px 8px;
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+    scroll-snap-type: x mandatory; scroll-padding: 0 16px;
+  }
+  .dest-sheet .planner { grid-auto-rows: max-content; }
+  .dest-sheet:not(.open) .dest-list::-webkit-scrollbar { display: none; }
+  .dest-sheet:not(.open) .dest { flex: 0 0 calc(100% - 40px); scroll-snap-align: start; }
+  .dest-sheet:not(.open) .dest:only-child { flex-basis: 100%; }
+  .dest.current { border-color: var(--ink); }
+  .dest.current.best { border-color: var(--red); }
+}
