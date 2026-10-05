@@ -2461,12 +2461,10 @@
     luxe: { label: 'Luxe', what: 'villa of goed hotel', factor: 1.9 },
   };
   // Regio per land, voor de keuze 'Waar'.
-  const REGIONS = [['all', 'Overal'], ['eu', 'Europa'], ['azie', 'Azië & Oceanië'], ['carib', 'Caraïben'], ['amerika', 'Amerika'], ['afrika', 'Afrika & Midden-Oosten']];
+  const REGIONS = [['all', 'Overal'], ['eu', 'Europa'], ['azie', 'Azië & Oceanië'], ['amerika', 'Amerika'], ['afrika', 'Afrika & Midden-Oosten']];
   const REGION_OF = {
     Thailand: 'azie', Vietnam: 'azie', Indonesië: 'azie', Singapore: 'azie', China: 'azie', 'Zuid-Korea': 'azie', Japan: 'azie',
     Maleisië: 'azie', Filipijnen: 'azie', 'Sri Lanka': 'azie', Malediven: 'azie', India: 'azie', Australië: 'azie',
-    Curaçao: 'carib', Aruba: 'carib', Bonaire: 'carib', 'Sint Maarten': 'carib', 'Dominicaanse Republiek': 'carib', Jamaica: 'carib',
-    Cuba: 'carib', Barbados: 'carib', "Bahama's": 'carib',
     'Verenigde Staten': 'amerika', Mexico: 'amerika', Brazilië: 'amerika', Argentinië: 'amerika', 'Costa Rica': 'amerika',
     Colombia: 'amerika', Peru: 'amerika', Canada: 'amerika',
     Marokko: 'afrika', Egypte: 'afrika', Kaapverdië: 'afrika', Tanzania: 'afrika', 'Zuid-Afrika': 'afrika', Mauritius: 'afrika',
