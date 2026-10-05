@@ -143,11 +143,112 @@ setLooseKind.run('eat', 'Eten & drinken');
 // De kaart is de centrale plek van de app; de oude naam "Locatie" wordt "Kaart".
 db.prepare("UPDATE sections SET title = 'Kaart', icon = '🗺️' WHERE kind = 'map' AND title = 'Locatie'").run();
 
-// Eerste keer opstarten: alleen lege tabs aanmaken, alle tekst vul je zelf in.
-function seed() {
-  const hasSections = db.prepare('SELECT COUNT(*) AS n FROM sections').get().n > 0;
-  if (hasSections) return;
+/* ---------- groepen en accounts ---------- */
 
+// Elke groep is een eigen omgeving met eigen tabs, pinnen, reizen, stemrondes, datumprikker en chat.
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  pass_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  invite_code TEXT NOT NULL UNIQUE,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Lid van een groep, met eigen voorkeuren (categorieën uit de ideeën) voor die groep.
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member',
+  likes TEXT NOT NULL DEFAULT '[]',
+  dislikes TEXT NOT NULL DEFAULT '[]',
+  note TEXT NOT NULL DEFAULT '',
+  last_read INTEGER NOT NULL DEFAULT 0,
+  joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (team_id, user_id)
+);
+
+-- Duim omhoog of omlaag per bestemming uit de ideeën (op naam, want die lijst is voor iedereen hetzelfde).
+CREATE TABLE IF NOT EXISTS dest_reactions (
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  dest TEXT NOT NULL,
+  value INTEGER NOT NULL,
+  PRIMARY KEY (team_id, user_id, dest)
+);
+
+-- Chat. ref_type/ref_id wijzen naar een gedeelde reis, pin of stemronde; kind 'event' is een automatische melding.
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL DEFAULT 'text',
+  body TEXT NOT NULL DEFAULT '',
+  ref_type TEXT,
+  ref_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS messages_team ON messages (team_id, id);
+
+CREATE TABLE IF NOT EXISTS team_settings (
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  value TEXT,
+  PRIMARY KEY (team_id, key)
+);
+`);
+
+const inviteCode = () => crypto.randomBytes(12).toString('base64url').replace(/[-_]/g, 'x').slice(0, 12);
+
+for (const table of ['sections', 'trips', 'polls']) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes('team_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE`);
+  db.exec(`CREATE INDEX IF NOT EXISTS ${table}_team ON ${table} (team_id)`);
+}
+
+// Alles van vóór de groepen wordt de eerste groep. Wie als eerste via de uitnodigingslink binnenkomt, wordt beheerder.
+db.transaction(() => {
+  const hasTeams = db.prepare('SELECT COUNT(*) AS n FROM teams').get().n > 0;
+  const hasData = db.prepare('SELECT COUNT(*) AS n FROM sections').get().n > 0;
+  if (hasTeams || !hasData) return;
+  const title = (db.prepare("SELECT value FROM settings WHERE key = 'site_title'").get() || {}).value || 'Onze vakantie';
+  const id = db.prepare('INSERT INTO teams (name, invite_code) VALUES (?, ?)').run(title, inviteCode()).lastInsertRowid;
+  for (const table of ['sections', 'trips', 'polls']) db.prepare(`UPDATE ${table} SET team_id = ? WHERE team_id IS NULL`).run(id);
+  db.prepare('INSERT OR IGNORE INTO team_settings (team_id, key, value) SELECT ?, key, value FROM settings').run(id);
+})();
+
+// De datumprikker hoort ook bij een groep; de tabel krijgt daarvoor een nieuwe sleutel.
+const availCols = db.prepare('PRAGMA table_info(available_days)').all().map((c) => c.name);
+if (!availCols.includes('team_id')) {
+  const first = db.prepare('SELECT MIN(id) AS id FROM teams').get().id;
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE available_days_new (
+        team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        date TEXT NOT NULL,
+        PRIMARY KEY (team_id, name, date)
+      )`);
+    if (first) db.prepare('INSERT INTO available_days_new (team_id, name, date) SELECT ?, name, date FROM available_days').run(first);
+    db.exec('DROP TABLE available_days; ALTER TABLE available_days_new RENAME TO available_days;');
+  })();
+}
+
+// Een nieuwe groep begint met lege tabs; alle tekst vul je zelf in.
+function seedTeam(teamId) {
   const tabs = [
     ['Kaart', '🗺️'],
     ['Vlucht', '✈️'],
@@ -157,21 +258,35 @@ function seed() {
     ['Budget', '💶'],
   ];
   const insert = db.prepare(`
-    INSERT INTO sections (title, icon, intro, position, show_price, kind) VALUES (?, ?, '', ?, ?, ?)
+    INSERT INTO sections (team_id, title, icon, intro, position, show_price, kind) VALUES (?, ?, ?, '', ?, ?, ?)
   `);
-  db.transaction(() => tabs.forEach(([title, icon], i) => (
-    insert.run(title, icon, i, PRICED_TABS.includes(title) ? 1 : 0, TAB_KINDS[title] || '')
-  )))();
+  tabs.forEach(([title, icon], i) => insert.run(teamId, title, icon, i, PRICED_TABS.includes(title) ? 1 : 0, TAB_KINDS[title] || ''));
 }
 
-seed();
+function createTeam(name, userId) {
+  return db.transaction(() => {
+    const id = db.prepare('INSERT INTO teams (name, invite_code, created_by) VALUES (?, ?, ?)').run(name, inviteCode(), userId).lastInsertRowid;
+    db.prepare("INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'admin')").run(id, userId);
+    db.prepare("INSERT INTO team_settings (team_id, key, value) VALUES (?, 'site_title', ?)").run(id, name);
+    seedTeam(id);
+    return id;
+  })();
+}
+
+// Automatische melding in de chat, bijv. "Sam stelt een reis voor".
+function postEvent(teamId, userId, body, refType = null, refId = null) {
+  db.prepare("INSERT INTO messages (team_id, user_id, kind, body, ref_type, ref_id) VALUES (?, ?, 'event', ?, ?, ?)")
+    .run(teamId, userId, body, refType, refId);
+}
 
 // Stemrondes met opties, stemmen en of ze (ook door de sluitdatum) gesloten zijn.
-function getPolls() {
+function getPolls(teamId) {
   const today = new Date().toISOString().slice(0, 10);
-  const polls = db.prepare('SELECT * FROM polls ORDER BY id DESC').all();
-  const options = db.prepare('SELECT poll_id, item_id FROM poll_options').all();
-  const votes = db.prepare('SELECT poll_id, name, item_id, voted_at FROM poll_votes ORDER BY voted_at').all();
+  const polls = teamId == null ? db.prepare('SELECT * FROM polls ORDER BY id DESC').all()
+    : db.prepare('SELECT * FROM polls WHERE team_id = ? ORDER BY id DESC').all(teamId);
+  const ids = new Set(polls.map((p) => p.id));
+  const options = db.prepare('SELECT poll_id, item_id FROM poll_options').all().filter((o) => ids.has(o.poll_id));
+  const votes = db.prepare('SELECT poll_id, name, item_id, voted_at FROM poll_votes ORDER BY voted_at').all().filter((v) => ids.has(v.poll_id));
   for (const p of polls) {
     p.item_ids = options.filter((o) => o.poll_id === p.id).map((o) => o.item_id);
     p.votes = votes.filter((v) => v.poll_id === p.id).map(({ name, item_id, voted_at }) => ({ name, item_id, voted_at }));
@@ -181,8 +296,14 @@ function getPolls() {
   return polls;
 }
 
+const teamSetting = (teamId, key) => (db.prepare('SELECT value FROM team_settings WHERE team_id = ? AND key = ?').get(teamId, key) || {}).value || '';
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;
 module.exports.getPolls = getPolls;
 module.exports.shareSlug = shareSlug;
+module.exports.inviteCode = inviteCode;
+module.exports.createTeam = createTeam;
+module.exports.postEvent = postEvent;
+module.exports.teamSetting = teamSetting;

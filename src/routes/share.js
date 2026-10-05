@@ -14,7 +14,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
 
-const setting = (key) => (db.prepare('SELECT value FROM settings WHERE key = ?').get(key) || {}).value || '';
+// Instellingen en naam horen bij de groep van de reis of stemronde.
+const teamName = (teamId) => (db.prepare('SELECT name FROM teams WHERE id = ?').get(teamId) || {}).name || '';
 const origin = (req) => `${req.protocol}://${req.get('host')}`;
 const fmtDate = (iso) => new Date(iso + 'T12:00:00Z').toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
 
@@ -54,7 +55,7 @@ function page(req, meta) {
   const html = fs.readFileSync(INDEX, 'utf8');
   const tags = `
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="${esc(setting('site_title') || 'Vakantie')}">
+  <meta property="og:site_name" content="${esc(meta.site || 'Vakantieplanner')}">
   <meta property="og:title" content="${esc(meta.title)}">
   <meta property="og:description" content="${esc(meta.description)}">
   <meta property="og:url" content="${esc(meta.url)}">
@@ -68,10 +69,9 @@ function page(req, meta) {
 
 // Startpagina met een algemeen voorbeeld.
 router.get('/', (req, res) => {
-  const title = setting('site_title') || 'Onze vakantie';
   res.type('html').send(page(req, {
-    title,
-    description: 'Plan samen onze vakantie op de kaart: bestemming, datum, vlucht en hotel.',
+    title: 'Vakantieplanner',
+    description: 'Plan samen jullie vakantie: bestemming, datum, vlucht en hotel, met chat en stemrondes in je eigen groep.',
     url: origin(req) + '/',
     image: sharp ? `${origin(req)}/og/site.jpg` : '',
   }));
@@ -85,8 +85,24 @@ router.get('/stem/:slug', (req, res, next) => {
   const v = `${poll.votes.length}${poll.is_closed ? 'c' : ''}`;
   res.type('html').send(page(req, {
     ...text,
+    site: teamName(poll.team_id),
     url: `${origin(req)}/stem/${poll.slug}`,
     image: sharp ? `${origin(req)}/og/stem/${poll.slug}.jpg?v=${v}` : '',
+  }));
+});
+
+// Uitnodigingslink voor een groep: de app opent en vraagt om in te loggen of een account te maken.
+router.get('/join/:code', (req, res) => {
+  const team = db.prepare('SELECT id, name FROM teams WHERE invite_code = ?').get(String(req.params.code));
+  // Verlopen link: toch de app openen, die meldt dat de link niet (meer) werkt.
+  if (!team) return res.status(404).type('html').send(page(req, { title: 'Vakantieplanner', description: 'Deze uitnodigingslink werkt niet (meer).', url: `${origin(req)}/` }));
+  const n = db.prepare('SELECT COUNT(*) AS n FROM team_members WHERE team_id = ?').get(team.id).n;
+  res.set('Cache-Control', 'no-cache').type('html').send(page(req, {
+    title: `Doe mee met ${team.name}`,
+    description: `Je bent uitgenodigd voor de groep ${team.name}${n ? ` (${n} ${n === 1 ? 'lid' : 'leden'})` : ''}. Plan samen de vakantie: kaart, chat en stemrondes.`,
+    site: 'Vakantieplanner',
+    url: `${origin(req)}/join/${req.params.code}`,
+    image: sharp ? `${origin(req)}/og/site.jpg` : '',
   }));
 });
 
@@ -172,13 +188,13 @@ router.get('/og/stem/:slug.jpg', async (req, res, next) => {
 router.get('/og/site.jpg', async (req, res, next) => {
   if (!sharp) return next();
   try {
-    const locs = db.prepare("SELECT i.title, i.image FROM items i JOIN sections s ON s.id = i.section_id WHERE s.kind = 'map' ORDER BY i.is_best DESC, i.likes DESC, i.id").all();
+    // Algemeen plaatje: groepen zijn privé, dus hier niets uit een groep.
     const img = await renderCard({
       kicker: 'Vakantie plannen',
-      title: setting('site_title') || 'Onze vakantie',
-      rows: locs.slice(0, 4).map((l) => ({ label: shortName(l.title), votes: null })),
+      title: 'Vakantieplanner',
+      rows: ['Eigen groep met chat', 'Pinnen op de kaart', 'Stemrondes en datumprikker'].map((label) => ({ label, votes: null })),
       footer: 'Kies samen bestemming, datum, vlucht en hotel',
-    }, setting('hero_image') || (locs.find((l) => l.image) || {}).image);
+    });
     res.type('jpeg').set('Cache-Control', 'public, max-age=600').send(img);
   } catch (err) { next(err); }
 });
@@ -245,8 +261,8 @@ function tripView(trip) {
   groups.sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
 
   // Wie er kan, alleen als de reis (deels) in de periode van de datumprikker valt.
-  const pollStart = setting('poll_start') || isoDay(new Date());
-  const pollEnd = setting('poll_end') || (() => {
+  const pollStart = db.teamSetting(trip.team_id, 'poll_start') || isoDay(new Date());
+  const pollEnd = db.teamSetting(trip.team_id, 'poll_end') || (() => {
     const d = new Date(pollStart + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + 83); // standaard 12 weken, net als in de app
     return isoDay(d);
@@ -255,7 +271,7 @@ function tripView(trip) {
   if (trip.start_date && !(trip.end_date < pollStart || trip.start_date > pollEnd)) {
     const days = rangeDays(trip.start_date, trip.end_date);
     const byName = new Map();
-    for (const { name, date } of db.prepare('SELECT name, date FROM available_days').all()) {
+    for (const { name, date } of db.prepare('SELECT name, date FROM available_days WHERE team_id = ?').all(trip.team_id)) {
       if (!byName.has(name)) byName.set(name, new Set());
       byName.get(name).add(date);
     }
@@ -331,7 +347,7 @@ function itemCard(x, v) {
 
 function tripPageHtml(req, v) {
   const { trip, loc, groups, who } = v;
-  const site = setting('site_title') || 'Onze vakantie';
+  const site = teamName(trip.team_id) || 'Vakantieplanner';
   const meta = tripMeta(v);
   const url = `${origin(req)}/reis/${trip.share_slug}`;
   const ver = `${groups.reduce((n, g) => n + g.items.length, 0)}${trip.start_date || ''}${trip.likes}`;

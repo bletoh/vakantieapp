@@ -53,7 +53,7 @@
         </div>
         <label>Link<input name="link" type="url" inputmode="url" placeholder="https://…"></label>
         <label id="locationField">Bestemming <small>(pin op de kaart)</small><select name="location_id"></select></label>
-        <label>Je naam <small>(optioneel)</small><input name="added_by" maxlength="40" autocomplete="given-name"></label>
+        <input type="hidden" name="added_by">
         <label class="check"><input type="checkbox" name="is_best"> Dit is de beste keuze</label>
       </div>
       <div class="sheet-foot">
@@ -172,7 +172,7 @@
         <p id="tripDateWarn" class="date-warn" hidden></p>
         <div class="trip-picks-form" id="tripPicks"></div>
         <label>Toelichting <small>(optioneel)</small><textarea name="note" rows="3"></textarea></label>
-        <label>Je naam <small>(optioneel)</small><input name="added_by" maxlength="40" autocomplete="given-name"></label>
+        <input type="hidden" name="added_by">
       </div>
       <div class="sheet-foot">
         <button type="button" class="btn ghost danger" id="tripDelete">Verwijderen</button>
@@ -254,6 +254,24 @@
       <button type="button" class="btn block" id="imageUrlSave">Link gebruiken</button>
       <button type="button" class="btn ghost danger block" id="imageRemove">Afbeelding verwijderen</button>
     </div>
+  </dialog>
+
+  <!-- Meer (telefoon): groep, groep wisselen en overige onderdelen -->
+  <dialog class="sheet small" id="moreDialog" aria-labelledby="moreTitle">
+    <div class="sheet-head">
+      <h2 id="moreTitle">Meer</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="sheet-body" id="moreBody"></div>
+  </dialog>
+
+  <!-- Delen in de chat: reis, pin of stemronde -->
+  <dialog class="sheet small" id="shareDialog" aria-labelledby="shareTitle">
+    <div class="sheet-head">
+      <h2 id="shareTitle">Delen in de chat</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="sheet-body" id="shareBody"></div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
