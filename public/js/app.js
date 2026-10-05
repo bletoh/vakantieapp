@@ -2590,7 +2590,7 @@
           </span>
         </label>
         <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
-        <label>Budget p.p.<span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
+        <label>Budget p.p. <small>(incl. verblijf)</small><span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
       </div>
       <p class="mini-label idea-cats-label">Waar hebben jullie zin in?</p>
       <div class="idea-cats" role="group" aria-label="Waar hebben jullie zin in?">
@@ -2625,25 +2625,26 @@
         <div class="pkg-body">
           <div class="pkg-head">
             <h3>${esc(d.n)}${d.c !== d.n ? ` <small>${esc(d.c)}</small>` : ''}</h3>
-            ${x.pin ? '<span class="pkg-on">Staat al op de kaart</span>' : ''}
+            <span class="pkg-pp"><strong>± ${euro(cost.totalPP)} p.p.</strong><small>incl. vlucht en verblijf</small></span>
           </div>
+          ${x.pin ? '<span class="pkg-on">Staat al op de kaart</span>' : ''}
           <div class="pkg-why">
             ${x.matched.map((c) => `<span class="chip">${esc(CAT_LABEL[c])}</span>`).join('')}
             ${m !== null ? `<span class="chip weather">± ${d.temp[m]}° in ${MONTHS[m]}</span>` : ''}
           </div>
           <div class="pkg-block">
             <div class="pkg-line">${ic('plane')}<span><strong>Vlucht</strong> <span class="pkg-flight">vanaf Schiphol · ± ${flightTime(x.km)}</span></span></div>
-            <div class="pkg-price"><span>± ${euro(cost.flightPP)} p.p. retour</span><span>${euro(cost.flightPP * n)} voor ${n}</span></div>
+            <div class="pkg-price"><span>retour, ${n} ${n === 1 ? 'persoon' : 'personen'}</span><span>± ${euro(cost.flightPP * n)}</span></div>
             <p class="pkg-links pkg-flight-links"></p>
           </div>
           <div class="pkg-block">
-            <div class="pkg-line">${ic('bed')}<span><strong>Verblijf</strong> · ${LEVELS[cost.level].label.toLowerCase()} (${LEVELS[cost.level].what}), ${cost.nights} ${cost.nights === 1 ? 'nacht' : 'nachten'}</span></div>
-            <div class="pkg-price"><span>± ${euro(cost.nightPP)} p.p. per nacht</span><span>${euro(cost.stayGroup)} voor ${n}</span></div>
+            <div class="pkg-line">${ic('bed')}<span><strong>Verblijf</strong> · ${LEVELS[cost.level].label.toLowerCase()} (${LEVELS[cost.level].what})</span></div>
+            <div class="pkg-price"><span>${cost.nights} ${cost.nights === 1 ? 'nacht' : 'nachten'}, ${n} ${n === 1 ? 'persoon' : 'personen'}</span><span>± ${euro(cost.stayGroup)}</span></div>
             <p class="pkg-links"><a href="${bookingGroupUrl(d, trip, n)}" target="_blank" rel="noopener">Verblijf zoeken voor ${n} ${n === 1 ? 'persoon' : 'personen'} ↗</a></p>
           </div>
           <div class="pkg-foot">
-            <div class="pkg-total"><strong>± ${euro(cost.totalPP)} p.p.</strong>
-              <small>± ${euro(cost.totalGroup)} voor de groep van ${n} · ${p.days} dagen${cost.over ? ' · <span class="warn">net boven budget</span>' : ''}</small></div>
+            <div class="pkg-total"><strong>± ${euro(cost.totalGroup)} voor de groep</strong>
+              <small>± ${euro(cost.totalPP)} p.p. incl. verblijf · ${p.days} dagen${cost.over ? ' · <span class="warn">net boven budget</span>' : ''}</small></div>
             ${x.pin ? `<a class="btn" href="#pin-${x.pin.id}">Bekijk op de kaart</a>`
               : `<button type="button" class="btn primary" data-idea-add="${i}">${ic('pin')} Zet op de kaart</button>`}
           </div>
@@ -2761,17 +2762,18 @@
       await api(`/sections/${s.id}/items`, 'POST', {
         title: `Amsterdam → ${a.name} (${a.iata})`,
         subtitle: `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen`,
-        body: `Indicatie: ± ${euro(c.flightPP)} retour per persoon (± ${euro(c.flightPP * c.persons)} voor ${c.persons}). Zoek de echte prijs op via de link.`,
-        price: `± ${euro(c.flightPP)} p.p.`,
+        body: `Indicatie per persoon: vlucht retour ± ${euro(c.flightPP)} + verblijf ± ${euro(c.stayPP)} (${LEVELS[c.level].label.toLowerCase()}, ${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}) = ± ${euro(c.totalPP)}.\n`
+          + `Voor de groep van ${c.persons}: ± ${euro(c.totalGroup)}. Zoek de echte prijs op via de link.`,
+        price: `± ${euro(c.totalPP)} p.p. incl. verblijf`,
         link: flightsUrl(a.iata, trip),
         location_id: loc.id,
         added_by: by,
       });
     }
     await reload();
-    const note = `Schatting verblijf (${LEVELS[c.level].label.toLowerCase()}, ${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}): `
-      + `± ${euro(c.stayGroup)} voor ${c.persons} ${c.persons === 1 ? 'persoon' : 'personen'} (± ${euro(c.stayPP)} p.p.). `
-      + `Totaal met vlucht ± ${euro(c.totalPP)} p.p.`;
+    const note = `Schatting: ± ${euro(c.totalPP)} p.p. incl. verblijf (vlucht ± ${euro(c.flightPP)} + verblijf ± ${euro(c.stayPP)}, `
+      + `${LEVELS[c.level].label.toLowerCase()}, ${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}). `
+      + `Voor de groep van ${c.persons}: ± ${euro(c.totalGroup)}.`;
     const existing = tripsFor(loc.id)[0];
     await syncTrip(findItem(loc.id), { ...(ideaDates(p) || {}), ...(!existing || !existing.note ? { note } : {}) });
     toast(`${x.d.n} staat op de kaart ✓`);
