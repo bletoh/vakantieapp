@@ -2645,7 +2645,6 @@
       ${all.length > ideaCtx.list.length ? `<button type="button" class="btn block idea-more" data-idea-more>Meer bestemmingen tonen (nog ${all.length - ideaCtx.list.length})</button>` : ''}
       ${ideaCtx.list.length ? `<p class="fineprint">Prijzen zijn een indicatie: vlucht retour per persoon, verblijf voor ${p.persons} ${p.persons === 1 ? 'persoon' : 'personen'} (met meer mensen deel je een appartement of villa). De echte prijs zie je via de links.</p>` : ''}`;
     ideaCtx.list.forEach((x, i) => fillPackage(x, i));
-    ideaCtx.list.forEach((x, i) => loadWikiImage(x.d, i));
   }
 
   function packageHtml(x, i, p, m) {
@@ -2654,7 +2653,7 @@
     const trip = ideaTrip();
     return `
       <article class="pkg" data-pkg="${i}">
-        <div class="pkg-img"><span class="pkg-score">${Math.round(x.score * 100)}% match</span></div>
+        <div class="pkg-img">${ideaImgHtml(d)}<span class="pkg-score">${Math.round(x.score * 100)}% match</span></div>
         <div class="pkg-body">
           <div class="pkg-head">
             <h3>${esc(d.n)}${d.c !== d.n ? ` <small>${esc(d.c)}</small>` : ''}</h3>
@@ -2686,47 +2685,13 @@
       </article>`;
   }
 
-  // Foto van de bestemming via Wikipedia (gratis, zonder sleutel).
-  const wikiImages = new Map();
-  async function loadWikiImage(d, i) {
-    const key = d.w || d.n;
-    if (!wikiImages.has(key)) {
-      wikiImages.set(key, (async () => {
-        // Vlaggen, wapens en kaartjes (bijna altijd svg) overslaan: we willen een foto.
-        const isPhoto = (src) => src && !/\.svg|flag|vlag|coat_of_arms|wapen|locator|location|map/i.test(src);
-        for (const [lang, title] of [['nl', d.w], ['en', d.n], ['en', `${d.n}, ${d.c}`]]) {
-          if (!title) continue;
-          try {
-            const r = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
-            if (!r.ok) continue;
-            const j = await r.json();
-            if (j.type === 'disambiguation') continue;
-            const src = (j.thumbnail && j.thumbnail.source) || (j.originalimage && j.originalimage.source);
-            if (isPhoto(src)) return src;
-          } catch { /* volgende proberen */ }
-        }
-        // Geen foto in de samenvatting: de eerste echte foto uit het artikel zelf.
-        for (const [lang, title] of [['en', d.n], ['nl', d.w]]) {
-          if (!title) continue;
-          try {
-            const r = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title.replace(/ /g, '_'))}`);
-            if (!r.ok) continue;
-            const items = (await r.json()).items || [];
-            const img = items.find((m) => m.type === 'image' && /\.jpe?g$/i.test(m.title || '') && isPhoto(m.title) && m.srcset && m.srcset.length);
-            if (img) return `https:${img.srcset[0].src}`.replace(/^https:https:/, 'https:');
-          } catch { /* volgende proberen */ }
-        }
-        return '';
-      })());
-    }
-    const src = await wikiImages.get(key);
-    const box = $(`.pkg[data-pkg="${i}"] .pkg-img`);
-    if (src && box && ideaCtx.list[i] && ideaCtx.list[i].d === d && !box.querySelector('img')) {
-      // Wikimedia levert alleen vaste breedtes (o.a. 500 en 960 pixels); andere maten geven een fout.
-      const at = (w) => (/\/\d+px-/.test(src) ? src.replace(/\/\d+px-/, `/${w}px-`) : src);
-      box.insertAdjacentHTML('afterbegin', `<img src="${esc(at(500))}" srcset="${esc(at(500))} 500w, ${esc(at(960))} 960w"
-        sizes="(max-width: 600px) 100vw, 380px" alt="" loading="lazy" onerror="this.remove()">`);
-    }
+  // Vaste, met de hand gecontroleerde foto per bestemming (Wikimedia Commons, in bestemmingen.json).
+  // Wikimedia levert alleen vaste breedtes (o.a. 500 en 960 pixels); andere maten geven een fout.
+  function ideaImgHtml(d) {
+    if (!d.img) return '';
+    const big = d.img.replace('/500px-', '/960px-');
+    return `<img src="${esc(d.img)}" srcset="${esc(d.img)} 500w, ${esc(big)} 960w"
+      sizes="(max-width: 600px) 100vw, 380px" alt="${esc(d.n)}" loading="lazy" onerror="this.remove()">`;
   }
 
   // Booking-zoekopdracht voor de hele groep (kamers voor twee, datums als die bekend zijn).
