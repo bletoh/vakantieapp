@@ -299,7 +299,7 @@ a.chip:hover { background: var(--navy-soft); }
 }
 .map-search input:focus { outline: 2px solid var(--navy); outline-offset: 0; border-color: transparent; }
 .map-search-icon {
-  position: absolute; left: 14px; top: 50%; transform: translateY(-52%);
+  position: absolute; left: 14px; top: 24px; transform: translateY(-52%);
   font-size: 1.3rem; color: var(--muted); pointer-events: none;
 }
 .place-results {
@@ -939,4 +939,76 @@ button.chip:hover { background: var(--navy-soft); }
   html { scroll-padding-top: 12px; }
   /* kaart iets hoger nu de titel weg is */
   .map { height: min(64dvh, 600px); }
+}
+
+/* ---------- grepen van uitschuifpanelen ---------- */
+
+.sheet-grip { display: none; }
+.dest-sheet { display: contents; }
+@media (min-width: 601px) and (max-width: 959px) { .dest-sheet { display: block; } }
+
+/* ---------- mobiel: kaart over het hele scherm, lijst en planpaneel schuiven eroverheen ---------- */
+
+@media (max-width: 600px) {
+  :root { --tabbar: calc(57px + var(--safe-b)); --peek: 178px; }
+
+  body.route-map { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+  .route-map .panel { flex: 1; min-height: 0; width: 100%; padding: 0 0 var(--tabbar); }
+  .mapview { position: relative; height: 100%; overflow: hidden; }
+  /* de kaart loopt door tot onder de ronde hoeken van het paneel */
+  .map-stage { position: absolute; inset: 0 0 calc(var(--peek) - 16px) 0; }
+  .map-stage .map { height: 100%; min-height: 0; border-bottom: none; }
+  .map .leaflet-bottom { bottom: 16px; }
+
+  .sheet-grip {
+    display: grid; place-items: center; flex: none; width: 100%; height: 26px; padding: 0;
+    border: none; background: none; touch-action: none; cursor: grab;
+  }
+  .sheet-grip span { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+  .sheet-grip:focus-visible { outline: 2px solid var(--navy); outline-offset: -4px; }
+
+  .dest-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 500;
+    display: flex; flex-direction: column; height: var(--peek);
+    background: var(--paper); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -6px 24px rgba(20, 16, 8, .18);
+    transition: height .25s ease;
+  }
+  .dest-sheet.open { height: 86%; }
+  .dest-sheet .planner { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 20px; gap: 12px; }
+  .dest-sheet:not(.open) .planner { overflow: hidden; }
+  /* op de telefoon eerst de bestemmingen, daarna datum en stemmen */
+  .dest-sheet .planner-head { order: -2; margin-top: 0; }
+  .dest-sheet .planner-head h2 { font-size: 1.25rem; cursor: pointer; }
+  .dest-sheet .dest-list, .dest-sheet .onboarding { order: -1; }
+  .dest-sheet .onboarding + .btn { order: -1; }
+
+  /* compactere rijen zodat er meer bestemmingen in beeld passen */
+  .dest-main { padding: 10px; gap: 10px; }
+  .dest-thumb { width: 46px; height: 46px; }
+  .dest-text strong { font-size: 1.05rem; }
+  .dest-side { padding: 10px 10px 6px 0; }
+
+  /* planpaneel: half over de kaart, omhoog vegen voor het hele scherm */
+  #pinDialog.bottom {
+    position: fixed; inset: auto 0 0 0; z-index: 1050; margin: 0;
+    width: 100vw; max-width: none; height: 56dvh; max-height: none;
+    border-radius: 16px 16px 0 0; border-width: 1px 0 0;
+    box-shadow: 0 -8px 30px rgba(20, 16, 8, .22);
+    transition: height .25s ease;
+  }
+  #pinDialog.bottom.full { height: calc(100dvh - 28px); }
+  #pinDialog.bottom .sheet-head { padding: 0 16px 10px; touch-action: none; }
+  .plan-kicker { display: none; }
+  .plan-head h2 { font-size: 1.15rem; }
+  .plan-num { width: 30px; height: 30px; font-size: .8125rem; }
+  #pinDialog .pin-body { padding-top: 12px; }
+  #pinDialog .sheet-foot { padding-top: 10px; padding-bottom: calc(10px + var(--safe-b)); }
+  .icon-btn { width: 40px; height: 40px; }
+  .icon-btn.sm { width: 40px; height: 40px; }
+
+  /* meldingen boven het planpaneel, niet eroverheen */
+  body.pin-bottom .toast { bottom: calc(56dvh + 12px); z-index: 1100; }
+  /* vliegveld/hotel kiezen: grotere knop voor de duim */
+  .result .btn.sm { min-height: 40px; padding: 6px 12px; }
 }

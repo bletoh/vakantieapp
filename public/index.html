@@ -66,6 +66,7 @@
 
   <!-- Planpaneel van een bestemming: datum, vlucht, hotel, activiteiten en eten -->
   <dialog class="sheet plan-sheet" id="pinDialog" aria-labelledby="pinTitle">
+    <button type="button" class="sheet-grip" id="pinGrip" aria-expanded="false" aria-label="Planpaneel groter maken"><span aria-hidden="true"></span></button>
     <div class="sheet-head">
       <div class="plan-head">
         <span class="plan-num" id="pinNum" aria-hidden="true"></span>
@@ -75,7 +76,7 @@
         </div>
       </div>
       <div class="sheet-head-actions">
-        <button type="button" class="text-btn" id="pinEdit">Foto en details</button>
+        <button type="button" class="text-btn" id="pinEdit" aria-label="Foto en details bewerken">Details</button>
         <button type="button" class="icon-btn" data-close aria-label="Planpaneel sluiten">✕</button>
       </div>
     </div>
