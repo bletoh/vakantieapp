@@ -270,7 +270,7 @@
   // Vluchten en overnachtingen beheer je via de pinnen op de kaart; die tabs tonen we niet.
   const listSections = () => {
     const map = mapSection();
-    return state.sections.filter((s) => s.kind !== 'map' && s.kind !== 'car' && !(map && (s.kind === 'flight' || s.kind === 'stay' || s.kind === 'do')));
+    return state.sections.filter((s) => s.kind !== 'map' && s.kind !== 'car' && !(map && (s.kind === 'flight' || s.kind === 'stay' || s.kind === 'do' || s.kind === 'eat')));
   };
   const listTabIcon = (s) => (KIND_ICONS[s.kind] ? kindIcon(s.kind) : s.icon ? `<span class="tab-emoji" aria-hidden="true">${esc(s.icon)}</span>` : '');
   const badge = (n) => (n ? ` <span class="tab-badge">${n > 99 ? '99+' : n}</span>` : '');
@@ -517,6 +517,7 @@
           <div class="trip-add">
             <span class="trip-add-label">Toevoegen aan deze reis</span>
             <button type="button" class="btn sm" data-trip-add="do" data-trip-id="${t.id}">${ic('sparkles')} Activiteit</button>
+            <button type="button" class="btn sm" data-trip-add="eat" data-trip-id="${t.id}">${ic('utensils')} Eten & drinken</button>
             <button type="button" class="btn sm" data-trip-add="car" data-trip-id="${t.id}">${ic('car')} Huurauto</button>
           </div>
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
@@ -2764,7 +2765,11 @@
 
   // Paneel "Toevoegen aan deze reis": huurauto of activiteiten, geopend vanaf een reiskaartje.
   const tripAddDialog = $('#tripAddDialog');
-  let tripAdd = null; // { tripId, mode: 'car' | 'do', places }
+  let tripAdd = null; // { tripId, mode: 'car' | 'do' | 'eat', places }
+  const TRIP_ADD = {
+    do: { title: 'Activiteiten', one: 'activiteit', none: 'Nog geen activiteiten in deze reis.', near: 'Te doen in de buurt', empty: 'Niets gevonden binnen 8 km.' },
+    eat: { title: 'Eten & drinken', one: 'restaurant of bar', none: 'Nog geen restaurants of bars in deze reis.', near: 'Eten en drinken in de buurt', empty: 'Geen restaurants gevonden binnen 2 km.' },
+  };
 
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-trip-add]');
@@ -2775,7 +2780,7 @@
     tripAdd = { tripId, mode, places: undefined };
     renderTripAdd();
     tripAddDialog.showModal();
-    if (mode === 'do') loadTripPlaces();
+    if (mode !== 'car') loadTripPlaces();
     // Het land (voor de leeftijdsregels) komt uit de bestemmingenlijst.
     if (mode === 'car' && !destinations) loadDestinations().then(refreshTripAdd, () => {});
   }
@@ -2784,10 +2789,10 @@
   function renderTripAdd() {
     const t = tripAddTrip();
     if (!t) { if (tripAddDialog.open) tripAddDialog.close(); return; }
-    $('#tripAddTitle').textContent = `${tripAdd.mode === 'car' ? 'Huurauto' : 'Activiteiten'} · ${t.title}`;
+    $('#tripAddTitle').textContent = `${tripAdd.mode === 'car' ? 'Huurauto' : TRIP_ADD[tripAdd.mode].title} · ${t.title}`;
     const body = $('#tripAddBody');
     const scroll = body.scrollTop;
-    body.innerHTML = tripAdd.mode === 'car' ? tripCarHtml(t) : tripDoHtml(t);
+    body.innerHTML = tripAdd.mode === 'car' ? tripCarHtml(t) : tripPlacesHtml(t, tripAdd.mode);
     body.scrollTop = scroll;
   }
 
@@ -2893,15 +2898,16 @@
     if (!loc || !hasPos(loc)) { tripAdd.places = null; renderTripAdd(); return; }
     const ctx = tripAdd;
     let places;
-    try { places = await findPlaces(loc, 'do'); } catch { places = 'error'; }
+    try { places = await findPlaces(loc, ctx.mode); } catch { places = 'error'; }
     if (ctx !== tripAdd) return;
     tripAdd.places = places;
     if (tripAddDialog.open) renderTripAdd();
   }
 
-  function tripDoHtml(t) {
+  function tripPlacesHtml(t, kind) {
+    const L = TRIP_ADD[kind];
     const loc = tripLocation(t);
-    const doItems = sectionsOfKind('do').flatMap((s) => sortedItems(s));
+    const doItems = sectionsOfKind(kind).flatMap((s) => sortedItems(s));
     const chosen = doItems.filter((it) => t.item_ids.includes(it.id));
     const earlier = doItems.filter((it) => !t.item_ids.includes(it.id) && (!it.location_id || (loc && it.location_id === loc.id) || !tripsWithItem(it.id).length));
     const titles = new Set(chosen.map((it) => it.title));
@@ -2910,12 +2916,13 @@
     if (places === null) nearby = '<p class="hint">Deze reis heeft geen plek op de kaart, dus er zijn geen suggesties in de buurt.</p>';
     else if (places === undefined) nearby = '<p class="hint loading-dots">Zoeken in de buurt (de eerste keer kan dit even duren)</p>';
     else if (places === 'error') nearby = '<p class="hint">OpenStreetMap is nu even te druk. <button type="button" class="text-btn" data-places-retry>Opnieuw proberen</button></p>';
-    else if (!places.length) nearby = '<p class="hint">Niets gevonden binnen 8 km.</p>';
+    else if (!places.length) nearby = `<p class="hint">${L.empty}</p>`;
     else nearby = resultsHtml(places, 'data-place-add', titles, (x) => `
       <strong>${esc(x.name)}</strong>
-      <small>${esc(x.type)} · ${kmText(x.km)}</small>
+      <small>${esc(x.type)}${x.cuisine ? ` · ${esc(x.cuisine)}` : ''} · ${kmText(x.km)}</small>
       <span class="result-links">
         ${x.website ? `<a href="${esc(x.website)}" target="_blank" rel="noopener">Website ↗</a>` : ''}
+        ${kind === 'eat' ? `<a href="${googleReviewsUrl(x.name, shortName(loc.title))}" target="_blank" rel="noopener">Google-reviews ↗</a>` : ''}
         <a href="${esc(x.osm)}" target="_blank" rel="noopener">Op OpenStreetMap ↗</a>
       </span>`);
     return `
@@ -2923,18 +2930,18 @@
         <ul class="chosen">${chosen.map((it) => `
           <li>
             <button type="button" class="chosen-main" data-do-edit="${it.id}">
-              <span class="chosen-icon">${kindIcon('do')}</span>
+              <span class="chosen-icon">${kindIcon(kind)}</span>
               <span><strong>${esc(it.title)}</strong>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}</span>
             </button>
             ${safeUrl(it.link) && !safeUrl(it.link).startsWith('/') ? `<a class="btn sm out-link" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener noreferrer">${esc(linkSite(it.link) || 'Website')} ↗</a>` : ''}
             <button type="button" class="icon-btn sm" data-trip-toggle="${it.id}" aria-label="${esc(it.title)} uit deze reis halen">✕</button>
-          </li>`).join('')}</ul>` : '<p class="hint">Nog geen activiteiten in deze reis.</p>'}
-      <button type="button" class="btn primary block" data-do-new>${ic('plus')} Zelf een activiteit invullen</button>
+          </li>`).join('')}</ul>` : `<p class="hint">${L.none}</p>`}
+      <button type="button" class="btn primary block" data-do-new>${ic('plus')} Zelf een ${L.one} invullen</button>
       ${earlier.length ? `<p class="mini-label">Eerdere suggesties</p>
         <ul class="results">${earlier.map((it) => `
           <li class="result"><div class="result-main"><strong>${esc(it.title)}</strong>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}${it.added_by ? `<small>door ${esc(it.added_by)}</small>` : ''}</div>
             <button type="button" class="btn sm" data-trip-toggle="${it.id}">＋ Kies</button></li>`).join('')}</ul>` : ''}
-      <p class="mini-label">Te doen in de buurt${loc ? ` van ${esc(shortName(loc.title))}` : ''}</p>
+      <p class="mini-label">${L.near}${loc ? ` van ${esc(shortName(loc.title))}` : ''}</p>
       ${nearby}
       ${Array.isArray(places) && places.length ? '<p class="fineprint">Gegevens: © OpenStreetMap-bijdragers.</p>' : ''}`;
   }
@@ -2950,7 +2957,7 @@
     const doEdit = el.closest('[data-do-edit]');
     if (doEdit) { openItemDialog(findItem(+doEdit.dataset.doEdit)); return; }
     if (el.closest('[data-do-new]')) {
-      const section = await ensureSection('do');
+      const section = await ensureSection(tripAdd.mode);
       const loc = tripLocation(t);
       openItemDialog(null, section.id, { location_id: loc ? loc.id : null, addToTrip: t.id });
       return;
@@ -2970,9 +2977,9 @@
         } else {
           const x = tripAdd.places[+place.dataset.placeAdd];
           const loc = tripLocation(t);
-          const section = await ensureSection('do');
+          const section = await ensureSection(tripAdd.mode);
           const { id } = await api(`/sections/${section.id}/items`, 'POST', {
-            title: x.name, subtitle: x.type, body: `${kmText(x.km)} van ${loc.title}.`, link: x.website || x.osm,
+            title: x.name, subtitle: [x.type, x.cuisine].filter(Boolean).join(' · '), body: `${kmText(x.km)} van ${loc.title}.`, link: x.website || x.osm,
             lat: x.pos[0], lng: x.pos[1], location_id: loc.id, added_by: myName(),
           });
           await setTripItem(t, id, true);
