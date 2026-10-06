@@ -18,6 +18,12 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
+    # Optionele instellingen (e-mail, vluchtprijzen) staan in .env naast dit bestand; zie README.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PUBLIC_URL: https://vakantieplanner.benjaminhashi.nl
     stop_grace_period: 10s
     logging:
       driver: json-file

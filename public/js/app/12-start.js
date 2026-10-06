@@ -9,6 +9,7 @@
     }
     await loadInvite();
     const me = await api('/auth/me');
+    session.mail = !!me.mail;
     if (!me.user) { showAuth(); return; }
     await signedIn(me);
     // Een gedeelde stemlink uit een andere groep van jou: daarheen gaan.

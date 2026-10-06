@@ -50,6 +50,7 @@ app.use(express.json({ limit: '15mb' }));
 app.use('/api', social.router);
 app.use('/api', auth.requireUser, social.team);
 app.use('/api', auth.requireUser, auth.requireTeam, apiRouter);
+app.get('/reset/:token', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'reset.html')));
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
 app.use(shareRouter);
 // Lettertype zelf aanbieden in plaats van via Google Fonts (dan gaat er geen IP-adres naar Google).
