@@ -152,3 +152,23 @@ test('rijtijden: ongeldige punten worden geweigerd', async () => {
   assert.equal((await a.req('POST', '/api/drive', { from: [999, 0], to: [[1, 1]] })).status, 400);
   assert.equal((await a.req('POST', '/api/drive', { from: [39.47, -0.38], to: [] })).status, 400);
 });
+
+test('roulette: twee bestemmingen, server kiest, uitslag in de chat', async () => {
+  const a = await newUser('Gokker');
+  a.team = (await a.req('POST', '/api/teams', { name: 'Gokclub' })).data.id;
+  const map = (await a.req('GET', '/api/content')).data.sections.find((s) => s.kind === 'map');
+  const x = (await a.req('POST', `/api/sections/${map.id}/items`, { title: 'Catania, Sicilië', lat: 37.5, lng: 15.08 })).data.id;
+  const y = (await a.req('POST', `/api/sections/${map.id}/items`, { title: 'Málaga, Spanje', lat: 36.72, lng: -4.42 })).data.id;
+  assert.equal((await a.req('POST', '/api/roulette', { item_ids: [x, x] })).status, 400);
+  assert.equal((await a.req('POST', '/api/roulette', { item_ids: [x, 999999] })).status, 400);
+  const seen = new Set();
+  for (let i = 0; i < 30 && seen.size < 2; i++) {
+    const r = await a.req('POST', '/api/roulette', { item_ids: [x, y] });
+    assert.equal(r.status, 200);
+    assert.ok([x, y].includes(r.data.winner_id));
+    seen.add(r.data.winner_id);
+  }
+  assert.equal(seen.size, 2, 'beide uitkomsten moeten kunnen');
+  const msgs = (await a.req('GET', '/api/messages')).data.messages;
+  assert.ok(msgs.some((m) => /liet de roulette kiezen tussen Catania en Málaga: (Catania|Málaga) wint/.test(m.body)));
+});

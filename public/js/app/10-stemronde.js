@@ -115,8 +115,112 @@
           ${lead ? `<span class="poll-lead">${p.is_closed ? '🏆' : '↑'} ${esc(shortName(lead.it.title))}</span>` : ''}
           <span class="dest-go" aria-hidden="true">›</span>
         </a></li>`;
-      }).join('')}</ul>` : ''}`;
+      }).join('')}</ul>` : ''}
+      ${canMake ? rouletteHtml() : ''}`;
   }
+
+  /* --- roulette: het lot laten kiezen tussen twee bestemmingen --- */
+
+  const rou = { a: null, b: null, angle: 0, spinning: false };
+
+  // Gelijkspel in een stemronde? Dan die twee alvast klaarzetten.
+  function rouletteTie() {
+    for (const p of state.polls) {
+      const rows = tallyOf(p);
+      if (rows.length >= 2 && rows[0].voters.length && rows[0].voters.length === rows[1].voters.length) return { poll: p, a: rows[0].it, b: rows[1].it };
+    }
+    return null;
+  }
+
+  function wheelSvg(names) {
+    const n = names.length;
+    const r = 100;
+    const seg = 360 / n;
+    const pt = (deg, rad) => { const a = (deg - 90) * Math.PI / 180; return [(110 + rad * Math.cos(a)).toFixed(2), (110 + rad * Math.sin(a)).toFixed(2)]; };
+    const slices = names.map((name, i) => {
+      const [x1, y1] = pt(i * seg, r);
+      const [x2, y2] = pt((i + 1) * seg, r);
+      const [tx, ty] = pt(i * seg + seg / 2, r * 0.55);
+      const label = name.length > 14 ? `${name.slice(0, 13)}…` : name;
+      return `<path class="wheel-seg s${i % 2}" d="M110 110 L${x1} ${y1} A${r} ${r} 0 ${seg > 180 ? 1 : 0} 1 ${x2} ${y2} Z"/>
+        <text class="wheel-label s${i % 2}" x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" transform="rotate(${i * seg + seg / 2 - 90} ${tx} ${ty})">${esc(label)}</text>`;
+    }).join('');
+    return `<svg class="wheel" viewBox="0 0 220 220" aria-hidden="true">
+      <g class="wheel-rot" style="transform: rotate(${rou.angle}deg)">${slices}<circle class="wheel-hub" cx="110" cy="110" r="14"/></g>
+    </svg>`;
+  }
+
+  function rouletteHtml() {
+    const locs = locations();
+    const tie = rouletteTie();
+    if (!rou.a || !findItem(rou.a)) rou.a = tie ? tie.a.id : locs[0].id;
+    if (!rou.b || !findItem(rou.b) || rou.b === rou.a) rou.b = tie ? tie.b.id : (locs.find((l) => l.id !== rou.a) || locs[1]).id;
+    const opts = (sel) => locs.map((l) => `<option value="${l.id}"${l.id === sel ? ' selected' : ''}>${esc(l.title)}</option>`).join('');
+    const names = [rou.a, rou.b].map((id) => shortName(findItem(id).title));
+    return `
+      <section class="roulette" aria-labelledby="rouTitle">
+        <div class="roulette-head">
+          <span class="roulette-ic" aria-hidden="true">🎰</span>
+          <div><h3 id="rouTitle">Roulette</h3>
+          <p>${tie ? `Gelijkspel in <strong>${esc(tie.poll.title)}</strong>? Laat het lot beslissen.` : 'Komen jullie er niet uit? Laat het lot beslissen tussen twee plekken.'}</p></div>
+        </div>
+        <div class="roulette-pick">
+          <label><span class="sr-only">Eerste plek</span><select id="rouA">${opts(rou.a)}</select></label>
+          <span class="roulette-of">of</span>
+          <label><span class="sr-only">Tweede plek</span><select id="rouB">${opts(rou.b)}</select></label>
+        </div>
+        <div class="wheel-wrap"><span class="wheel-pointer" aria-hidden="true"></span><div id="rouWheel">${wheelSvg(names)}</div></div>
+        <button type="button" class="btn primary block" data-roulette-spin>Draai!</button>
+        <p class="roulette-result" id="rouResult" role="status"></p>
+        <p class="fineprint">De server kiest de winnaar en zet de uitslag in de groepschat, zodat iedereen hem ziet.</p>
+      </section>`;
+  }
+
+  function redrawWheel() {
+    const el = $('#rouWheel');
+    if (el) el.innerHTML = wheelSvg([rou.a, rou.b].map((id) => shortName(findItem(id).title)));
+    const r = $('#rouResult');
+    if (r) r.innerHTML = '';
+  }
+
+  document.addEventListener('change', (e) => {
+    if (e.target.id !== 'rouA' && e.target.id !== 'rouB') return;
+    rou[e.target.id === 'rouA' ? 'a' : 'b'] = +e.target.value;
+    redrawWheel();
+  });
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-roulette-spin]');
+    if (!btn || rou.spinning) return;
+    if (rou.a === rou.b) { toast('Kies twee verschillende plekken', true); return; }
+    rou.spinning = true;
+    btn.disabled = true;
+    $('#rouResult').innerHTML = '';
+    let r;
+    try { r = await api('/roulette', 'POST', { item_ids: [rou.a, rou.b] }); } catch (err) {
+      toast(err.message, true); rou.spinning = false; btn.disabled = false; return;
+    }
+    // Draaien zodat het midden (± wat speling) van het winnende vak onder de pijl stopt.
+    const seg = 180;
+    const center = r.index * seg + seg / 2;
+    const jitter = (Math.random() - 0.5) * seg * 0.7;
+    const base = Math.ceil(rou.angle / 360) * 360;
+    rou.angle = base + 360 * 5 + (360 - center) + jitter;
+    const g = $('#rouWheel .wheel-rot');
+    const ms = reducedMotion() ? 0 : 4200;
+    if (g) {
+      g.style.transition = ms ? `transform ${ms}ms cubic-bezier(.12,.67,.12,1)` : 'none';
+      requestAnimationFrame(() => { g.style.transform = `rotate(${rou.angle}deg)`; });
+    }
+    await new Promise((res) => setTimeout(res, ms + 150));
+    rou.spinning = false;
+    btn.disabled = false;
+    btn.textContent = 'Nog een keer draaien';
+    const win = findItem(r.winner_id);
+    if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
+    const res = $('#rouResult');
+    if (res && win) res.innerHTML = `<span class="roulette-win">🎉 <strong>${esc(shortName(win.title))}</strong> wint!</span> <a class="btn sm" href="#pin-${win.id}">Verder plannen →</a>`;
+  });
 
   function optionMetaHtml(loc) {
     const p = planOf(loc);
