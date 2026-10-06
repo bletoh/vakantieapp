@@ -8,6 +8,7 @@ const apiRouter = require('./routes/api');
 const social = require('./routes/social');
 const auth = require('./auth');
 const shareRouter = require('./routes/share');
+const { appRoute } = require('./bundle');
 
 const app = express();
 // Achter Caddy (één stap, op het eigen Docker-netwerk): alleen dát adres mag het echte IP doorgeven.
@@ -55,6 +56,7 @@ app.use(shareRouter);
 app.use('/vendor/inter', express.static(path.dirname(require.resolve('@fontsource-variable/inter/package.json')), { maxAge: '30d' }));
 app.use('/vendor/leaflet', express.static(path.dirname(require.resolve('leaflet')), { maxAge: '7d' }));
 app.use('/uploads', express.static(db.UPLOAD_DIR, { maxAge: '30d', immutable: true }));
+app.get('/js/app.js', appRoute());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use((err, req, res, next) => {
