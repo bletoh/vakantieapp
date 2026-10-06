@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy · Vakantieplanner</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/vendor/inter/index.css">
+  <style>
+    :root { --bg: #fff; --ink: #222; --muted: #6a6a6a; --line: #e2e2e2; --brand: #e0245e; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #121212; --ink: #f2f2f2; --muted: #a3a3a3; --line: #333; --brand: #ff5c8a; color-scheme: dark; } }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    main { max-width: 680px; margin: 0 auto; padding: 32px 16px 56px; }
+    h1 { font-size: 1.75rem; letter-spacing: -.02em; margin: 0 0 4px; }
+    h2 { font-size: 1.125rem; margin: 28px 0 6px; }
+    p, li { color: var(--ink); }
+    .muted { color: var(--muted); }
+    ul { padding-left: 20px; }
+    a { color: var(--brand); }
+    .back { display: inline-block; margin-bottom: 20px; font-weight: 600; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">← Terug naar de app</a>
+    <h1>Privacy</h1>
+    <p class="muted">Wat de Vakantieplanner over je bewaart, waarom, en hoe je het weer weghaalt.</p>
+
+    <h2>Wie</h2>
+    <p>De Vakantieplanner is een privé-app voor vriendengroepen die samen een reis plannen. Hij draait op een eigen server en is niet bedoeld voor commercieel gebruik. Er is geen reclame en er worden geen gegevens verkocht of gedeeld met adverteerders.</p>
+
+    <h2>Wat we bewaren</h2>
+    <ul>
+      <li><strong>Je account:</strong> de naam die je kiest en je wachtwoord, versleuteld opgeslagen (scrypt). Je wachtwoord zelf kan niemand inzien, ook de beheerder niet.</li>
+      <li><strong>Een inlogcookie</strong> (<code>vp_sid</code>) zodat je ingelogd blijft. Dat is de enige cookie; er zijn geen tracking- of advertentiecookies.</li>
+      <li><strong>Wat je in een groep zet:</strong> pinnen, reizen, verblijven, huurauto's, activiteiten, stemmen, chatberichten, je beschikbare dagen en je voorkeuren. Dat zien alleen de leden van die groep.</li>
+      <li><strong>Deellinks:</strong> een reis of stemronde die je deelt, kan iedereen met de link bekijken (alleen lezen).</li>
+      <li><strong>Foto's</strong> die je uploadt of die bij een geplakte link horen.</li>
+      <li><strong>Mislukte inlogpogingen</strong> worden per naam en IP-adres een kwartier onthouden, om het raden van wachtwoorden tegen te gaan. Bij een fout op de server wordt het verzoek (zonder wachtwoord) gelogd.</li>
+    </ul>
+
+    <h2>Diensten van anderen</h2>
+    <ul>
+      <li><strong>Kaart:</strong> de kaarttegels komen van OpenStreetMap, de satellietlaag van Esri (ArcGIS); je browser vraagt ze daar rechtstreeks op.</li>
+      <li><strong>Plekken in de buurt en zoeken:</strong> onze server vraagt die op bij OpenStreetMap (Overpass en Photon). Daarbij gaat alleen de plek mee, niet wie je bent.</li>
+      <li><strong>Geplakte links</strong> (bijv. Airbnb) haalt onze server op om de naam en foto in te vullen.</li>
+      <li><strong>Foto's van bestemmingen</strong> komen van Wikimedia Commons.</li>
+      <li>Links naar Google Flights, Skyscanner, Booking, Kayak en dergelijke openen pas als je erop tikt.</li>
+    </ul>
+
+    <h2>Hoe lang</h2>
+    <p>Zolang je account bestaat. Elke nacht wordt er een back-up gemaakt; die worden na 30 dagen gewist (één per maand blijft een half jaar bewaard).</p>
+
+    <h2>Weghalen</h2>
+    <ul>
+      <li><strong>Account verwijderen:</strong> in de app onder <em>Groep → Account → Account verwijderen</em>. Je naam, wachtwoord, sessies, lidmaatschappen en voorkeuren worden dan gewist. Je chatberichten blijven staan zonder naam, en wat je aan een groep hebt toegevoegd (zoals een pin of reis) blijft van de groep; haal dat eerst weg als je dat niet wilt.</li>
+      <li><strong>Een groep verlaten</strong> kan op dezelfde plek.</li>
+      <li>Vragen of een verzoek om inzage? Vraag het de beheerder van je groep.</li>
+    </ul>
+  </main>
+</body>
+</html>

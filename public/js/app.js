@@ -4217,11 +4217,12 @@
         <label>Je naam<input name="name" maxlength="30" required autocomplete="username" autocapitalize="words" enterkeyhint="next"
           placeholder="${reg ? 'Hoe noemen je vrienden je?' : ''}"></label>
         <label>Wachtwoord<input name="password" type="password" minlength="6" required
-          autocomplete="${reg ? 'new-password' : 'current-password'}" enterkeyhint="go" placeholder="${reg ? 'Minstens 6 tekens' : ''}"></label>
+          autocomplete="${reg ? 'new-password' : 'current-password'}" enterkeyhint="go" placeholder="${reg ? 'Minstens 8 tekens' : ''}"></label>
         <p class="form-error" id="authError" hidden></p>
         <button type="submit" class="btn primary block">${reg ? 'Account maken' : 'Inloggen'}</button>
       </form>
-      <p class="hint">${reg ? 'Je naam staat bij je pinnen, reizen, stemmen en berichten.' : 'Wachtwoord vergeten? Vraag de beheerder van je groep om een tijdelijk wachtwoord.'}</p>`);
+      <p class="hint">${reg ? 'Je naam staat bij je pinnen, reizen, stemmen en berichten.' : 'Wachtwoord vergeten? Vraag de beheerder van je groep om een tijdelijk wachtwoord.'}</p>
+      <p class="fineprint"><a href="/privacy" target="_blank" rel="noopener">Privacy: wat we bewaren</a></p>`);
     const first = $('#authForm input[name="name"]');
     if (first && !isPhone()) first.focus();
   }
@@ -4325,6 +4326,18 @@
         await enterTeam(id);
         location.hash = '#chat';
         toast(`Welkom in ${state.team.name}!`);
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (e.target.closest('[data-account-delete]')) {
+      if (!confirm('Je account definitief verwijderen? Je naam, wachtwoord en voorkeuren worden gewist en je verlaat al je groepen. Je chatberichten blijven staan zonder naam.')) return;
+      const password = prompt('Typ je wachtwoord om het account te verwijderen');
+      if (password == null) return;
+      try {
+        await api('/auth/account', 'DELETE', { password });
+        store.remove('team');
+        toast('Je account is verwijderd');
+        showAuth('register');
       } catch (err) { toast(err.message, true); }
       return;
     }
@@ -4722,7 +4735,8 @@
         <button type="button" class="btn sm" data-password>Wachtwoord wijzigen</button>
         <button type="button" class="btn sm ghost" data-logout>Uitloggen</button>
         <button type="button" class="btn sm ghost danger" data-group-leave>Groep verlaten</button>
-      </div>`;
+      </div>
+      <p class="fineprint account-links"><a href="/privacy" target="_blank" rel="noopener">Privacy: wat we bewaren</a> · <button type="button" class="text-btn danger" data-account-delete>Account verwijderen</button></p>`;
   }
 
   let prefTimer = null;
@@ -4816,7 +4830,7 @@
     if (e.target.closest('[data-password]')) {
       const current = prompt('Je huidige wachtwoord');
       if (current == null) return;
-      const next = prompt('Nieuw wachtwoord (minstens 6 tekens)');
+      const next = prompt('Nieuw wachtwoord (minstens 8 tekens)');
       if (next == null) return;
       try { await api('/auth/password', 'PUT', { current, password: next }); toast('Wachtwoord gewijzigd ✓'); } catch (err) { toast(err.message, true); }
     }

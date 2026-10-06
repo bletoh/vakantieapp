@@ -58,6 +58,30 @@ Of met Docker: `docker compose up -d --build`.
 
 De data (SQLite-database en geüploade foto's) staat in `data/`, of in de map die je met de variabele `DATA_DIR` opgeeft.
 
+## Testen
+
+```bash
+npm test
+```
+
+Start de app met een lege tijdelijke database en test o.a. inloggen (en de rem op wachtwoorden raden), het afschermen van groepen, uploads, het ophalen van links (geen interne adressen), account verwijderen en de health-check. GitHub draait dezelfde tests bij elke push en pull request (`.github/workflows/test.yml`).
+
+## Productie
+
+- **Health-check:** `GET /healthz` (app en database). Docker gebruikt hem als `healthcheck`. `GET /healthz?backup=1` geeft 503 als de laatste back-up ouder is dan 30 uur; de NAS controleert dat elk kwartier.
+- **Back-ups:** `/usr/local/sbin/vakantieplanner-backup.sh` draait elke nacht om 02:30 (`/etc/cron.d/vakantieplanner-backup`). Hij maakt een consistente kopie van de database (SQLite online backup + `integrity_check`) en pakt die in met de uploads: 30 dagelijkse back-ups in `/srv/backups/vakantieplanner/daily`, één per maand een half jaar in `monthly/`, en de laatste 30 ook op de NAS (`backups/vakantieplanner`). Log: `/var/log/vakantieplanner-backup.log`.
+- **Terugzetten:**
+  ```bash
+  cd /srv/docker/vakantieplanner && sudo docker compose stop
+  V=/var/lib/docker/volumes/vakantieplanner_vakantie_data/_data
+  sudo rm -f $V/vakantieplanner.db-wal $V/vakantieplanner.db-shm
+  sudo tar -xzf /srv/backups/vakantieplanner/daily/vakantieplanner-JJJJMMDD-UUMM.tar.gz -C $V
+  sudo docker compose start
+  ```
+- **Beveiliging:** wachtwoorden met scrypt, sessiecookie `HttpOnly`/`SameSite=Lax`/`Secure`, max. 10 mislukte inlogpogingen per kwartier per naam en per IP (alleen Caddy mag het echte IP doorgeven), beveiligingsheaders (o.a. `X-Frame-Options`, `nosniff`, HSTS), uploads worden gecontroleerd op echte afbeeldingen, en het ophalen van links weigert interne adressen.
+- **Privacy:** `/privacy` legt uit wat er bewaard wordt. Leden kunnen hun account zelf verwijderen (Groep → Account). Het lettertype (Inter) en Leaflet komen van de eigen server, niet van Google.
+- **DNS:** de container gebruikt 1.1.1.1/9.9.9.9, omdat de DNS van de server (NetBird) 2,5 s per opzoeking kost.
+
 ## Voorbeeldreis Turkije
 
 `scripts/reis-turkije.js` zet een complete all-inclusive reis naar Side (Turkije) in de database: een locatie met pin op de kaart, een vlucht (Corendon AMS → AYT), een hotel (Side Crown Palace) en een reis die ze bundelt. Prijzen zijn opgezocht op 3 oktober 2026.

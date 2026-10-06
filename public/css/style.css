@@ -18,9 +18,9 @@
   --radius: 12px;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .06), 0 2px 8px rgba(0, 0, 0, .06);
   --shadow: 0 6px 20px rgba(0, 0, 0, .12);
-  --serif: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --mono: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --safe-b: env(safe-area-inset-bottom, 0px);
   color-scheme: light;
 }
@@ -1650,3 +1650,4 @@ body.gate .tabs { display: none; }
 .idea-filters + .idea-results, .idea-summary + .idea-filters[hidden] + .idea-results { margin-top: 16px; }
 .pkg-casino { margin: 0; font-size: .875rem; font-weight: 500; }
 .idea-search [data-idea-clear][hidden] { display: none; }
+.text-btn.danger { color: var(--red); }
