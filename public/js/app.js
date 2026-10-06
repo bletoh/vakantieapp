@@ -136,6 +136,7 @@
     utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
     pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
     expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
     layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
@@ -2618,7 +2619,7 @@
     Vietnam: [21, 0, 10], 'Sri Lanka': [21, 0, 10], India: [21, 0, 10], Japan: [18, 0, 0], 'Zuid-Korea': [21, 5, 10],
   };
   const CAR_RULE_DEFAULT = [21, 10, 25];
-  const NO_CAR_NEEDED = ['Malediven', 'Singapore', 'Seychellen', 'China'];
+  const NO_CAR_NEEDED = ['Malediven', 'Singapore', 'Seychellen', 'China', 'Macau', 'Monaco'];
 
   // "€ 1.250", "367,92" of "1,250.50" naar een getal.
   function parseEuro(v) {
@@ -3024,7 +3025,7 @@
     ['nachtleven', 'Feesten & clubs'], ['strand', 'Strand & beachclubs'], ['zon', 'Zon'], ['stad', 'Stedentrip'],
     ['goedkoop', 'Goedkoop bier & eten'], ['eten', 'Lekker eten'], ['avontuur', 'Actie & avontuur'], ['watersport', 'Watersport & surfen'],
     ['eiland', 'Eiland'], ['natuur', 'Natuur & hiken'], ['allin', 'All-inclusive'], ['wintersport', 'Wintersport & après-ski'],
-    ['cultuur', 'Beetje cultuur'], ['kort', 'Korte vlucht (< 3 uur)'], ['ver', 'Verre reis'],
+    ['cultuur', 'Beetje cultuur'], ['casino', "Casino's"], ['kort', 'Korte vlucht (< 3 uur)'], ['ver', 'Verre reis'],
   ];
   const CAT_LABEL = Object.fromEntries(IDEA_CATS);
   const LEVELS = {
@@ -3040,7 +3041,7 @@
     'Verenigde Staten': 'amerika', Mexico: 'amerika', Brazilië: 'amerika', Argentinië: 'amerika', 'Costa Rica': 'amerika',
     Colombia: 'amerika', Peru: 'amerika', Canada: 'amerika',
     Marokko: 'afrika', Egypte: 'afrika', Kaapverdië: 'afrika', Tanzania: 'afrika', 'Zuid-Afrika': 'afrika', Mauritius: 'afrika',
-    Seychellen: 'afrika', 'Verenigde Arabische Emiraten': 'afrika',
+    Seychellen: 'afrika', 'Verenigde Arabische Emiraten': 'afrika', Macau: 'azie',
   };
   const regionOf = (d) => REGION_OF[d.c] || 'eu';
   // Keuze voor het verblijf; 'auto' = zo goed als het budget toelaat.
@@ -3139,7 +3140,7 @@
   }
 
   const isRainy = (d, m) => m !== null && Array.isArray(d.r) && d.r.includes(m);
-  const tagsOf = (d) => (d.h <= 50 ? [...d.t, 'goedkoop'] : d.t);
+  const tagsOf = (d) => [...d.t, ...(d.h <= 50 ? ['goedkoop'] : []), ...(d.cas && !d.t.includes('casino') ? ['casino'] : [])];
 
   function rankIdeas(p) {
     const m = ideaMonth(p);
@@ -3163,12 +3164,15 @@
       const weather = weatherScore(d, m, wish);
       let score = weather === null ? match : 0.6 * match + 0.4 * weather;
       score += groupScoreDelta(d, hours);
+      // Casino's: de beste (Las Vegas, Macau, Monte-Carlo) bovenaan.
+      if (wish.includes('casino') && d.cas) score += (d.cas[0] - 2) * 0.12;
       if (cost.over) score -= 0.15;
-      return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), pin: nearbyPin(d) };
+      // score is het matchpercentage (max 100%); rank telt ook mee boven de 100% voor de volgorde.
+      return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), rank: score, pin: nearbyPin(d) };
     }).filter(Boolean);
     // Laagste prijs: gewoon van goedkoop naar duur, zonder spreiding over landen.
-    if (p.sort === 'price') return ranked.sort((a, b) => a.cost.totalPP - b.cost.totalPP || b.score - a.score);
-    ranked.sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP);
+    if (p.sort === 'price') return ranked.sort((a, b) => a.cost.totalPP - b.cost.totalPP || b.rank - a.rank);
+    ranked.sort((a, b) => b.rank - a.rank || a.cost.totalPP - b.cost.totalPP);
     // Spreiding: bovenaan hooguit twee per land, de rest schuift door naar achteren.
     const perCountry = new Map();
     const first = [];
@@ -3207,40 +3211,63 @@
         <button type="button" class="icon-btn sm" data-idea-clear aria-label="Zoekopdracht wissen"${p.q ? '' : ' hidden'}>✕</button>
         <datalist id="ideaPlaces"></datalist>
       </div>
-      <div class="idea-opts">
-        <label class="idea-when">Wanneer<select id="ideaMonth">${monthOptions(p)}</select></label>
-        <label>Personen
-          <span class="stepper">
-            <button type="button" data-persons="-1" aria-label="Eén persoon minder">−</button>
-            <input id="ideaPersons" type="number" min="1" max="30" inputmode="numeric" value="${p.persons}">
-            <button type="button" data-persons="1" aria-label="Eén persoon meer">+</button>
-          </span>
-        </label>
-        <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
-        <label><span>Budget p.p. <small>incl. verblijf</small></span><span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
+      <div class="idea-bar">
+        <button type="button" class="btn idea-filter-btn" data-idea-filters aria-expanded="${ideaFiltersOpen()}" aria-controls="ideaFilters">
+          ${ic('sliders')} Filters <span class="filter-count" id="ideaFilterCount"></span><span class="chev" aria-hidden="true">▾</span>
+        </button>
+        <label class="idea-sort"><span class="sr-only">Sorteren</span><select id="ideaSort">
+          ${SORTS.map(([k, label]) => `<option value="${k}"${p.sort === k ? ' selected' : ''}>${esc(k === 'price' ? 'Laagste prijs' : label)}</option>`).join('')}
+        </select></label>
       </div>
-      <p class="mini-label idea-cats-label">Verblijf</p>
-      <div class="idea-cats" role="radiogroup" aria-label="Verblijf">
-        ${STAY_OPTS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-stay="${k}" aria-checked="${p.stay === k}" aria-pressed="${p.stay === k}">${esc(label)}</button>`).join('')}
-      </div>
-      <p class="mini-label idea-cats-label">Sorteren</p>
-      <div class="idea-cats" role="radiogroup" aria-label="Sorteren">
-        ${SORTS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-sort="${k}" aria-checked="${p.sort === k}" aria-pressed="${p.sort === k}">${esc(label)}</button>`).join('')}
-      </div>
-      <p class="mini-label idea-cats-label">Waar naartoe?${p.q ? ' <small class="idea-q-note">(zoekopdracht gaat voor)</small>' : ''}</p>
-      <div class="idea-cats idea-regions" role="radiogroup" aria-label="Regio">
-        ${REGIONS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-region="${k}" aria-checked="${p.region === k}" aria-pressed="${p.region === k}">${esc(label)}</button>`).join('')}
-      </div>
-      <p class="mini-label idea-cats-label">Waar hebben jullie zin in?</p>
-      <div class="idea-cats" role="group" aria-label="Waar hebben jullie zin in?">
-        ${IDEA_CATS.map(([k, label]) => `<button type="button" class="cat" data-cat="${k}" aria-pressed="${p.cats.includes(k)}">${esc(label)}</button>`).join('')}
+      <p class="idea-summary" id="ideaSummary"></p>
+      <div class="idea-filters" id="ideaFilters"${ideaFiltersOpen() ? '' : ' hidden'}>
+        <div class="idea-opts">
+          <label class="idea-when">Wanneer<select id="ideaMonth">${monthOptions(p)}</select></label>
+          <label>Personen
+            <span class="stepper">
+              <button type="button" data-persons="-1" aria-label="Eén persoon minder">−</button>
+              <input id="ideaPersons" type="number" min="1" max="30" inputmode="numeric" value="${p.persons}">
+              <button type="button" data-persons="1" aria-label="Eén persoon meer">+</button>
+            </span>
+          </label>
+          <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
+          <label><span>Budget p.p. <small>incl. verblijf</small></span><span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
+        </div>
+        <p class="mini-label idea-cats-label">Verblijf</p>
+        <div class="idea-cats" role="radiogroup" aria-label="Verblijf">
+          ${STAY_OPTS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-stay="${k}" aria-checked="${p.stay === k}" aria-pressed="${p.stay === k}">${esc(label)}</button>`).join('')}
+        </div>
+        <p class="mini-label idea-cats-label">Waar naartoe?${p.q ? ' <small class="idea-q-note">(zoekopdracht gaat voor)</small>' : ''}</p>
+        <div class="idea-cats idea-regions" role="radiogroup" aria-label="Regio">
+          ${REGIONS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-region="${k}" aria-checked="${p.region === k}" aria-pressed="${p.region === k}">${esc(label)}</button>`).join('')}
+        </div>
+        <p class="mini-label idea-cats-label">Waar hebben jullie zin in?</p>
+        <div class="idea-cats" role="group" aria-label="Waar hebben jullie zin in?">
+          ${IDEA_CATS.map(([k, label]) => `<button type="button" class="cat" data-cat="${k}" aria-pressed="${p.cats.includes(k)}">${esc(label)}</button>`).join('')}
+        </div>
+        <button type="button" class="btn block idea-filters-done" data-idea-filters>Klaar</button>
       </div>
       <div id="ideaResults" class="idea-results" aria-live="polite"><p class="hint loading-dots">Bestemmingen laden</p></div>`;
+  }
+
+  // Filters zijn ingeklapt; eronder een korte samenvatting van wat er aan staat.
+  const ideaFiltersOpen = () => store.get('ideaFilters') === 'open';
+  function updateIdeaSummary(p) {
+    const sum = $('#ideaSummary');
+    if (!sum) return;
+    const month = p.month === 'any' ? 'elke maand' : p.month === 'poll' ? 'beste periode' : MONTHS[toDate(`${p.month}-01`).getUTCMonth()];
+    const bits = [`${p.persons} ${p.persons === 1 ? 'persoon' : 'personen'}`, `${p.days} dagen`, month,
+      STAY_OPTS.find(([k]) => k === p.stay)[1].toLowerCase(), p.budget ? `max ${euro(p.budget)} p.p.` : '',
+      p.region !== 'all' ? REGIONS.find(([k]) => k === p.region)[1] : '', ...p.cats.map((c) => CAT_LABEL[c])].filter(Boolean);
+    sum.textContent = bits.join(' · ');
+    const n = p.cats.length + (p.region !== 'all') + (p.budget > 0) + (p.stay !== 'mid') + (p.month !== 'poll');
+    $('#ideaFilterCount').textContent = n ? String(n) : '';
   }
 
   async function renderIdeaResults() {
     const box = $('#ideaResults');
     if (!box) return;
+    updateIdeaSummary(ideaPrefs());
     try { await loadDestinations(); } catch { box.innerHTML = '<p class="hint">De bestemmingen konden niet geladen worden.</p>'; return; }
     const p = ideaPrefs();
     const all = rankIdeas(p);
@@ -3288,6 +3315,7 @@
             ${m !== null ? `<span class="chip weather">± ${d.temp[m]}° in ${MONTHS[m]}</span>` : ''}
             ${isRainy(d, m) ? '<span class="chip rain">Regenseizoen</span>' : ''}
           </div>
+          ${p.cats.includes('casino') && d.cas ? `<p class="pkg-casino">🎰 ${'★'.repeat(d.cas[0])} ${esc(d.cas[1])}</p>` : ''}
           ${groupFeelHtml(x)}
           <div class="pkg-block">
             <div class="pkg-line">${ic('plane')}<span><strong>Vlucht</strong> <span class="pkg-flight">vanaf Schiphol · ± ${flightTime(x.km)}</span></span></div>
@@ -3415,6 +3443,15 @@
       renderIdeaResults();
       return;
     }
+    if (e.target.closest('[data-idea-filters]')) {
+      const panel = $('#ideaFilters');
+      const open = panel.hidden;
+      panel.hidden = !open;
+      store.set('ideaFilters', open ? 'open' : 'closed');
+      $('.idea-filter-btn').setAttribute('aria-expanded', String(open));
+      if (!open) $('.idea-filter-btn').scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      return;
+    }
     const choice = e.target.closest('[data-stay], [data-sort]');
     if (choice) {
       const key = choice.dataset.stay ? 'stay' : 'sort';
@@ -3470,6 +3507,9 @@
     }
   });
   document.addEventListener('change', (e) => {
+    if (e.target.id === 'ideaSort') {
+      const p = ideaPrefs(); p.sort = e.target.value; saveIdeaPrefs(p); ideaCtx.limit = PAGE; renderIdeaResults();
+    }
     if (e.target.id === 'ideaMonth') {
       const p = ideaPrefs(); p.month = e.target.value; saveIdeaPrefs(p); renderIdeaResults();
     }
