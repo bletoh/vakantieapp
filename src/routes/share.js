@@ -299,6 +299,17 @@ function bookingUrl(item, loc, trip) {
   const dates = trip.start_date ? `&checkin=${trip.start_date}&checkout=${trip.end_date > trip.start_date ? trip.end_date : trip.start_date}` : '';
   return `https://www.booking.com/searchresults.nl.html?ss=${encodeURIComponent(q)}${dates}`;
 }
+// "Bekijk op Airbnb" in plaats van een vaag "Website".
+function linkSite(u) {
+  let h;
+  try { h = new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; }
+  if (/(^|\.)airbnb\./.test(h) || h === 'abnb.me') return 'Airbnb';
+  if (/(^|\.)booking\.com$/.test(h)) return 'Booking';
+  if (/(^|\.)vrbo\.com$/.test(h)) return 'Vrbo';
+  if (/(^|\.)hostelworld\.com$/.test(h)) return 'Hostelworld';
+  if (/(^|\.)expedia\./.test(h)) return 'Expedia';
+  return '';
+}
 const safeLink = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
 const safeImg = (u) => (u && (u.startsWith('/uploads/') || /^https?:\/\//i.test(u)) ? u : '');
 
@@ -326,20 +337,23 @@ function itemCard(x, v) {
     const u = flightUrl(x, trip);
     if (u) links.push(`<a href="${esc(u)}" target="_blank" rel="noopener">Vluchten zoeken ↗</a>`);
   } else if (x.kind === 'stay') {
-    links.push(`<a href="${esc(bookingUrl(x, loc, trip))}" target="_blank" rel="noopener">Prijs op Booking ↗</a>`);
-    if (safeLink(x.link)) links.push(`<a href="${esc(x.link)}" target="_blank" rel="noopener">Website ↗</a>`);
+    // Eigen link (Airbnb, Booking, hotelsite) als grote knop; anders zoeken op Booking.
+    if (!safeLink(x.link)) links.push(`<a href="${esc(bookingUrl(x, loc, trip))}" target="_blank" rel="noopener">Prijs op Booking ↗</a>`);
   } else if (safeLink(x.link)) {
     links.push(`<a href="${esc(x.link)}" target="_blank" rel="noopener">Meer info ↗</a>`);
   }
+  const own = x.kind === 'stay' && safeLink(x.link);
+  const open = (inner, attrs = '') => (own ? `<a href="${esc(own)}" target="_blank" rel="noopener"${attrs}>${inner}</a>` : inner);
   const img = safeImg(x.image);
   const stars = x.rating ? `<span class="stars" aria-label="${x.rating} sterren">${'★'.repeat(x.rating)}</span>` : '';
   return `<article class="item">
-    ${img ? `<img class="item-img" src="${esc(img)}" alt="" loading="lazy">` : ''}
+    ${img ? open(`<img class="item-img" src="${esc(img)}" alt="" loading="lazy">`, ' class="item-img-link" tabindex="-1" aria-hidden="true"') : ''}
     <div class="item-body">
-      <h3>${esc(x.title)}</h3>
+      <h3>${open(esc(x.title))}</h3>
       ${x.subtitle || stars ? `<p class="sub">${stars}${stars && x.subtitle ? ' · ' : ''}${esc(x.subtitle || '')}</p>` : ''}
       ${x.show_price && x.price ? `<span class="price">${esc(x.price)}</span>` : ''}
       ${x.body && x.kind !== 'flight' ? `<p class="body">${esc(x.body)}</p>` : ''}
+      ${own ? `<a class="go-btn" href="${esc(own)}" target="_blank" rel="noopener">${linkSite(own) ? `Bekijk op ${linkSite(own)}` : 'Bekijk het verblijf'} ↗</a>` : ''}
       ${links.length ? `<p class="links">${links.join('')}</p>` : ''}
     </div>
   </article>`;
@@ -439,6 +453,11 @@ function tripPageHtml(req, v) {
     .body { margin: 2px 0 0; color: var(--muted); font-size: .875rem; white-space: pre-line; }
     .links { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; font-size: .875rem; font-weight: 600; }
     .links a { text-decoration: underline; text-underline-offset: 3px; }
+    .item-img-link { display: flex; flex: none; }
+    .item h3 a { color: inherit; text-decoration: none; }
+    .go-btn { justify-self: start; display: inline-flex; align-items: center; margin-top: 8px; min-height: 44px; padding: 10px 18px;
+      border-radius: 10px; background: #e0245e; color: #fff; font-weight: 600; text-decoration: none; }
+    .go-btn:hover { filter: brightness(.92); }
     .empty { color: var(--muted); }
     footer { max-width: 680px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .8125rem; display: flex; align-items: center; gap: 8px; }
     .lock { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); }

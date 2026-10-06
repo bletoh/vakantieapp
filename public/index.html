@@ -30,6 +30,14 @@
         <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
       </div>
       <div class="sheet-body">
+        <div class="link-fetch" id="linkFetch">
+          <label for="itemLink">Link <small>(Airbnb, Booking of website)</small></label>
+          <div class="input-btn">
+            <input id="itemLink" name="link" type="url" inputmode="url" placeholder="Plak hier de link…" autocomplete="off">
+            <button type="button" class="btn sm" id="linkFetchBtn">Ophalen</button>
+          </div>
+          <p class="link-status" id="linkFetchStatus" role="status">Plak een link, dan vullen we de naam, foto en score voor je in.</p>
+        </div>
         <div class="img-field" id="itemImageField"></div>
         <label>Titel<input name="title" required maxlength="120"></label>
         <label>Ondertitel<input name="subtitle" maxlength="160"></label>
@@ -51,7 +59,6 @@
           <label>Pluspunten <small>(één per regel)</small><textarea name="pros" rows="3"></textarea></label>
           <label>Minpunten <small>(één per regel)</small><textarea name="cons" rows="3"></textarea></label>
         </div>
-        <label>Link<input name="link" type="url" inputmode="url" placeholder="https://…"></label>
         <label id="locationField">Bestemming <small>(pin op de kaart)</small><select name="location_id"></select></label>
         <input type="hidden" name="added_by">
         <label class="check"><input type="checkbox" name="is_best"> Dit is de beste keuze</label>
