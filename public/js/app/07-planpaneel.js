@@ -389,6 +389,35 @@
     }).join('')}</ul>`;
   }
 
+  // Echte vluchtprijs (retour p.p., Aviasales) per vliegveld voor de datums van de reis.
+  const flightPriceKey = (iata, t) => `${iata}|${t.start_date}|${t.end_date || t.start_date}`;
+  function flightPriceHtml(a, p) {
+    const t = p.trip;
+    if (!t || !t.start_date) return '';
+    pinCtx.fp = pinCtx.fp || {};
+    const key = flightPriceKey(a.iata, t);
+    if (!(key in pinCtx.fp)) {
+      pinCtx.fp[key] = 'loading';
+      const locId = pinCtx.locId;
+      queueMicrotask(async () => {
+        if (!priceStatus) priceStatus = await api('/prices/status').catch(() => ({ flights: false }));
+        let r = null;
+        if (priceStatus.flights) {
+          const qs = new URLSearchParams({ destination: a.iata, depart: t.start_date, ret: t.end_date || t.start_date });
+          r = await api(`/prices/flight?${qs}`).catch(() => null);
+        }
+        if (!pinCtx || pinCtx.locId !== locId) return;
+        pinCtx.fp[key] = r;
+        renderPinSheet();
+      });
+    }
+    const r = pinCtx.fp[key];
+    if (r === 'loading') return '<small class="loading-dots">Vluchtprijs ophalen</small>';
+    const f = r && r.cheapest;
+    if (!f) return '';
+    return `<span class="airbnb-price"><strong>€ ${f.price.toLocaleString('nl-NL')} p.p.</strong> retour · <span class="real-note">echte prijs</span> ${esc(flightNote(f, r.approx))}</span>`;
+  }
+
   // Echte Airbnb-prijzen voor de datums van de reis en de groepsgrootte (uit Ideeën).
   function airbnbHtml(loc, p, titles) {
     if (!hasPos(loc)) return '';
@@ -439,6 +468,7 @@
           <strong>${HOME_CODE} → ${esc(a.iata)}</strong>
           <span>${esc(a.name)}</span>
           <small>${kmText(a.km)} van de pin · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen</small>
+          ${flightPriceHtml(a, p)}
           <span class="result-links">
             <a href="${flightsUrl(a.iata, p.trip)}" target="_blank" rel="noopener">Google Flights ↗</a>
             <a href="${skyscannerUrl(a.iata, p.trip)}" target="_blank" rel="noopener">Skyscanner ↗</a>
@@ -663,12 +693,18 @@
     const by = myName();
     if (btn.dataset.addAirport !== undefined) {
       const a = pinCtx.airports[+btn.dataset.addAirport];
+      const trip = tripsFor(loc.id)[0];
+      const fr = trip && trip.start_date && pinCtx.fp && pinCtx.fp[flightPriceKey(a.iata, trip)];
+      const f = fr && fr !== 'loading' && fr.cheapest;
       const section = await ensureSection('flight');
       await api(`/sections/${section.id}/items`, 'POST', {
         title: `Amsterdam → ${a.name} (${a.iata})`,
-        subtitle: `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen`,
-        body: `Vliegveld op ${kmText(a.km)} van ${loc.title}. Vliegtijd is een schatting; zoek de prijs op via de link.`,
-        link: flightsUrl(a.iata, tripsFor(loc.id)[0]),
+        subtitle: `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen${f ? ` · ${flightNote(f, fr.approx).slice(1, -1)}` : ''}`,
+        body: f
+          ? `Echte prijs: € ${f.price.toLocaleString('nl-NL')} p.p. retour${fr.approx ? ` (goedkoopste in die maand: ${shortRange(f.departAt.slice(0, 10), (f.returnAt || f.departAt).slice(0, 10))})` : ''}, gevonden via Aviasales op ${fmt(fr.fetchedAt.slice(0, 10), { day: 'numeric', month: 'long' })}. Prijzen veranderen snel; boek via de link.`
+          : `Vliegveld op ${kmText(a.km)} van ${loc.title}. Vliegtijd is een schatting; zoek de prijs op via de link.`,
+        ...(f ? { price: `€ ${f.price.toLocaleString('nl-NL')} p.p.` } : {}),
+        link: (f && f.link) || flightsUrl(a.iata, tripsFor(loc.id)[0]),
         location_id: loc.id,
         added_by: by,
       });

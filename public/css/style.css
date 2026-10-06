@@ -1661,3 +1661,4 @@ body.gate .tabs { display: none; }
 .airbnb-price strong { color: var(--ink); }
 .account-email { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; font-size: .9375rem; }
 .account-email strong { overflow-wrap: anywhere; }
+.real-note { color: var(--good); font-weight: 600; }

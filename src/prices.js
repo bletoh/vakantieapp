@@ -162,20 +162,28 @@ async function flightPrices({ origin = 'AMS', destination, depart, ret }) {
   }
   const key = `flight|${origin}|${destination}|${depart}|${ret || ''}`;
   return cached(key, 6 * 3600e3, async () => {
-    const qs = new URLSearchParams({
-      origin, destination, departure_at: depart, currency: 'eur', sorting: 'price', unique: 'false', limit: '5',
-      one_way: ret ? 'false' : 'true', token: process.env.TRAVELPAYOUTS_TOKEN,
-    });
-    if (ret) qs.set('return_at', ret);
-    const res = await fetch(`https://api.travelpayouts.com/aviasales/v3/prices_for_dates?${qs}`, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error(`travelpayouts: HTTP ${res.status}`);
-    const json = await res.json();
-    const list = (json.data || []).filter((f) => f.price).map((f) => ({
-      price: f.price, airline: f.airline || '', departAt: f.departure_at || '', returnAt: f.return_at || '',
-      transfers: f.transfers ?? null, link: f.link ? `https://www.aviasales.com${f.link}` : '',
-    }));
-    return { source: 'Aviasales', origin, destination, depart, ret: ret || null, cheapest: list[0] || null, list, fetchedAt: new Date().toISOString() };
+    const exact = await queryFlights({ origin, destination, depart, ret });
+    if (exact.list.length || depart.length === 7) return exact;
+    // Op precies die dagen nog niemand gezocht: de goedkoopste retour in dezelfde maand(en).
+    const month = await queryFlights({ origin, destination, depart: depart.slice(0, 7), ret: ret ? ret.slice(0, 7) : null });
+    return { ...month, depart, ret: ret || null, approx: true };
   });
+}
+
+async function queryFlights({ origin, destination, depart, ret }) {
+  const qs = new URLSearchParams({
+    origin, destination, departure_at: depart, currency: 'eur', sorting: 'price', unique: 'false', limit: '5',
+    one_way: ret ? 'false' : 'true', token: process.env.TRAVELPAYOUTS_TOKEN,
+  });
+  if (ret) qs.set('return_at', ret);
+  const res = await fetch(`https://api.travelpayouts.com/aviasales/v3/prices_for_dates?${qs}`, { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`travelpayouts: HTTP ${res.status}`);
+  const json = await res.json();
+  const list = (json.data || []).filter((f) => f.price).map((f) => ({
+    price: f.price, airline: f.airline || '', departAt: f.departure_at || '', returnAt: f.return_at || '',
+    transfers: f.transfers ?? null, link: f.link ? `https://www.aviasales.com${f.link}` : '',
+  }));
+  return { source: 'Aviasales', origin, destination, depart, ret: ret || null, cheapest: list[0] || null, list, fetchedAt: new Date().toISOString() };
 }
 
 module.exports = { stayPrices, flightPrices, flightsEnabled, parseAirbnb, airbnbSearchUrl };
