@@ -119,6 +119,52 @@
     </div>
   </dialog>
 
+  <!-- Huurauto toevoegen of aanpassen -->
+  <dialog class="sheet" id="carDialog">
+    <form method="dialog" id="carForm">
+      <div class="sheet-head">
+        <h2 id="carDialogTitle">Huurauto toevoegen</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="sheet-body">
+        <label>Link naar de auto <small>(Rentalcars, Sunny Cars, Kayak…)</small><input name="link" type="url" inputmode="url" placeholder="https://…" autocomplete="off"></label>
+        <label>Auto<input name="title" required maxlength="120" placeholder="Bijv. Fiat 500 of vergelijkbaar"></label>
+        <label>Verhuurder en ophaalplek<input name="subtitle" maxlength="160" placeholder="Bijv. Goldcar · vliegveld Catania"></label>
+        <label>Reis<select name="trip"></select></label>
+        <div class="row-2">
+          <label>Huurprijs totaal<span class="euro"><input name="price" inputmode="decimal" placeholder="Bijv. 240"></span></label>
+          <label>Huurdagen<input name="days" type="number" min="1" max="60" inputmode="numeric"></label>
+        </div>
+        <fieldset class="young-box">
+          <legend>Jonge bestuurder</legend>
+          <div class="row-2">
+            <label>Minimumleeftijd<input name="min_age" type="number" min="16" max="99" inputmode="numeric" placeholder="Bijv. 21"></label>
+            <label>Toeslag <small>(onder 25)</small>
+              <span class="fee-row"><span class="euro"><input name="fee" inputmode="decimal" placeholder="0"></span>
+                <select name="fee_unit" aria-label="Toeslag per dag of totaal"><option value="day">per dag</option><option value="total">totaal</option></select></span>
+            </label>
+          </div>
+          <p class="link-status" id="carFeeNote">Staat in de voorwaarden van de verhuurder, vaak onder "jonge bestuurder" of "young driver".</p>
+        </fieldset>
+        <label>Opmerking<textarea name="body" rows="3" placeholder="Bijv. eigen risico € 0, volle tank terug"></textarea></label>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost danger" id="carDelete">Verwijderen</button>
+        <button type="button" class="btn ghost" data-close>Annuleren</button>
+        <button type="submit" class="btn primary">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Toevoegen aan een reis: activiteiten of huurauto -->
+  <dialog class="sheet" id="tripAddDialog" aria-labelledby="tripAddTitle">
+    <div class="sheet-head">
+      <h2 id="tripAddTitle">Toevoegen</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="sheet-body trip-add-body" id="tripAddBody"></div>
+  </dialog>
+
   <!-- Periode datumprikker -->
   <dialog class="sheet small" id="pollDialog">
     <form method="dialog" id="pollForm">

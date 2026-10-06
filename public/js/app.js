@@ -32,6 +32,10 @@
     if (/(^|\.)vrbo\.com$/.test(h)) return 'Vrbo';
     if (/(^|\.)hostelworld\.com$/.test(h)) return 'Hostelworld';
     if (/(^|\.)expedia\./.test(h)) return 'Expedia';
+    if (/(^|\.)rentalcars\.com$/.test(h)) return 'Rentalcars';
+    if (/(^|\.)sunnycars\./.test(h)) return 'Sunny Cars';
+    if (/(^|\.)discovercars\.com$/.test(h)) return 'DiscoverCars';
+    if (/(^|\.)kayak\./.test(h)) return 'Kayak';
     return '';
   }
   const linkLabel = (u) => (linkSite(u) ? `Bekijk op ${linkSite(u)}` : 'Bekijk website');
@@ -127,6 +131,7 @@
     vote: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
     plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
     bed: '<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>',
+    car: '<path d="M5 17h14M3 17v-4l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v4a1 1 0 0 1-1 1h-1M5 18H4a1 1 0 0 1-1-1M3 13h18"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>',
     sparkles: '<path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/>',
     utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
     pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
@@ -143,7 +148,7 @@
     thumbDown: '<path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 5.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
   };
   const ic = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
-  const KIND_ICONS = { map: 'pin', flight: 'plane', stay: 'bed', do: 'sparkles', eat: 'utensils' };
+  const KIND_ICONS = { map: 'pin', flight: 'plane', stay: 'bed', car: 'car', do: 'sparkles', eat: 'utensils' };
   // Vaste soorten krijgen een lijn-icoon; eigen tabs houden het icoon dat iemand zelf koos.
   const kindIcon = (kind, own) => (KIND_ICONS[kind] ? ic(KIND_ICONS[kind]) : esc(own || ''));
 
@@ -188,6 +193,7 @@
     if (own) own.name = data.team.name;
     render();
     if (pinCtx && pinDialog.open) renderPinSheet();
+    refreshTripAdd();
   }
 
   /* ---------- routing ---------- */
@@ -250,6 +256,7 @@
     const title = (state.team && state.team.name) || 'Vakantie';
     document.title = title;
     $('#brand').textContent = title;
+    document.documentElement.style.setProperty('--brand-w', `${$('#brand').offsetWidth + 48}px`);
     renderTabs();
     renderPanel();
   }
@@ -263,7 +270,7 @@
   // Vluchten en overnachtingen beheer je via de pinnen op de kaart; die tabs tonen we niet.
   const listSections = () => {
     const map = mapSection();
-    return state.sections.filter((s) => s.kind !== 'map' && !(map && (s.kind === 'flight' || s.kind === 'stay')));
+    return state.sections.filter((s) => s.kind !== 'map' && s.kind !== 'car' && !(map && (s.kind === 'flight' || s.kind === 'stay' || s.kind === 'do' || s.kind === 'eat')));
   };
   const listTabIcon = (s) => (KIND_ICONS[s.kind] ? kindIcon(s.kind) : s.icon ? `<span class="tab-emoji" aria-hidden="true">${esc(s.icon)}</span>` : '');
   const badge = (n) => (n ? ` <span class="tab-badge">${n > 99 ? '99+' : n}</span>` : '');
@@ -458,10 +465,10 @@
     const lines = [`✈️ *${t.title}*`];
     if (t.start_date) lines.push(`📅 ${rangeText(t.start_date, t.end_date)} (${dayCount(t.start_date, t.end_date)} dagen)`);
     // Het verblijf met link erbij, zodat iedereen in één tik op Airbnb of Booking zit.
-    for (const s of sectionsOfKind('stay')) {
+    for (const s of [...sectionsOfKind('stay'), ...sectionsOfKind('car')]) {
       for (const it of s.items) {
         const u = t.item_ids.includes(it.id) && safeUrl(it.link);
-        if (u && !u.startsWith('/')) lines.push(`🏠 ${it.title}${s.show_price && it.price ? ` (${it.price})` : ''}: ${u}`);
+        if (u && !u.startsWith('/')) lines.push(`${s.kind === 'car' ? '🚗' : '🏠'} ${it.title}${s.show_price && it.price ? ` (${it.price})` : ''}: ${u}`);
       }
     }
     lines.push(`Bekijk het hele reisplan: ${tripShareUrl(t)}`);
@@ -505,8 +512,14 @@
             <li><a class="trip-pick" href="${tripPickHref(s, it)}">
               <span class="trip-pick-icon" aria-hidden="true">${kindIcon(s.kind, s.icon)}</span>
               <span class="trip-pick-text"><small>${esc(s.kind === 'map' ? 'Bestemming' : s.title)}</small>${esc(it.title)}
-                ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}</span>
+                ${s.show_price && it.price ? `<span class="price">${esc(it.price)}${s.kind === 'car' && it.young_fee ? ` + € ${Math.round(it.young_fee).toLocaleString('nl-NL')} toeslag &lt;25` : ''}</span>` : ''}</span>
             </a>${s.kind !== 'map' && s.kind !== 'flight' && safeUrl(it.link) && !safeUrl(it.link).startsWith('/') ? `<a class="btn sm out-link" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener noreferrer">${esc(linkSite(it.link) || 'Website')} ↗</a>` : ''}</li>`).join('')}</ul>` : ''}
+          <div class="trip-add">
+            <span class="trip-add-label">Toevoegen aan deze reis</span>
+            <button type="button" class="btn sm" data-trip-add="do" data-trip-id="${t.id}">${ic('sparkles')} Activiteit</button>
+            <button type="button" class="btn sm" data-trip-add="eat" data-trip-id="${t.id}">${ic('utensils')} Eten & drinken</button>
+            <button type="button" class="btn sm" data-trip-add="car" data-trip-id="${t.id}">${ic('car')} Huurauto</button>
+          </div>
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
           ${tripShareHtml(t)}
           <div class="card-foot">
@@ -912,6 +925,7 @@
       wasBest: !!(item && item.is_best),
       lat: item ? item.lat : preset.lat ?? null,
       lng: item ? item.lng : preset.lng ?? null,
+      addToTrip: item ? null : preset.addToTrip || null,
     };
     const section = findSection(itemCtx.sectionId);
     $('#itemDialogTitle').textContent = item ? 'Aanpassen' : addLabel(section);
@@ -1033,8 +1047,11 @@
         : (await api(`/items/${itemCtx.id}`, 'PUT', data), itemCtx.id);
       if (wantBest !== itemCtx.wasBest) await api(`/items/${id}/best`, 'PUT');
       itemDialog.close();
+      // Toegevoegd vanuit een reis: meteen in die reis zetten.
+      const addTo = isNew && itemCtx.addToTrip && state.trips.find((t) => t.id === itemCtx.addToTrip);
+      if (addTo) await setTripItem(addTo, id, true);
       await reload();
-      toast(isNew ? 'Toegevoegd, bedankt! ✓' : 'Opgeslagen ✓');
+      toast(isNew ? (addTo ? `Toegevoegd aan ${addTo.title} ✓` : 'Toegevoegd, bedankt! ✓') : 'Opgeslagen ✓');
       const saved = findItem(id);
       // Nieuwe bestemming: meteen het planpaneel openen.
       if (isNew && saved && sectionOf(saved).kind === 'map') openPin(saved.id);
@@ -2006,7 +2023,7 @@
   async function ensureSection(kind) {
     const found = sectionsOfKind(kind)[0];
     if (found) return found;
-    const k = KINDS[kind];
+    const k = KINDS[kind] || (kind === 'car' ? { icon: '🚗', title: 'Huurauto', price: true } : null);
     const { id } = await api('/sections', 'POST', { title: k.title, icon: k.icon, kind, show_price: k.price });
     await reload();
     return findSection(id);
@@ -2584,6 +2601,422 @@
     openItemDialog(findItem(pinCtx.locId));
   });
 
+  /* ---------- huurauto: vergelijken met de leeftijd van de jongste bestuurder ---------- */
+
+  // Indicatie per land bij de grote verhuurders: [minimumleeftijd, toeslag per dag onder 25 (van, tot)].
+  // Dit verschilt per verhuurder en autoklasse; de voorwaarden van de verhuurder gelden altijd.
+  const CAR_RULES = {
+    Spanje: [21, 10, 20], Portugal: [21, 10, 15], Italië: [21, 15, 25], Griekenland: [21, 10, 15], Frankrijk: [21, 30, 40],
+    Kroatië: [21, 10, 15], Bulgarije: [21, 8, 12], Cyprus: [21, 10, 15], Malta: [21, 10, 15], Turkije: [21, 10, 20],
+    Duitsland: [18, 15, 20], Oostenrijk: [19, 15, 20], Zwitserland: [20, 20, 30], Engeland: [21, 30, 45], Schotland: [21, 30, 45],
+    Ierland: [21, 25, 35], Denemarken: [19, 15, 20], Zweden: [19, 15, 20], Noorwegen: [19, 15, 20], Finland: [20, 15, 20],
+    IJsland: [20, 0, 10], Marokko: [21, 8, 12], Egypte: [23, 10, 15], Kaapverdië: [21, 5, 10], 'Zuid-Afrika': [21, 10, 15],
+    Tanzania: [23, 10, 20], Mauritius: [23, 5, 10], 'Verenigde Arabische Emiraten': [21, 10, 20],
+    'Verenigde Staten': [20, 25, 35], Canada: [21, 20, 30], Mexico: [21, 10, 25], 'Costa Rica': [21, 10, 20],
+    Brazilië: [21, 5, 15], Argentinië: [21, 10, 15], Colombia: [21, 5, 15], Peru: [22, 10, 15],
+    Australië: [21, 15, 25], Thailand: [21, 0, 10], Indonesië: [21, 0, 10], Maleisië: [23, 5, 10], Filipijnen: [21, 5, 10],
+    Vietnam: [21, 0, 10], 'Sri Lanka': [21, 0, 10], India: [21, 0, 10], Japan: [18, 0, 0], 'Zuid-Korea': [21, 5, 10],
+  };
+  const CAR_RULE_DEFAULT = [21, 10, 25];
+  const NO_CAR_NEEDED = ['Malediven', 'Singapore', 'Seychellen', 'China'];
+
+  // "€ 1.250", "367,92" of "1,250.50" naar een getal.
+  function parseEuro(v) {
+    let t = String(v ?? '').replace(/[^\d.,]/g, '');
+    if (!t) return null;
+    const lastC = t.lastIndexOf(','), lastD = t.lastIndexOf('.');
+    if (lastC > -1 && lastD > -1) {
+      const dec = lastC > lastD ? ',' : '.';
+      t = t.replace(new RegExp(`\\${dec === ',' ? '.' : ','}`, 'g'), '').replace(dec, '.');
+    } else if (lastC > -1) {
+      t = /,\d{1,2}$/.test(t) && t.split(',').length === 2 ? t.replace(',', '.') : t.replace(/,/g, '');
+    } else if (lastD > -1) {
+      if (/\.\d{3}$/.test(t) || t.split('.').length > 2) t = t.replace(/\./g, '');
+    }
+    const n = parseFloat(t);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function carPrefs() {
+    let p = {};
+    try { p = JSON.parse(store.get('cars') || '{}'); } catch { /* standaard */ }
+    return {
+      age: Math.min(99, Math.max(18, +p.age || 23)),
+      onlyOk: p.onlyOk !== false,
+      sort: p.sort === 'new' ? 'new' : 'total',
+    };
+  }
+  const saveCarPrefs = (p) => store.set('cars', JSON.stringify(p));
+
+  const carItems = () => sectionsOfKind('car').flatMap((s) => sortedItems(s));
+  const tripsWithItem = (id) => state.trips.filter((t) => t.item_ids.includes(id));
+  const tripDays = (t) => (t && t.start_date ? dayCount(t.start_date, t.end_date) : null);
+
+  // Land van een reis: de dichtstbijzijnde bestemming uit de ideeënlijst.
+  function tripCountry(t) {
+    const loc = t && tripLocation(t);
+    if (!loc || !hasPos(loc) || !destinations) return null;
+    let best = null;
+    for (const d of destinations) {
+      const km = distanceKm([loc.lat, loc.lng], [d.lat, d.lng]);
+      if (!best || km < best.km) best = { c: d.c, km };
+    }
+    return best && best.km < 400 ? best.c : null;
+  }
+
+  // Wat kost de auto voor iemand van deze leeftijd, en mag het wel?
+  function carCost(it, age) {
+    const rent = parseEuro(it.price);
+    const young = age < 25 && it.young_fee ? it.young_fee : 0;
+    const allowed = it.min_age ? age >= it.min_age : null;
+    return { rent, young, total: rent != null ? rent + young : null, allowed };
+  }
+
+  // Toevoegen / aanpassen
+  const carDialog = $('#carDialog');
+  const carForm = $('#carForm');
+  let carCtx = null;
+
+  function openCarDialog(it, tripId) {
+    carCtx = { id: it ? it.id : null };
+    const el = carForm.elements;
+    $('#carDialogTitle').textContent = it ? 'Huurauto aanpassen' : 'Huurauto toevoegen';
+    $('#carDelete').hidden = !it;
+    for (const f of ['link', 'title', 'subtitle', 'body']) el[f].value = it ? it[f] || '' : '';
+    el.price.value = it && it.price ? String(it.price).replace(/^€\s*/, '') : '';
+    el.min_age.value = it && it.min_age ? it.min_age : '';
+    el.fee.value = it && it.young_fee != null ? it.young_fee : '';
+    el.fee_unit.value = it ? 'total' : 'day';
+    const inTrips = it ? tripsWithItem(it.id) : [];
+    const pre = tripId ? String(tripId) : inTrips[0] ? String(inTrips[0].id) : '';
+    el.trip.innerHTML = '<option value="">Nog geen reis</option>'
+      + state.trips.map((t) => `<option value="${t.id}"${String(t.id) === pre ? ' selected' : ''}>${esc(t.title)}</option>`).join('');
+    el.trip.disabled = inTrips.length > 1 && !tripId;
+    syncCarDays();
+    carDialog.showModal();
+    setTimeout(() => (it ? el.title : el.link).focus(), 50);
+  }
+
+  function syncCarDays() {
+    const el = carForm.elements;
+    const t = state.trips.find((x) => x.id === +el.trip.value);
+    if (tripDays(t)) el.days.value = tripDays(t);
+    else if (!el.days.value) el.days.value = 7;
+    updateCarFeeNote();
+  }
+  function updateCarFeeNote() {
+    const el = carForm.elements;
+    const fee = parseEuro(el.fee.value);
+    const days = parseInt(el.days.value, 10) || 0;
+    $('#carFeeNote').textContent = fee && el.fee_unit.value === 'day' && days
+      ? `€ ${fee} × ${days} dagen = € ${(fee * days).toLocaleString('nl-NL')} toeslag in totaal.`
+      : 'Staat in de voorwaarden van de verhuurder, vaak onder "jonge bestuurder" of "young driver".';
+  }
+  carForm.elements.trip.addEventListener('change', syncCarDays);
+  for (const f of ['fee', 'days', 'fee_unit']) carForm.elements[f].addEventListener('input', updateCarFeeNote);
+
+  carForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const el = carForm.elements;
+    const rent = parseEuro(el.price.value);
+    const fee = parseEuro(el.fee.value);
+    const days = parseInt(el.days.value, 10) || 1;
+    const tripId = +el.trip.value || null;
+    const trip = state.trips.find((t) => t.id === tripId);
+    const loc = trip && tripLocation(trip);
+    const data = {
+      title: el.title.value, subtitle: el.subtitle.value, body: el.body.value, link: el.link.value,
+      price: rent != null ? `€ ${rent.toLocaleString('nl-NL', rent % 1 ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {})}` : '',
+      min_age: el.min_age.value, young_fee: fee == null ? '' : el.fee_unit.value === 'day' ? fee * days : fee,
+    };
+    try {
+      const isNew = !carCtx.id;
+      if (isNew) {
+        const section = await ensureSection('car');
+        carCtx.id = (await api(`/sections/${section.id}/items`, 'POST', { ...data, location_id: loc ? loc.id : null, added_by: myName() })).id;
+      } else {
+        await api(`/items/${carCtx.id}`, 'PUT', data);
+      }
+      await reload();
+      if (trip && !trip.item_ids.includes(carCtx.id)) await setTripItem(trip, carCtx.id, true);
+      carDialog.close();
+      await reload();
+      toast(isNew ? `Huurauto toegevoegd${trip ? ` aan ${trip.title}` : ''} ✓` : 'Opgeslagen ✓');
+    } catch (err) { toast(err.message, true); }
+  });
+
+  $('#carDelete').addEventListener('click', async () => {
+    const it = findItem(carCtx.id);
+    if (!it || !confirm(`"${it.title}" verwijderen?`)) return;
+    try { await api(`/items/${it.id}`, 'DELETE'); carDialog.close(); await reload(); toast('Verwijderd'); } catch (err) { toast(err.message, true); }
+  });
+
+  // Een onderdeel in of uit een reis halen (de rest van de reis blijft gelijk).
+  async function setTripItem(t, itemId, on) {
+    const ids = new Set(t.item_ids);
+    if (on) ids.add(itemId); else ids.delete(itemId);
+    await api(`/trips/${t.id}`, 'PUT', { title: t.title, note: t.note || '', start_date: t.start_date || '', end_date: t.end_date || '', item_ids: [...ids] });
+    t.item_ids = [...ids];
+    // Op de kaart: de auto hoort bij de bestemming van de reis.
+    const loc = on && tripLocation(t);
+    const it = findItem(itemId);
+    if (loc && it && !it.location_id) await api(`/items/${itemId}`, 'PUT', { location_id: loc.id });
+  }
+
+  // Paneel "Toevoegen aan deze reis": huurauto of activiteiten, geopend vanaf een reiskaartje.
+  const tripAddDialog = $('#tripAddDialog');
+  let tripAdd = null; // { tripId, mode: 'car' | 'do' | 'eat', places }
+  const TRIP_ADD = {
+    do: { title: 'Activiteiten', one: 'activiteit', none: 'Nog geen activiteiten in deze reis.', near: 'Te doen in de buurt', empty: 'Niets gevonden binnen 8 km.' },
+    eat: { title: 'Eten & drinken', one: 'restaurant of bar', none: 'Nog geen restaurants of bars in deze reis.', near: 'Eten en drinken in de buurt', empty: 'Geen restaurants gevonden binnen 2 km.' },
+  };
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-trip-add]');
+    if (b) openTripAdd(+b.dataset.tripId, b.dataset.tripAdd);
+  });
+
+  function openTripAdd(tripId, mode) {
+    tripAdd = { tripId, mode, places: undefined };
+    renderTripAdd();
+    tripAddDialog.showModal();
+    if (mode !== 'car') loadTripPlaces();
+    // Het land (voor de leeftijdsregels) komt uit de bestemmingenlijst.
+    if (mode === 'car' && !destinations) loadDestinations().then(refreshTripAdd, () => {});
+  }
+  const tripAddTrip = () => tripAdd && state.trips.find((t) => t.id === tripAdd.tripId);
+
+  function renderTripAdd() {
+    const t = tripAddTrip();
+    if (!t) { if (tripAddDialog.open) tripAddDialog.close(); return; }
+    $('#tripAddTitle').textContent = `${tripAdd.mode === 'car' ? 'Huurauto' : TRIP_ADD[tripAdd.mode].title} · ${t.title}`;
+    const body = $('#tripAddBody');
+    const scroll = body.scrollTop;
+    body.innerHTML = tripAdd.mode === 'car' ? tripCarHtml(t) : tripPlacesHtml(t, tripAdd.mode);
+    body.scrollTop = scroll;
+  }
+
+  /* --- huurauto voor een reis --- */
+
+  function tripCarHtml(t) {
+    const p = carPrefs();
+    let list = carItems().map((it) => ({ it, cost: carCost(it, p.age), trips: tripsWithItem(it.id) }))
+      // Auto's van deze reis en auto's die nog bij geen enkele reis horen.
+      .filter((x) => x.trips.some((y) => y.id === t.id) || !x.trips.length);
+    const hidden = p.onlyOk ? list.filter((x) => x.cost.allowed === false) : [];
+    if (p.onlyOk) list = list.filter((x) => x.cost.allowed !== false);
+    if (p.sort === 'total') list.sort((a, b) => (a.cost.total ?? Infinity) - (b.cost.total ?? Infinity) || b.it.id - a.it.id);
+    else list.sort((a, b) => b.it.id - a.it.id);
+    return `
+      <div class="car-top">
+        <label>Jongste bestuurder
+          <span class="stepper">
+            <button type="button" data-car-age="-1" aria-label="Een jaar jonger">−</button>
+            <input id="carAge" type="number" min="18" max="99" inputmode="numeric" value="${p.age}" aria-label="Leeftijd jongste bestuurder">
+            <button type="button" data-car-age="1" aria-label="Een jaar ouder">+</button>
+          </span>
+        </label>
+        <div class="idea-cats car-filters">
+          <button type="button" class="cat" data-car-ok aria-pressed="${p.onlyOk}">Alleen auto's die ik mag huren</button>
+          ${[['total', 'Laagste totaalprijs'], ['new', 'Nieuwste eerst']].map(([k, l]) => `<button type="button" class="cat" role="radio" data-car-sort="${k}" aria-checked="${p.sort === k}" aria-pressed="${p.sort === k}">${l}</button>`).join('')}
+        </div>
+      </div>
+      ${carSearchHtml(t, p)}
+      <button type="button" class="btn primary block" data-car-new>${ic('plus')} Huurauto toevoegen</button>
+      ${list.length ? `<div class="car-list">${list.map((x, i) => carCardHtml(x, p, t, i === 0 && p.sort === 'total' && list.length > 1)).join('')}</div>`
+        : `<p class="hint">${hidden.length ? `Geen auto die je op ${p.age} mag huren.` : 'Nog geen huurauto bij deze reis.'}</p>`}
+      ${hidden.length ? `<p class="hint">${hidden.length} ${hidden.length === 1 ? 'auto is' : "auto's zijn"} verborgen omdat je ${hidden.length === 1 ? 'hem' : 'ze'} op ${p.age} niet mag huren. <button type="button" class="text-btn" data-car-ok>Toch tonen</button></p>` : ''}`;
+  }
+
+  function carSearchHtml(t, p) {
+    const loc = tripLocation(t);
+    const place = loc ? shortName(loc.title) : t.title.replace(/^Reis naar /, '');
+    const country = tripCountry(t);
+    const days = tripDays(t);
+    const [min, lo, hi] = (country && CAR_RULES[country]) || CAR_RULE_DEFAULT;
+    let rule;
+    if (country && NO_CAR_NEEDED.includes(country)) rule = `In ${esc(country)} huur je meestal geen auto: taxi, Grab of boot is gebruikelijker.`;
+    else {
+      const where = country ? `In ${esc(country)}` : 'Bij de meeste verhuurders';
+      const fee = p.age >= 25 || !hi ? 'zonder toeslag voor jonge bestuurders'
+        : `met meestal € ${lo}–${hi} per dag toeslag${days ? ` (± € ${lo * days}–${hi * days} voor ${days} dagen)` : ''}`;
+      rule = `${where} mag je meestal vanaf <strong>${min} jaar</strong> huren. `
+        + (p.age >= min ? `Op ${p.age} kan dat dus, ${fee}.` : `Op ${p.age} is dat vaak lastig: zoek naar verhuurders die het wel toestaan.`)
+        + (p.age < 25 ? ' Vaak moet je je rijbewijs ook al 1 à 2 jaar hebben, en dure auto\'s zijn soms pas vanaf 25.' : '');
+    }
+    const dates = t.start_date ? `/${t.start_date}/${t.end_date > t.start_date ? t.end_date : addDays(t.start_date, 1)}` : '';
+    const google = `https://www.google.com/search?q=${encodeURIComponent(`huurauto ${place} ${p.age} jaar jonge bestuurder`)}`;
+    return `
+      <div class="car-search">
+        <div class="car-rule">${ic('car')}<p>${rule}<small>Indicatie bij grote verhuurders; de voorwaarden van de verhuurder gelden altijd.</small></p></div>
+        <p class="mini-label">Zoeken in ${esc(place)}${t.start_date ? ` · ${shortRange(t.start_date, t.end_date)}` : ''}</p>
+        <p class="pkg-links">
+          <a href="https://www.kayak.nl/cars/${encodeURIComponent(place)}${dates}" target="_blank" rel="noopener">Kayak ↗</a>
+          <a href="https://www.discovercars.com/nl" target="_blank" rel="noopener">DiscoverCars ↗</a>
+          <a href="https://www.rentalcars.com/nl/" target="_blank" rel="noopener">Rentalcars ↗</a>
+          <a href="https://www.sunnycars.nl/" target="_blank" rel="noopener">Sunny Cars ↗</a>
+          <a href="${google}" target="_blank" rel="noopener">Google ↗</a>
+        </p>
+        <p class="fineprint">Vul op de site bij "leeftijd bestuurder" ${p.age} in, anders zie je de prijs zonder toeslag.</p>
+      </div>`;
+  }
+
+  function carCardHtml({ it, cost, trips }, p, t, cheapest) {
+    const link = safeUrl(it.link);
+    const inTrip = trips.some((y) => y.id === t.id);
+    const age = cost.allowed === true ? `<span class="car-age ok">✓ Mag op ${p.age}${it.min_age ? ` (vanaf ${it.min_age})` : ''}</span>`
+      : cost.allowed === false ? `<span class="car-age no">✕ Pas vanaf ${it.min_age} jaar</span>`
+        : '<span class="car-age unknown">Minimumleeftijd onbekend</span>';
+    const money = (n) => `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+    return `
+      <article class="car-card${cost.allowed === false ? ' blocked' : ''}${inTrip ? ' in-trip' : ''}">
+        <div class="car-head">
+          <span class="car-ic">${ic('car')}</span>
+          <div><h3>${esc(it.title)}</h3>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}</div>
+          ${cheapest ? '<span class="car-best">Goedkoopst</span>' : ''}
+        </div>
+        ${age}
+        <dl class="car-price">
+          <div><dt>Huurprijs</dt><dd>${cost.rent != null ? money(cost.rent) : '–'}</dd></div>
+          ${p.age < 25 ? `<div><dt>Toeslag jonge bestuurder</dt><dd>${it.young_fee ? money(it.young_fee) : it.young_fee === 0 ? 'geen' : 'onbekend'}</dd></div>` : ''}
+          <div class="car-total"><dt>Totaal${p.age < 25 ? ` op ${p.age}` : ''}</dt><dd>${cost.total != null ? money(cost.total) : '–'}</dd></div>
+        </dl>
+        ${it.body ? `<p class="card-text">${esc(it.body)}</p>` : ''}
+        <div class="car-foot">
+          <button type="button" class="btn sm${inTrip ? ' done' : ' primary'}" data-trip-toggle="${it.id}" aria-pressed="${inTrip}">${inTrip ? '✓ In deze reis' : '＋ Aan deze reis toevoegen'}</button>
+          ${link && !link.startsWith('/') ? `<a class="btn sm out-link" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(linkSite(link) || 'Bekijk')} ↗</a>` : ''}
+          <button type="button" class="text-btn" data-car-edit="${it.id}">Aanpassen</button>
+        </div>
+      </article>`;
+  }
+
+  /* --- activiteiten voor een reis --- */
+
+  async function loadTripPlaces() {
+    const t = tripAddTrip();
+    const loc = t && tripLocation(t);
+    if (!loc || !hasPos(loc)) { tripAdd.places = null; renderTripAdd(); return; }
+    const ctx = tripAdd;
+    let places;
+    try { places = await findPlaces(loc, ctx.mode); } catch { places = 'error'; }
+    if (ctx !== tripAdd) return;
+    tripAdd.places = places;
+    if (tripAddDialog.open) renderTripAdd();
+  }
+
+  function tripPlacesHtml(t, kind) {
+    const L = TRIP_ADD[kind];
+    const loc = tripLocation(t);
+    const doItems = sectionsOfKind(kind).flatMap((s) => sortedItems(s));
+    const chosen = doItems.filter((it) => t.item_ids.includes(it.id));
+    const earlier = doItems.filter((it) => !t.item_ids.includes(it.id) && (!it.location_id || (loc && it.location_id === loc.id) || !tripsWithItem(it.id).length));
+    const titles = new Set(chosen.map((it) => it.title));
+    const places = tripAdd.places;
+    let nearby = '';
+    if (places === null) nearby = '<p class="hint">Deze reis heeft geen plek op de kaart, dus er zijn geen suggesties in de buurt.</p>';
+    else if (places === undefined) nearby = '<p class="hint loading-dots">Zoeken in de buurt (de eerste keer kan dit even duren)</p>';
+    else if (places === 'error') nearby = '<p class="hint">OpenStreetMap is nu even te druk. <button type="button" class="text-btn" data-places-retry>Opnieuw proberen</button></p>';
+    else if (!places.length) nearby = `<p class="hint">${L.empty}</p>`;
+    else nearby = resultsHtml(places, 'data-place-add', titles, (x) => `
+      <strong>${esc(x.name)}</strong>
+      <small>${esc(x.type)}${x.cuisine ? ` · ${esc(x.cuisine)}` : ''} · ${kmText(x.km)}</small>
+      <span class="result-links">
+        ${x.website ? `<a href="${esc(x.website)}" target="_blank" rel="noopener">Website ↗</a>` : ''}
+        ${kind === 'eat' ? `<a href="${googleReviewsUrl(x.name, shortName(loc.title))}" target="_blank" rel="noopener">Google-reviews ↗</a>` : ''}
+        <a href="${esc(x.osm)}" target="_blank" rel="noopener">Op OpenStreetMap ↗</a>
+      </span>`);
+    return `
+      ${chosen.length ? `<p class="mini-label">In deze reis</p>
+        <ul class="chosen">${chosen.map((it) => `
+          <li>
+            <button type="button" class="chosen-main" data-do-edit="${it.id}">
+              <span class="chosen-icon">${kindIcon(kind)}</span>
+              <span><strong>${esc(it.title)}</strong>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}</span>
+            </button>
+            ${safeUrl(it.link) && !safeUrl(it.link).startsWith('/') ? `<a class="btn sm out-link" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener noreferrer">${esc(linkSite(it.link) || 'Website')} ↗</a>` : ''}
+            <button type="button" class="icon-btn sm" data-trip-toggle="${it.id}" aria-label="${esc(it.title)} uit deze reis halen">✕</button>
+          </li>`).join('')}</ul>` : `<p class="hint">${L.none}</p>`}
+      <button type="button" class="btn primary block" data-do-new>${ic('plus')} Zelf een ${L.one} invullen</button>
+      ${earlier.length ? `<p class="mini-label">Eerdere suggesties</p>
+        <ul class="results">${earlier.map((it) => `
+          <li class="result"><div class="result-main"><strong>${esc(it.title)}</strong>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}${it.added_by ? `<small>door ${esc(it.added_by)}</small>` : ''}</div>
+            <button type="button" class="btn sm" data-trip-toggle="${it.id}">＋ Kies</button></li>`).join('')}</ul>` : ''}
+      <p class="mini-label">${L.near}${loc ? ` van ${esc(shortName(loc.title))}` : ''}</p>
+      ${nearby}
+      ${Array.isArray(places) && places.length ? '<p class="fineprint">Gegevens: © OpenStreetMap-bijdragers.</p>' : ''}`;
+  }
+
+  // Bediening van het paneel.
+  $('#tripAddBody').addEventListener('click', async (e) => {
+    const t = tripAddTrip();
+    if (!t) return;
+    const el = e.target;
+    if (el.closest('[data-car-new]')) { openCarDialog(null, t.id); return; }
+    const edit = el.closest('[data-car-edit]');
+    if (edit) { openCarDialog(findItem(+edit.dataset.carEdit), t.id); return; }
+    const doEdit = el.closest('[data-do-edit]');
+    if (doEdit) { openItemDialog(findItem(+doEdit.dataset.doEdit)); return; }
+    if (el.closest('[data-do-new]')) {
+      const section = await ensureSection(tripAdd.mode);
+      const loc = tripLocation(t);
+      openItemDialog(null, section.id, { location_id: loc ? loc.id : null, addToTrip: t.id });
+      return;
+    }
+    if (el.closest('[data-places-retry]')) { tripAdd.places = undefined; renderTripAdd(); loadTripPlaces(); return; }
+    const toggle = el.closest('[data-trip-toggle]');
+    const place = el.closest('[data-place-add]');
+    if (toggle || place) {
+      (toggle || place).disabled = true;
+      try {
+        if (toggle) {
+          const id = +toggle.dataset.tripToggle;
+          const on = !t.item_ids.includes(id);
+          await setTripItem(t, id, on);
+          await reload();
+          toast(on ? `Toegevoegd aan ${t.title} ✓` : `Uit ${t.title} gehaald`);
+        } else {
+          const x = tripAdd.places[+place.dataset.placeAdd];
+          const loc = tripLocation(t);
+          const section = await ensureSection(tripAdd.mode);
+          const { id } = await api(`/sections/${section.id}/items`, 'POST', {
+            title: x.name, subtitle: [x.type, x.cuisine].filter(Boolean).join(' · '), body: `${kmText(x.km)} van ${loc.title}.`, link: x.website || x.osm,
+            lat: x.pos[0], lng: x.pos[1], location_id: loc.id, added_by: myName(),
+          });
+          await setTripItem(t, id, true);
+          await reload();
+          toast(`${x.name} toegevoegd ✓`);
+        }
+      } catch (err) { toast(err.message, true); }
+      renderTripAdd();
+      return;
+    }
+    const p = carPrefs();
+    if (el.closest('[data-car-ok]')) { p.onlyOk = !p.onlyOk; saveCarPrefs(p); renderTripAdd(); return; }
+    const sort = el.closest('[data-car-sort]');
+    if (sort) { p.sort = sort.dataset.carSort; saveCarPrefs(p); renderTripAdd(); return; }
+    const step = el.closest('[data-car-age]');
+    if (step) {
+      p.age = Math.min(99, Math.max(18, p.age + +step.dataset.carAge)); saveCarPrefs(p); renderTripAdd();
+    }
+  });
+  let carTimer = null;
+  $('#tripAddBody').addEventListener('input', (e) => {
+    if (e.target.id !== 'carAge') return;
+    clearTimeout(carTimer);
+    carTimer = setTimeout(() => {
+      const a = parseInt(e.target.value, 10);
+      if (!(a >= 18 && a <= 99)) return;
+      const p = carPrefs(); p.age = a; saveCarPrefs(p);
+      const pos = e.target.selectionStart;
+      renderTripAdd();
+      const input = $('#carAge'); input.focus(); try { input.setSelectionRange(pos, pos); } catch { /* number-veld */ }
+    }, 400);
+  });
+  // Na elke wijziging (ook van anderen) het open paneel bijwerken.
+  function refreshTripAdd() {
+    try { if (tripAddDialog.open) renderTripAdd(); } catch { /* paneel nog niet klaar */ }
+  }
+
   /* ---------- ideeën: vakantiepakketten (vlucht + schatting verblijf) voor de groep ---------- */
 
   // Categorieën voor een vriendengroep. 'goedkoop' volgt uit de prijzen; 'kort' en 'ver' uit de vliegtijd.
@@ -2610,6 +3043,12 @@
     Seychellen: 'afrika', 'Verenigde Arabische Emiraten': 'afrika',
   };
   const regionOf = (d) => REGION_OF[d.c] || 'eu';
+  // Keuze voor het verblijf; 'auto' = zo goed als het budget toelaat.
+  const STAY_OPTS = [['budget', 'Voordelig'], ['mid', 'Middenklasse'], ['luxe', 'Luxe'], ['auto', 'Beste binnen budget']];
+  const SORTS = [['match', 'Beste match'], ['price', 'Laagste prijs (vlucht + verblijf)']];
+  // Zoeken zonder hoofdletters en accenten: "malaga" vindt Málaga, "indonesie" vindt Indonesië.
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const searchHit = (d, q) => fold(d.c).includes(q) || fold(d.n).includes(q);
   const PAGE = 12;
   const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
   const euro = (n) => `€ ${Math.round(n).toLocaleString('nl-NL')}`;
@@ -2632,6 +3071,9 @@
     return {
       cats, month: p.month || 'poll', days: +p.days || pollSettings().days, budget: +p.budget || 0,
       region: REGIONS.some(([k]) => k === p.region) ? p.region : 'all',
+      stay: STAY_OPTS.some(([k]) => k === p.stay) ? p.stay : 'mid',
+      sort: SORTS.some(([k]) => k === p.sort) ? p.sort : 'match',
+      q: typeof p.q === 'string' ? p.q.slice(0, 60) : '',
       persons: Math.min(30, Math.max(1, +p.persons || defaultPersons())),
     };
   }
@@ -2685,6 +3127,12 @@
       const stayPP = nightPP * nights;
       return { level, nights, persons: n, nightPP, stayPP, stayGroup: stayPP * n, flightPP: d.f, totalPP: d.f + stayPP, totalGroup: (d.f + stayPP) * n };
     };
+    if (p.stay !== 'auto') {
+      const c = calc(p.stay);
+      return { ...c, over: !!p.budget && c.totalPP > p.budget };
+    }
+    // Bij "laagste prijs" zonder vaste keuze: het voordeligste verblijf.
+    if (p.sort === 'price') return { ...calc('budget'), over: !!p.budget && calc('budget').totalPP > p.budget };
     if (!p.budget) return { ...calc('mid'), over: false };
     for (const level of ['luxe', 'mid', 'budget']) { const c = calc(level); if (c.totalPP <= p.budget) return { ...c, over: false }; }
     return { ...calc('budget'), over: true };
@@ -2696,16 +3144,19 @@
   function rankIdeas(p) {
     const m = ideaMonth(p);
     const wish = p.cats.filter((c) => c !== 'kort' && c !== 'ver');
+    // Zoek je op een land of plek, dan telt alleen dat; regio en wensen bepalen dan alleen de volgorde.
+    const q = fold(p.q);
     const ranked = destinations.map((d) => {
-      if (p.region !== 'all' && regionOf(d) !== p.region) return null;
+      if (q && !searchHit(d, q)) return null;
+      if (!q && p.region !== 'all' && regionOf(d) !== p.region) return null;
       const km = distanceKm(HOME, [d.lat, d.lng]);
       const hours = km / 800 + 0.5;
-      if (p.cats.includes('kort') && hours > 3.5) return null;
-      if (p.cats.includes('ver') && hours < 6) return null;
+      if (!q && p.cats.includes('kort') && hours > 3.5) return null;
+      if (!q && p.cats.includes('ver') && hours < 6) return null;
       const tags = tagsOf(d);
       const matched = wish.filter((c) => tags.includes(c));
-      if (wish.length && !matched.length) return null;
-      if (wish.includes('wintersport') && !tags.includes('wintersport')) return null;
+      if (!q && wish.length && !matched.length) return null;
+      if (!q && wish.includes('wintersport') && !tags.includes('wintersport')) return null;
       const cost = ideaCost(d, p);
       if (cost.over && cost.totalPP > p.budget * 1.15) return null;
       const match = wish.length ? matched.length / wish.length : 0.6;
@@ -2714,7 +3165,10 @@
       score += groupScoreDelta(d, hours);
       if (cost.over) score -= 0.15;
       return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), pin: nearbyPin(d) };
-    }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP);
+    }).filter(Boolean);
+    // Laagste prijs: gewoon van goedkoop naar duur, zonder spreiding over landen.
+    if (p.sort === 'price') return ranked.sort((a, b) => a.cost.totalPP - b.cost.totalPP || b.score - a.score);
+    ranked.sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP);
     // Spreiding: bovenaan hooguit twee per land, de rest schuift door naar achteren.
     const perCountry = new Map();
     const first = [];
@@ -2747,6 +3201,12 @@
         <h2>Ideeën</h2>
         <p class="section-intro">Met hoeveel zijn jullie en waar hebben jullie zin in? Je krijgt bestemmingen met een vlucht vanaf Schiphol en een schatting van het verblijf voor de hele groep.</p>
       </div>
+      <div class="idea-search">
+        ${ic('search')}
+        <input id="ideaSearch" type="search" aria-label="Zoek een land of plek" list="ideaPlaces" placeholder="Zoek een land of plek, bijv. Spanje of Bali" value="${esc(p.q)}" autocomplete="off" enterkeyhint="search">
+        <button type="button" class="icon-btn sm" data-idea-clear aria-label="Zoekopdracht wissen"${p.q ? '' : ' hidden'}>✕</button>
+        <datalist id="ideaPlaces"></datalist>
+      </div>
       <div class="idea-opts">
         <label class="idea-when">Wanneer<select id="ideaMonth">${monthOptions(p)}</select></label>
         <label>Personen
@@ -2759,7 +3219,15 @@
         <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
         <label><span>Budget p.p. <small>incl. verblijf</small></span><span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
       </div>
-      <p class="mini-label idea-cats-label">Waar naartoe?</p>
+      <p class="mini-label idea-cats-label">Verblijf</p>
+      <div class="idea-cats" role="radiogroup" aria-label="Verblijf">
+        ${STAY_OPTS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-stay="${k}" aria-checked="${p.stay === k}" aria-pressed="${p.stay === k}">${esc(label)}</button>`).join('')}
+      </div>
+      <p class="mini-label idea-cats-label">Sorteren</p>
+      <div class="idea-cats" role="radiogroup" aria-label="Sorteren">
+        ${SORTS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-sort="${k}" aria-checked="${p.sort === k}" aria-pressed="${p.sort === k}">${esc(label)}</button>`).join('')}
+      </div>
+      <p class="mini-label idea-cats-label">Waar naartoe?${p.q ? ' <small class="idea-q-note">(zoekopdracht gaat voor)</small>' : ''}</p>
       <div class="idea-cats idea-regions" role="radiogroup" aria-label="Regio">
         ${REGIONS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-region="${k}" aria-checked="${p.region === k}" aria-pressed="${p.region === k}">${esc(label)}</button>`).join('')}
       </div>
@@ -2778,6 +3246,21 @@
     const all = rankIdeas(p);
     ideaCtx.list = all.slice(0, ideaCtx.limit);
     const m = ideaMonth(p);
+    const dl = $('#ideaPlaces');
+    if (dl && !dl.childElementCount) {
+      const names = [...new Set(destinations.map((d) => d.c))].sort((a, b) => a.localeCompare(b, 'nl'));
+      dl.innerHTML = names.map((n) => `<option value="${esc(n)}">`).join('');
+    }
+    if (p.q) {
+      const n = all.length;
+      box.innerHTML = `
+        <p class="hint">${n ? `${n} ${n === 1 ? 'bestemming' : 'bestemmingen'} voor “${esc(p.q)}”${p.sort === 'price' ? ', goedkoopste eerst' : ''}.` : ''}</p>
+        ${ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')}
+        ${!n ? `<div class="empty"><p>Geen bestemming gevonden voor “${esc(p.q)}”${p.budget ? ' binnen het budget' : ''}. ${p.budget ? 'Verhoog het budget of kies een ander verblijf. ' : ''}Staat het niet in de lijst? <a href="#kaart">Zoek het op de kaart</a> en zet het daar neer.</p></div>` : ''}
+        ${all.length > ideaCtx.list.length ? `<button type="button" class="btn block idea-more" data-idea-more>Meer bestemmingen tonen (nog ${all.length - ideaCtx.list.length})</button>` : ''}`;
+      ideaCtx.list.forEach((x, i) => fillPackage(x, i));
+      return;
+    }
     box.innerHTML = `
       ${!p.cats.length ? '<p class="hint">Nog niets aangetikt: dit zijn bestemmingen met lekker weer in die periode. Tik hierboven aan waar jullie zin in hebben voor betere tips.</p>' : ''}
       ${ideaCtx.list.length ? ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')
@@ -2932,6 +3415,26 @@
       renderIdeaResults();
       return;
     }
+    const choice = e.target.closest('[data-stay], [data-sort]');
+    if (choice) {
+      const key = choice.dataset.stay ? 'stay' : 'sort';
+      const p = ideaPrefs();
+      p[key] = choice.dataset[key];
+      saveIdeaPrefs(p);
+      $$(`[data-${key}]`).forEach((b) => { const on = b.dataset[key] === p[key]; b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-checked', String(on)); });
+      ideaCtx.limit = PAGE;
+      renderIdeaResults();
+      return;
+    }
+    if (e.target.closest('[data-idea-clear]')) {
+      const p = ideaPrefs(); p.q = ''; saveIdeaPrefs(p);
+      $('#ideaSearch').value = '';
+      e.target.closest('[data-idea-clear]').hidden = true;
+      $('.idea-q-note')?.remove();
+      ideaCtx.limit = PAGE;
+      renderIdeaResults();
+      return;
+    }
     if (e.target.closest('[data-idea-more]')) {
       const y = window.scrollY;
       ideaCtx.limit += PAGE;
@@ -2973,6 +3476,20 @@
   });
   let ideaTimer = null;
   document.addEventListener('input', (e) => {
+    if (e.target.id === 'ideaSearch') {
+      clearTimeout(ideaTimer);
+      ideaTimer = setTimeout(() => {
+        const p = ideaPrefs();
+        p.q = e.target.value.trim().slice(0, 60);
+        saveIdeaPrefs(p);
+        $('[data-idea-clear]').hidden = !p.q;
+        const label = $('.idea-regions')?.previousElementSibling;
+        if (label) label.innerHTML = `Waar naartoe?${p.q ? ' <small class="idea-q-note">(zoekopdracht gaat voor)</small>' : ''}`;
+        ideaCtx.limit = PAGE;
+        renderIdeaResults();
+      }, 250);
+      return;
+    }
     if (!['ideaDays', 'ideaBudget', 'ideaPersons'].includes(e.target.id)) return;
     clearTimeout(ideaTimer);
     ideaTimer = setTimeout(() => {
@@ -3840,7 +4357,7 @@
     ticking = true;
     const teamId = session.teamId;
     try {
-      const [{ messages }, { teams }] = await Promise.all([
+      const [{ messages, removed = [], unref = [] }, { teams }] = await Promise.all([
         api(`/messages${chat.loaded ? `?after=${chat.lastId}` : ''}`),
         api('/unread'),
       ]);
@@ -3849,11 +4366,17 @@
       const fresh = chat.loaded ? messages : [];
       if (chat.loaded) chat.messages.push(...messages); else { chat.messages = messages; chat.loaded = true; }
       if (messages.length) chat.lastId = messages[messages.length - 1].id;
+      // Berichten over een verwijderde pin of reis zijn op de server opgeruimd: hier ook weghalen.
+      const gone = new Set(removed);
+      const noRef = new Set(unref);
+      let changed = false;
+      if (gone.size && chat.messages.some((m) => gone.has(m.id))) { chat.messages = chat.messages.filter((m) => !gone.has(m.id)); changed = true; }
+      for (const m of chat.messages) if (noRef.has(m.id) && m.ref_type) { m.ref_type = null; m.ref_id = null; changed = true; }
       for (const t of teams) { const own = session.teams.find((x) => x.id === t.id); if (own) own.unread = t.unread; }
       // Iemand anders zette iets op de kaart, stelde een reis voor of begon een stemronde: inhoud verversen.
       if (fresh.some((m) => m.kind === 'event' && m.user_id !== session.user.id)) reloadSoon();
       if (currentRoute() === 'chat') {
-        if (first || fresh.length) renderChat();
+        if (first || fresh.length || changed) renderChat();
         markRead();
       }
       updateBadges();

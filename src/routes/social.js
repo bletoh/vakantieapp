@@ -207,6 +207,34 @@ function refOk(teamId, type, id) {
   return REF_TYPES[type] && !!db.prepare(`SELECT 1 FROM ${REF_TYPES[type]} WHERE id = ? AND team_id = ?`).get(id, teamId);
 }
 
+// Opruimen: berichten over een pin, reis of stemronde die verwijderd is, verdwijnen na een minuut.
+// Een automatische melding (of een gedeelde pin zonder tekst) gaat helemaal weg; bij een bericht
+// met eigen tekst blijft de tekst staan en verdwijnt alleen het kaartje.
+const GONE_REF = `ref_type IS NOT NULL AND (
+  (ref_type = 'item' AND NOT EXISTS (SELECT 1 FROM items WHERE items.id = messages.ref_id))
+  OR (ref_type = 'trip' AND NOT EXISTS (SELECT 1 FROM trips WHERE trips.id = messages.ref_id))
+  OR (ref_type = 'poll' AND NOT EXISTS (SELECT 1 FROM polls WHERE polls.id = messages.ref_id)))`;
+const markGone = db.prepare(`UPDATE messages SET gone_at = datetime('now') WHERE gone_at IS NULL AND ${GONE_REF}`);
+const expired = db.prepare(`SELECT id, team_id, kind, body FROM messages WHERE gone_at <= datetime('now', '-1 minute')`);
+const delMsg = db.prepare('DELETE FROM messages WHERE id = ?');
+const unrefMsg = db.prepare('UPDATE messages SET ref_type = NULL, ref_id = NULL, gone_at = NULL WHERE id = ?');
+// Wat er de laatste tien minuten is opgeruimd, zodat open chats het ook weghalen.
+const cleaned = [];
+function cleanupMessages() {
+  markGone.run();
+  const now = Date.now();
+  db.transaction(() => {
+    for (const m of expired.all()) {
+      const drop = m.kind === 'event' || !m.body.trim();
+      (drop ? delMsg : unrefMsg).run(m.id);
+      cleaned.push({ team: m.team_id, id: m.id, drop, at: now });
+    }
+  })();
+  while (cleaned.length && cleaned[0].at < now - 10 * 60 * 1000) cleaned.shift();
+}
+cleanupMessages();
+setInterval(cleanupMessages, 15 * 1000).unref();
+
 // Nieuwe berichten sinds `after`; zonder `after` de laatste 100.
 team.get('/messages', (req, res) => {
   const after = parseInt(req.query.after, 10) || 0;
@@ -215,7 +243,8 @@ team.get('/messages', (req, res) => {
         WHERE g.team_id = ? AND g.id > ? ORDER BY g.id LIMIT 200`).all(req.team.id, after)
     : db.prepare(`SELECT * FROM (SELECT g.*, u.name FROM messages g LEFT JOIN users u ON u.id = g.user_id
         WHERE g.team_id = ? ORDER BY g.id DESC LIMIT 100) ORDER BY id`).all(req.team.id);
-  res.json({ messages: rows });
+  const mine = cleaned.filter((c) => c.team === req.team.id);
+  res.json({ messages: rows, removed: mine.filter((c) => c.drop).map((c) => c.id), unref: mine.filter((c) => !c.drop).map((c) => c.id) });
 });
 
 team.post('/messages', (req, res) => {

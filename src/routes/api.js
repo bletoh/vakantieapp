@@ -14,8 +14,8 @@ const SETTING_KEYS = [
   'poll_start', 'poll_end', 'trip_days',
 ];
 const SECTION_FIELDS = ['title', 'icon', 'intro', 'show_price', 'kind'];
-const SECTION_KINDS = ['', 'map', 'flight', 'stay', 'do', 'eat'];
-const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons', 'added_by', 'lat', 'lng', 'location_id'];
+const SECTION_KINDS = ['', 'map', 'flight', 'stay', 'do', 'eat', 'car'];
+const ITEM_FIELDS = ['title', 'subtitle', 'body', 'image', 'link', 'price', 'rating', 'pros', 'cons', 'added_by', 'lat', 'lng', 'location_id', 'min_age', 'young_fee'];
 
 function pick(body, fields) {
   const out = {};
@@ -27,6 +27,14 @@ function normalizeItem(data, teamId) {
   if ('rating' in data) {
     const r = parseInt(data.rating, 10);
     data.rating = r >= 1 && r <= 5 ? r : null;
+  }
+  if ('min_age' in data) {
+    const a = parseInt(data.min_age, 10);
+    data.min_age = a >= 16 && a <= 99 ? a : null;
+  }
+  if ('young_fee' in data) {
+    const f = parseFloat(String(data.young_fee ?? '').replace(',', '.'));
+    data.young_fee = Number.isFinite(f) && f >= 0 ? Math.round(f * 100) / 100 : null;
   }
   for (const k of ['lat', 'lng']) {
     if (k in data) {
