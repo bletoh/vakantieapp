@@ -421,7 +421,10 @@
       c.flightPP = f.price;
       x.real.flight = flight;
       $('.pkg-flight-label', card).innerHTML = `retour, ${n} ${n === 1 ? 'persoon' : 'personen'} · <span class="real">echte prijs</span> ${esc(flightNote(f, flight.approx))}`;
-      if (x.iatas[0] !== flight.destination) $('.pkg-flight', card).textContent = `${HOME_CODE} → ${flight.destination} · goedkoopste vliegveld in de buurt`;
+      if (x.iatas[0] !== flight.destination) {
+        const ap = (ideaCtx.airports.get(x.d.n) || []).find((y) => y.iata === flight.destination);
+        $('.pkg-flight', card).textContent = `${HOME_CODE} → ${flight.destination} · goedkoper${ap && ap.drive != null ? `, ${driveText(ap.drive)} rijden naar ${x.d.n}` : ''}`;
+      }
       $('.pkg-flight-price', card).textContent = euro(f.price * n);
       if (f.link) $('.pkg-flight-links', card).insertAdjacentHTML('afterbegin', `<a href="${esc(f.link)}" target="_blank" rel="noopener">Deze vlucht (${esc(f.airline)}) ↗</a> `);
     }

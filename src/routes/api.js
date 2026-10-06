@@ -6,6 +6,7 @@ const db = require('../db');
 const { nearby } = require('../nearby');
 const { linkInfo, saveImage } = require('../linkinfo');
 const prices = require('../prices');
+const { driveMinutes } = require('../drive');
 
 const router = express.Router();
 
@@ -413,6 +414,18 @@ router.get('/prices/flight', async (req, res, next) => {
     if (err.status) return next(err);
     console.error('prijzen vlucht', err.message);
     res.status(502).json({ error: 'Vluchtprijzen zijn nu even niet bereikbaar' });
+  }
+});
+
+// Rijtijden van een plek naar een paar punten (vliegvelden), in minuten; null = niet over de weg bereikbaar.
+router.post('/drive', async (req, res) => {
+  const ok = (p) => Array.isArray(p) && Math.abs(+p[0]) <= 90 && Math.abs(+p[1]) <= 180;
+  const from = req.body.from;
+  const to = Array.isArray(req.body.to) ? req.body.to.slice(0, 10) : [];
+  if (!ok(from) || !to.length || !to.every(ok)) return res.status(400).json({ error: 'Ongeldige punten' });
+  try { res.json({ minutes: await driveMinutes(from, to) }); } catch (err) {
+    console.error('rijtijd', err.message);
+    res.status(502).json({ error: 'Rijtijden zijn nu even niet bereikbaar' });
   }
 });
 
