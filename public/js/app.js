@@ -3924,7 +3924,7 @@
     ticking = true;
     const teamId = session.teamId;
     try {
-      const [{ messages }, { teams }] = await Promise.all([
+      const [{ messages, removed = [], unref = [] }, { teams }] = await Promise.all([
         api(`/messages${chat.loaded ? `?after=${chat.lastId}` : ''}`),
         api('/unread'),
       ]);
@@ -3933,11 +3933,17 @@
       const fresh = chat.loaded ? messages : [];
       if (chat.loaded) chat.messages.push(...messages); else { chat.messages = messages; chat.loaded = true; }
       if (messages.length) chat.lastId = messages[messages.length - 1].id;
+      // Berichten over een verwijderde pin of reis zijn op de server opgeruimd: hier ook weghalen.
+      const gone = new Set(removed);
+      const noRef = new Set(unref);
+      let changed = false;
+      if (gone.size && chat.messages.some((m) => gone.has(m.id))) { chat.messages = chat.messages.filter((m) => !gone.has(m.id)); changed = true; }
+      for (const m of chat.messages) if (noRef.has(m.id) && m.ref_type) { m.ref_type = null; m.ref_id = null; changed = true; }
       for (const t of teams) { const own = session.teams.find((x) => x.id === t.id); if (own) own.unread = t.unread; }
       // Iemand anders zette iets op de kaart, stelde een reis voor of begon een stemronde: inhoud verversen.
       if (fresh.some((m) => m.kind === 'event' && m.user_id !== session.user.id)) reloadSoon();
       if (currentRoute() === 'chat') {
-        if (first || fresh.length) renderChat();
+        if (first || fresh.length || changed) renderChat();
         markRead();
       }
       updateBadges();

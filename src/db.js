@@ -298,6 +298,9 @@ function getPolls(teamId) {
 
 const teamSetting = (teamId, key) => (db.prepare('SELECT value FROM team_settings WHERE team_id = ? AND key = ?').get(teamId, key) || {}).value || '';
 
+// Wanneer de pin, reis of stemronde van een bericht verwijderd is (daarna gaat het bericht weg).
+if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'gone_at')) db.exec('ALTER TABLE messages ADD COLUMN gone_at TEXT');
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;
