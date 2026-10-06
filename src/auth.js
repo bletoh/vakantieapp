@@ -8,7 +8,10 @@ const YEAR = 365 * 24 * 3600;
 const MIN_PASSWORD = 8;
 
 // Verlopen sessies (cookie is een jaar geldig) uit de database halen, bij de start en daarna dagelijks.
-const purgeSessions = () => db.prepare("DELETE FROM sessions WHERE created_at < datetime('now', '-365 days')").run();
+const purgeSessions = () => {
+  db.prepare("DELETE FROM sessions WHERE created_at < datetime('now', '-365 days')").run();
+  db.prepare('DELETE FROM password_resets WHERE expires_at < ?').run(Date.now() - 24 * 3600e3);
+};
 purgeSessions();
 setInterval(purgeSessions, 24 * 3600e3).unref();
 

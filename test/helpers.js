@@ -11,11 +11,11 @@ function freePort() {
   });
 }
 
-async function startServer() {
+async function startServer(extraEnv = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-test-'));
   const port = await freePort();
   const proc = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'server.js')], {
-    env: { ...process.env, DATA_DIR: dir, PORT: String(port) },
+    env: { ...process.env, DATA_DIR: dir, PORT: String(port), ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
@@ -31,8 +31,11 @@ async function startServer() {
     dataDir: dir,
     log: () => log,
     async stop() {
-      proc.kill('SIGTERM');
-      await new Promise((r) => proc.once('exit', r));
+      if (proc.exitCode === null && proc.signalCode === null) {
+        const exited = new Promise((r) => proc.once('exit', r));
+        proc.kill('SIGTERM');
+        await exited;
+      }
       fs.rmSync(dir, { recursive: true, force: true });
     },
   };

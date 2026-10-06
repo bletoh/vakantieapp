@@ -301,6 +301,18 @@ function getPolls(teamId) {
 
 const teamSetting = (teamId, key) => (db.prepare('SELECT value FROM team_settings WHERE team_id = ? AND key = ?').get(teamId, key) || {}).value || '';
 
+// E-mailadres (optioneel) voor wachtwoord-herstel, en eenmalige herstelcodes (alleen de hash wordt bewaard).
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'email')) db.exec('ALTER TABLE users ADD COLUMN email TEXT');
+db.exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users (email COLLATE NOCASE) WHERE email IS NOT NULL;
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0
+);
+`);
+
 // Wanneer de pin, reis of stemronde van een bericht verwijderd is (daarna gaat het bericht weg).
 if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'gone_at')) db.exec('ALTER TABLE messages ADD COLUMN gone_at TEXT');
 

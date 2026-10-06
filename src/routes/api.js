@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const db = require('../db');
 const { nearby } = require('../nearby');
 const { linkInfo, saveImage } = require('../linkinfo');
+const prices = require('../prices');
 
 const router = express.Router();
 
@@ -391,6 +392,27 @@ router.get('/nearby/:kind', async (req, res, next) => {
   } catch (err) {
     console.error('nearby', err.message);
     res.status(err.status || 502).json({ error: 'OpenStreetMap is even niet bereikbaar' });
+  }
+});
+
+/* ---------- echte prijzen ---------- */
+
+// Welke echte prijzen zijn er? (vluchten alleen met een Travelpayouts-token)
+router.get('/prices/status', (req, res) => res.json({ stays: true, flights: prices.flightsEnabled() }));
+
+router.get('/prices/stay', async (req, res, next) => {
+  try { res.json(await prices.stayPrices(req.query)); } catch (err) {
+    if (err.status) return next(err);
+    console.error('prijzen verblijf', err.message);
+    res.status(502).json({ error: 'Airbnb is nu even niet bereikbaar' });
+  }
+});
+
+router.get('/prices/flight', async (req, res, next) => {
+  try { res.json(await prices.flightPrices({ destination: req.query.destination, depart: req.query.depart, ret: req.query.ret })); } catch (err) {
+    if (err.status) return next(err);
+    console.error('prijzen vlucht', err.message);
+    res.status(502).json({ error: 'Vluchtprijzen zijn nu even niet bereikbaar' });
   }
 });
 

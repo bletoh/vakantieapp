@@ -3,10 +3,21 @@ const express = require('express');
 const crypto = require('crypto');
 const db = require('../db');
 const auth = require('../auth');
+const mail = require('../mail');
 
 const router = express.Router();
 
 const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} ._'-]{0,29}$/u;
+const EMAIL_RE = /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,}$/i;
+
+// Optioneel e-mailadres controleren: '' = geen, anders geldig en nog niet in gebruik.
+function cleanEmail(raw, userId = 0) {
+  const email = String(raw || '').trim();
+  if (!email) return null;
+  if (!EMAIL_RE.test(email)) throw fail(400, 'Dat e-mailadres klopt niet');
+  if (db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE AND id != ?').get(email, userId)) throw fail(409, 'Dit e-mailadres hoort al bij een ander account');
+  return email;
+}
 
 function fail(status, message, code) {
   const err = new Error(message);
@@ -39,9 +50,10 @@ router.post('/auth/register', (req, res) => {
   if (!NAME_RE.test(name)) throw fail(400, 'Kies een naam van 1 tot 30 letters of cijfers');
   if (password.length < auth.MIN_PASSWORD) throw fail(400, `Kies een wachtwoord van minstens ${auth.MIN_PASSWORD} tekens`);
   if (db.prepare('SELECT 1 FROM users WHERE name = ?').get(name)) throw fail(409, 'Deze naam is al bezet. Log in, of kies een andere naam.');
-  const id = db.prepare('INSERT INTO users (name, pass_hash) VALUES (?, ?)').run(name, auth.hashPassword(password)).lastInsertRowid;
+  const email = cleanEmail(req.body.email);
+  const id = db.prepare('INSERT INTO users (name, pass_hash, email) VALUES (?, ?, ?)').run(name, auth.hashPassword(password), email).lastInsertRowid;
   auth.startSession(req, res, id);
-  res.json({ user: { id, name }, teams: [] });
+  res.json({ user: { id, name, email: email || '' }, teams: [] });
 });
 
 router.post('/auth/login', (req, res) => {
@@ -56,7 +68,7 @@ router.post('/auth/login', (req, res) => {
   }
   auth.clearFails(keys);
   auth.startSession(req, res, user.id);
-  res.json({ user: { id: user.id, name: user.name }, teams: teamsOf(user.id) });
+  res.json({ user: { id: user.id, name: user.name, email: user.email || '' }, teams: teamsOf(user.id) });
 });
 
 router.post('/auth/logout', (req, res) => {
@@ -77,7 +89,70 @@ router.get('/invite/:code', (req, res) => {
 // Wie ben ik? Zonder sessie gewoon `user: null` (geen foutmelding in de console).
 router.get('/auth/me', (req, res) => {
   const user = auth.userFromRequest(req);
-  res.json({ user, teams: user ? teamsOf(user.id) : [] });
+  if (user) user.email = (db.prepare('SELECT email FROM users WHERE id = ?').get(user.id) || {}).email || '';
+  res.json({ user, teams: user ? teamsOf(user.id) : [], mail: mail.mailEnabled() });
+});
+
+/* ---------- wachtwoord vergeten (via e-mail) ---------- */
+
+const RESET_TTL = 60 * 60e3; // een uur
+const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
+// Hooguit 5 aanvragen per uur per IP en 3 per account, zodat niemand iemands inbox kan volspammen.
+const forgotLog = new Map();
+function forgotAllowed(key, max) {
+  const now = Date.now();
+  const list = (forgotLog.get(key) || []).filter((t) => now - t < 3600e3);
+  if (list.length >= max) return false;
+  list.push(now);
+  forgotLog.set(key, list);
+  return true;
+}
+// Het adres in de mail komt uit PUBLIC_URL (niet uit de Host-header, die kan iemand vervalsen).
+const publicUrl = (req) => (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+
+// Express 4 vangt fouten in async-routes niet zelf op; deze helper geeft ze door aan de foutafhandeling.
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+router.post('/auth/forgot', wrap(async (req, res) => {
+  const who = String(req.body.who || '').trim();
+  const answer = { ok: true, message: 'Als er een e-mailadres bij dit account hoort, is er een mail onderweg met een link om een nieuw wachtwoord te kiezen. Geen mail gekregen? Kijk in je spam, of vraag de beheerder van je groep om een tijdelijk wachtwoord.' };
+  if (!mail.mailEnabled()) throw fail(400, 'Herstellen via e-mail staat niet aan. Vraag de beheerder van je groep om een tijdelijk wachtwoord.');
+  if (!who) throw fail(400, 'Vul je naam of e-mailadres in');
+  if (!forgotAllowed(`ip:${req.ip}`, 5)) throw fail(429, 'Te veel aanvragen. Probeer het over een uur opnieuw.');
+  const user = db.prepare('SELECT * FROM users WHERE (name = ? OR email = ? COLLATE NOCASE) AND email IS NOT NULL').get(who, who);
+  if (!user || !forgotAllowed(`u:${user.id}`, 3)) return res.json(answer);
+  const token = crypto.randomBytes(32).toString('base64url');
+  db.prepare('INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)').run(sha(token), user.id, Date.now() + RESET_TTL);
+  const link = `${publicUrl(req)}/reset/${token}`;
+  try {
+    await mail.sendMail({
+      to: user.email,
+      subject: 'Nieuw wachtwoord voor de Vakantieplanner',
+      text: `Hoi ${user.name},\n\nJe (of iemand anders) vroeg een nieuw wachtwoord aan voor de Vakantieplanner.\nKies een nieuw wachtwoord via deze link (een uur geldig, één keer te gebruiken):\n\n${link}\n\nHeb je dit niet zelf aangevraagd? Dan kun je deze mail negeren; je wachtwoord blijft hetzelfde.`,
+      html: `<p>Hoi ${user.name.replace(/[<>&"]/g, '')},</p><p>Je (of iemand anders) vroeg een nieuw wachtwoord aan voor de Vakantieplanner.</p><p><a href="${link}" style="display:inline-block;padding:10px 18px;background:#e0245e;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Nieuw wachtwoord kiezen</a></p><p style="color:#6a6a6a">De link is een uur geldig en werkt één keer. Heb je dit niet zelf aangevraagd? Dan kun je deze mail negeren; je wachtwoord blijft hetzelfde.</p>`,
+    });
+  } catch (err) {
+    console.error(new Date().toISOString(), 'mail versturen mislukt', err.message);
+    throw fail(502, 'De mail kon niet worden verstuurd. Probeer het later, of vraag de beheerder om een tijdelijk wachtwoord.');
+  }
+  res.json(answer);
+}));
+
+router.post('/auth/reset', (req, res) => {
+  const token = String(req.body.token || '');
+  const password = String(req.body.password || '');
+  const row = token && db.prepare('SELECT * FROM password_resets WHERE token_hash = ?').get(sha(token));
+  if (!row || row.used || row.expires_at < Date.now()) throw fail(400, 'Deze link werkt niet (meer). Vraag een nieuwe aan via "Wachtwoord vergeten".');
+  if (password.length < auth.MIN_PASSWORD) throw fail(400, `Kies een wachtwoord van minstens ${auth.MIN_PASSWORD} tekens`);
+  db.transaction(() => {
+    db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(auth.hashPassword(password), row.user_id);
+    // Alle herstellinks van dit account vervallen, en overal uitloggen.
+    db.prepare('UPDATE password_resets SET used = 1 WHERE user_id = ?').run(row.user_id);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(row.user_id);
+  })();
+  auth.startSession(req, res, row.user_id);
+  const user = db.prepare("SELECT id, name, COALESCE(email, '') AS email FROM users WHERE id = ?").get(row.user_id);
+  res.json({ user, teams: teamsOf(user.id) });
 });
 
 router.use(auth.requireUser);
@@ -105,6 +180,15 @@ router.delete('/auth/account', (req, res) => {
   db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
   auth.endSession(req, res);
   res.json({ ok: true });
+});
+
+// E-mailadres voor wachtwoord-herstel instellen of weghalen (wachtwoord nodig).
+router.put('/auth/email', (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!auth.checkPassword(String(req.body.password || ''), user.pass_hash)) throw fail(400, 'Je wachtwoord klopt niet');
+  const email = cleanEmail(req.body.email, user.id);
+  db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email, user.id);
+  res.json({ ok: true, email: email || '' });
 });
 
 /* ---------- groepen ---------- */

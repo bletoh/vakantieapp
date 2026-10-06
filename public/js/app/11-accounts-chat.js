@@ -57,12 +57,15 @@
       <form id="authForm" class="gate-form" novalidate>
         <label>Je naam<input name="name" maxlength="30" required autocomplete="username" autocapitalize="words" enterkeyhint="next"
           placeholder="${reg ? 'Hoe noemen je vrienden je?' : ''}"></label>
+        ${reg ? `<label>E-mail <small>(optioneel, voor als je je wachtwoord vergeet)</small><input name="email" type="email" maxlength="200" autocomplete="email" inputmode="email" enterkeyhint="next"></label>` : ''}
         <label>Wachtwoord<input name="password" type="password" minlength="6" required
           autocomplete="${reg ? 'new-password' : 'current-password'}" enterkeyhint="go" placeholder="${reg ? 'Minstens 8 tekens' : ''}"></label>
         <p class="form-error" id="authError" hidden></p>
         <button type="submit" class="btn primary block">${reg ? 'Account maken' : 'Inloggen'}</button>
       </form>
-      <p class="hint">${reg ? 'Je naam staat bij je pinnen, reizen, stemmen en berichten.' : 'Wachtwoord vergeten? Vraag de beheerder van je groep om een tijdelijk wachtwoord.'}</p>
+      <p class="hint">${reg ? 'Je naam staat bij je pinnen, reizen, stemmen en berichten.' : session.mail
+        ? '<button type="button" class="text-btn" data-forgot>Wachtwoord vergeten?</button>'
+        : 'Wachtwoord vergeten? Vraag de beheerder van je groep om een tijdelijk wachtwoord.'}</p>
       <p class="fineprint"><a href="/privacy" target="_blank" rel="noopener">Privacy: wat we bewaren</a></p>`);
     const first = $('#authForm input[name="name"]');
     if (first && !isPhone()) first.focus();
@@ -99,6 +102,7 @@
 
   async function signedIn({ user, teams }) {
     session.user = user;
+    session.email = user.email || '';
     session.teams = teams;
     if (invite && !invite.error) {
       if (invite.member || teams.some((t) => t.id === invite.id)) {
@@ -170,6 +174,25 @@
       } catch (err) { toast(err.message, true); }
       return;
     }
+    if (e.target.closest('[data-forgot]')) {
+      const who = prompt('Je naam of e-mailadres');
+      if (!who) return;
+      try { const r = await api('/auth/forgot', 'POST', { who }); alert(r.message); } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (e.target.closest('[data-email]')) {
+      const email = prompt('E-mailadres voor wachtwoord-herstel (leeg laten om het weg te halen)', session.email || '');
+      if (email == null) return;
+      const password = prompt('Typ je wachtwoord om dit te bevestigen');
+      if (password == null) return;
+      try {
+        const r = await api('/auth/email', 'PUT', { email, password });
+        session.email = r.email;
+        toast(r.email ? 'E-mailadres opgeslagen ✓' : 'E-mailadres weggehaald');
+        renderPanel();
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     if (e.target.closest('[data-account-delete]')) {
       if (!confirm('Je account definitief verwijderen? Je naam, wachtwoord en voorkeuren worden gewist en je verlaat al je groepen. Je chatberichten blijven staan zonder naam.')) return;
       const password = prompt('Typ je wachtwoord om het account te verwijderen');
@@ -199,7 +222,7 @@
       btn.disabled = true;
       try {
         const res = await api(`/auth/${authMode === 'register' ? 'register' : 'login'}`, 'POST',
-          { name: f.elements.name.value.trim(), password: f.elements.password.value });
+          { name: f.elements.name.value.trim(), password: f.elements.password.value, ...(f.elements.email ? { email: f.elements.email.value.trim() } : {}) });
         await signedIn(res);
       } catch (ex) {
         err.textContent = ex.message;
@@ -580,6 +603,8 @@
         <button type="button" class="btn sm ghost" data-logout>Uitloggen</button>
         <button type="button" class="btn sm ghost danger" data-group-leave>Groep verlaten</button>
       </div>
+      <div class="account-email"><span>E-mail voor wachtwoord-herstel: <strong>${session.email ? esc(session.email) : 'nog niet ingesteld'}</strong></span>
+        <button type="button" class="btn sm ghost" data-email>${session.email ? 'Wijzigen' : 'Instellen'}</button></div>
       <p class="fineprint account-links"><a href="/privacy" target="_blank" rel="noopener">Privacy: wat we bewaren</a> · <button type="button" class="text-btn danger" data-account-delete>Account verwijderen</button></p>`;
   }
 

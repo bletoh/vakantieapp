@@ -389,6 +389,35 @@
     }).join('')}</ul>`;
   }
 
+  // Echte Airbnb-prijzen voor de datums van de reis en de groepsgrootte (uit Ideeën).
+  function airbnbHtml(loc, p, titles) {
+    if (!hasPos(loc)) return '';
+    const t = p.trip;
+    if (!t || !t.start_date) return '<p class="hint">Kies eerst een datum, dan zie je hier echte Airbnb-prijzen voor jullie groep.</p>';
+    const n = ideaPrefs().persons;
+    const checkout = t.end_date > t.start_date ? t.end_date : addDays(t.start_date, 1);
+    const key = `${loc.id}|${t.start_date}|${checkout}|${n}`;
+    if (pinCtx.airbnbKey !== key) {
+      pinCtx.airbnbKey = key;
+      pinCtx.airbnb = undefined;
+      const qs = new URLSearchParams({ lat: loc.lat, lng: loc.lng, checkin: t.start_date, checkout, adults: n });
+      queueMicrotask(() => loadPinData('airbnb', () => api(`/prices/stay?${qs}`)));
+    }
+    const r = pinCtx.airbnb;
+    const head = `<p class="hint airbnb-for">Hele woningen voor <strong>${n} ${n === 1 ? 'persoon' : 'personen'}</strong>, ${shortRange(t.start_date, t.end_date)}. <small>Groepsgrootte pas je aan bij Ideeën.</small></p>`;
+    if (r === undefined || r === 'loading') return `${head}<p class="hint loading-dots">Echte prijzen ophalen bij Airbnb</p>`;
+    if (r === 'error') return `${head}<p class="hint">Airbnb is nu even niet bereikbaar. <button type="button" class="text-btn" data-airbnb-retry>Opnieuw proberen</button></p>`;
+    if (!r.listings.length) return `${head}<p class="hint">Geen woningen gevonden voor ${n} personen op deze datums. <a href="${esc(r.url)}" target="_blank" rel="noopener">Zelf zoeken op Airbnb ↗</a></p>`;
+    return `${head}
+      <p class="airbnb-levels">Vanaf <strong>€ ${r.levels.min.toLocaleString('nl-NL')}</strong> · meestal € ${r.levels.mid.toLocaleString('nl-NL')} voor de groep <small>(€ ${Math.round(r.levels.mid / n).toLocaleString('nl-NL')} p.p.)</small></p>
+      ${resultsHtml(r.listings.slice(0, 6).map((x) => ({ ...x, addTitle: x.name })), 'data-add-airbnb', titles, (a) => `
+        <strong>${esc(a.name)}</strong>
+        <small>${a.rating ? `★ ${String(a.rating).replace('.', ',')}${a.reviews ? ` (${a.reviews})` : ''} · ` : ''}${esc(a.rooms)}</small>
+        <span class="airbnb-price"><strong>€ ${a.total.toLocaleString('nl-NL')}</strong> totaal · € ${a.perPerson.toLocaleString('nl-NL')} p.p.</span>
+        <span class="result-links"><a href="${esc(a.link)}?check_in=${r.checkin}&check_out=${r.checkout}&adults=${r.adults}" target="_blank" rel="noopener">Bekijk op Airbnb ↗</a></span>`)}
+      <p class="fineprint">Echte prijzen van Airbnb incl. kosten, opgehaald ${r.stale ? 'eerder (Airbnb was nu niet bereikbaar)' : 'in de afgelopen 12 uur'}. <a href="${esc(r.url)}" target="_blank" rel="noopener">Alle ${r.count} op Airbnb ↗</a></p>`;
+  }
+
   function kindStepHtml(loc, p, kind) {
     const k = KINDS[kind];
     const section = sectionsOfKind(kind)[0];
@@ -418,6 +447,8 @@
     } else if (kind === 'stay') {
       const hotels = Array.isArray(pinCtx.hotels) ? pinCtx.hotels : [];
       found = `
+        ${airbnbHtml(loc, p, titles)}
+        <p class="mini-label">Hotels in de buurt</p>
         ${statusHtml(pinCtx.hotels, 'Geen hotels gevonden binnen 5 km.')}
         ${resultsHtml(hotels, 'data-add-hotel', titles, (h) => `
           <strong>${esc(h.name)}</strong>
@@ -444,7 +475,7 @@
     const n = chosen.length;
     const summary = n ? chosen.map(({ it }) => esc(it.title)).slice(0, 2).join(', ') + (n > 2 ? ` en ${n - 2} meer` : '')
       : kind === 'flight' || kind === 'stay' ? 'Nog niet gekozen' : 'Optioneel';
-    const nearbyLabel = { flight: 'Vliegvelden in de buurt', stay: 'Hotels in de buurt', do: 'Te doen in de buurt', eat: 'Eten in de buurt' }[kind];
+    const nearbyLabel = { flight: 'Vliegvelden in de buurt', stay: "Airbnb's voor jullie groep", do: 'Te doen in de buurt', eat: 'Eten in de buurt' }[kind];
     return stepHtml(kind, kindIcon(kind), k.title, summary, n > 0, `
       ${chosenHtml(chosen)}
       <div class="step-actions">${own}${ownNew}</div>
@@ -612,10 +643,11 @@
       return;
     }
 
-    const add = t.closest('[data-add-airport], [data-add-hotel], [data-add-do], [data-add-eat]');
+    if (t.closest('[data-airbnb-retry]')) { pinCtx.airbnbKey = null; renderPinSheet(); return; }
+    const add = t.closest('[data-add-airport], [data-add-hotel], [data-add-airbnb], [data-add-do], [data-add-eat]');
     if (!add) return;
     add.disabled = true;
-    const kind = add.matches('[data-add-airport]') ? 'flight' : add.matches('[data-add-hotel]') ? 'stay' : null;
+    const kind = add.matches('[data-add-airport]') ? 'flight' : add.matches('[data-add-hotel], [data-add-airbnb]') ? 'stay' : null;
     const first = kind && !planOf(loc).per[kind].length;
     try {
       await addSuggestion(loc, add);
@@ -645,7 +677,24 @@
       animateFlight(loc.id);
       return;
     }
-    if (btn.dataset.addHotel !== undefined) {
+    if (btn.dataset.addAirbnb !== undefined) {
+      const a = pinCtx.airbnb.listings[+btn.dataset.addAirbnb];
+      const r = pinCtx.airbnb;
+      const section = await ensureSection('stay');
+      await api(`/sections/${section.id}/items`, 'POST', {
+        title: a.name,
+        subtitle: [a.rating ? `★ ${String(a.rating).replace('.', ',')}${a.reviews ? ` (${a.reviews})` : ''}` : '', a.rooms].filter(Boolean).join(' · '),
+        body: `Echte Airbnb-prijs voor ${r.adults} ${r.adults === 1 ? 'persoon' : 'personen'}, ${r.nights} ${r.nights === 1 ? 'nacht' : 'nachten'} (${shortRange(r.checkin, addDays(r.checkout, -1))}): € ${a.total.toLocaleString('nl-NL')} totaal, € ${a.perPerson.toLocaleString('nl-NL')} p.p. Opgehaald op ${fmt(r.fetchedAt.slice(0, 10), { day: 'numeric', month: 'long' })}.`,
+        price: `€ ${a.total.toLocaleString('nl-NL')}`,
+        rating: a.rating ? Math.round(a.rating) : null,
+        link: a.link,
+        image: a.image,
+        lat: a.lat,
+        lng: a.lng,
+        location_id: loc.id,
+        added_by: by,
+      });
+    } else if (btn.dataset.addHotel !== undefined) {
       const h = pinCtx.hotels[+btn.dataset.addHotel];
       const section = await ensureSection('stay');
       await api(`/sections/${section.id}/items`, 'POST', {
