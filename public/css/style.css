@@ -1373,7 +1373,7 @@ body.gate .tabs { display: none; }
 .msg-name { display: block; font-size: .75rem; font-weight: 700; margin-bottom: 1px; }
 .msg-meta { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: .6875rem; opacity: .65; margin-top: 2px; }
 .msg-del { border: none; background: none; padding: 0 2px; color: inherit; font-size: .75rem; opacity: 0; }
-.msg:hover .msg-del, .msg-del:focus-visible { opacity: 1; }
+.msg:hover .msg-del, .msg-event:hover .msg-del, .msg-del:focus-visible { opacity: 1; }
 @media (hover: none) { .msg-del { opacity: .7; } }
 .msg-day { align-self: center; margin: 14px 0 6px; font-size: .75rem; font-weight: 600; color: var(--muted); }
 .msg-day span { padding: 3px 10px; border-radius: 999px; background: var(--surface-2); }
@@ -1381,6 +1381,7 @@ body.gate .tabs { display: none; }
 .msg-event .av { width: 22px; height: 22px; font-size: .625rem; }
 .msg-event strong { color: var(--ink); }
 .msg-event time { font-size: .6875rem; margin-left: 4px; }
+.msg-event .msg-del { margin-left: 6px; }
 .msg-event-ref { align-self: center; width: min(420px, 92%); }
 .ref-card {
   display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; padding: 8px; min-width: min(260px, 70vw);
@@ -1720,6 +1721,7 @@ body.gate .tabs { display: none; }
 .roulette-win.red { box-shadow: 0 0 0 3px rgba(200,16,46,.5); }
 .btn.gold { background: linear-gradient(180deg, var(--gold-light), var(--gold)); border-color: #8a6d1d; color: #2a1a05; }
 .roulette-fine { margin: 0; text-align: center; font-size: .75rem; color: #a9c4b1; position: relative; }
+.roulette-fine .link-btn { color: var(--gold-light); font-size: inherit; text-decoration: underline; padding: 0; background: none; border: none; }
 .confetti { position: absolute; left: 50%; top: 45%; width: 8px; height: 12px; border-radius: 2px; pointer-events: none;
   animation: confetti 1.2s cubic-bezier(.2,.8,.3,1) forwards; }
 @keyframes confetti { to { transform: translate(var(--dx), var(--dy)) rotate(var(--r)); opacity: 0; } }

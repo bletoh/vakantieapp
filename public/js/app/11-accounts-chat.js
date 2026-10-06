@@ -386,7 +386,8 @@
     const sep = newDay ? `<div class="msg-day"><span>${esc(dayLabel(d))}</span></div>` : '';
     const name = m.name || 'Oud-lid';
     if (m.kind === 'event') {
-      return `${sep}<div class="msg-event" data-msg="${m.id}">${avatar(name)}<span><strong>${esc(name)}</strong> ${esc(m.body)} <time>${timeOf(m)}</time></span></div>
+      const canDel = m.body.startsWith('liet de roulette kiezen');
+      return `${sep}<div class="msg-event" data-msg="${m.id}">${avatar(name)}<span><strong>${esc(name)}</strong> ${esc(m.body)} <time>${timeOf(m)}</time>${canDel ? `<button type="button" class="msg-del" data-msg-del="${m.id}" aria-label="Uitslag uit de chat halen" title="Uitslag uit de chat halen">✕</button>` : ''}</span></div>
         ${m.ref_type ? `<div class="msg-event-ref">${refHtml(m)}</div>` : ''}`;
     }
     const mine = m.user_id === session.user.id;

@@ -200,7 +200,7 @@
         <div class="wheel-wrap" id="rouWheel">${wheelSvg()}</div>
         <button type="button" class="spin-chip" data-roulette-spin><span>SPIN</span></button>
         <div class="roulette-result" id="rouResult" role="status"></div>
-        <p class="roulette-fine">De server trekt de winnaar en de uitslag komt in de groepschat, zodat iedereen hem ziet.</p>
+        <p class="roulette-fine">De server trekt de winnaar en de uitslag komt in de groepschat, zodat iedereen hem ziet. <button type="button" class="link-btn" data-roulette-clear>Uitslagen uit de chat halen</button></p>
       </section>`;
   }
 
@@ -236,6 +236,16 @@
   }
 
   document.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-roulette-clear]')) {
+      if (!confirm('Alle roulette-uitslagen uit de groepschat halen?')) return;
+      try {
+        const { removed } = await api('/messages/roulette', 'DELETE');
+        const gone = new Set(removed);
+        if (chat.loaded) chat.messages = chat.messages.filter((m) => !gone.has(m.id));
+        toast(removed.length ? `${removed.length} ${removed.length === 1 ? 'uitslag' : 'uitslagen'} uit de chat gehaald` : 'Er staan geen roulette-uitslagen in de chat');
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     const btn = e.target.closest('[data-roulette-spin]');
     if (!btn || rou.spinning) return;
     if (rou.a === rou.b) { toast('Kies twee verschillende plekken', true); return; }

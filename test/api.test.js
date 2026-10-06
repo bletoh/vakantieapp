@@ -155,7 +155,8 @@ test('rijtijden: ongeldige punten worden geweigerd', async () => {
 
 test('roulette: twee bestemmingen, server kiest, uitslag in de chat', async () => {
   const a = await newUser('Gokker');
-  a.team = (await a.req('POST', '/api/teams', { name: 'Gokclub' })).data.id;
+  const club = (await a.req('POST', '/api/teams', { name: 'Gokclub' })).data;
+  a.team = club.id;
   const map = (await a.req('GET', '/api/content')).data.sections.find((s) => s.kind === 'map');
   const x = (await a.req('POST', `/api/sections/${map.id}/items`, { title: 'Catania, Sicilië', lat: 37.5, lng: 15.08 })).data.id;
   const y = (await a.req('POST', `/api/sections/${map.id}/items`, { title: 'Málaga, Spanje', lat: 36.72, lng: -4.42 })).data.id;
@@ -171,4 +172,19 @@ test('roulette: twee bestemmingen, server kiest, uitslag in de chat', async () =
   assert.equal(seen.size, 2, 'beide uitkomsten moeten kunnen');
   const msgs = (await a.req('GET', '/api/messages')).data.messages;
   assert.ok(msgs.some((m) => /liet de roulette kiezen tussen Catania en Málaga: (Catania|Málaga) wint/.test(m.body)));
+
+  // Uitslagen weghalen: elk lid mag een roulette-uitslag weghalen, maar geen andere meldingen van een ander.
+  const b = await newUser('Meegokker');
+  assert.equal((await b.req('POST', `/api/invite/${club.teams.find((g) => g.id === a.team).invite_code}`)).status, 200);
+  b.team = a.team;
+  const spins = msgs.filter((m) => m.body.startsWith('liet de roulette'));
+  const other = msgs.find((m) => m.kind === 'event' && !m.body.startsWith('liet de roulette'));
+  assert.equal((await b.req('DELETE', `/api/messages/${other.id}`)).status, 403);
+  assert.equal((await b.req('DELETE', `/api/messages/${spins[0].id}`)).status, 200);
+  const all = await b.req('DELETE', '/api/messages/roulette');
+  assert.equal(all.status, 200);
+  assert.equal(all.data.removed.length, spins.length - 1);
+  const left = (await a.req('GET', '/api/messages')).data;
+  assert.ok(!left.messages.some((m) => m.body.startsWith('liet de roulette')));
+  assert.ok(left.messages.some((m) => m.id === other.id));
 });
