@@ -396,6 +396,23 @@ router.get('/nearby/:kind', async (req, res, next) => {
   }
 });
 
+/* ---------- roulette: het lot laten kiezen tussen twee bestemmingen ---------- */
+
+// De server trekt de winnaar (niet de telefoon), en de uitslag komt in de groepschat,
+// zodat niemand kan blijven draaien tot zijn favoriet wint zonder dat de groep het ziet.
+router.post('/roulette', (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body.item_ids) ? req.body.item_ids : []).map((n) => parseInt(n, 10)))];
+  if (ids.length !== 2) return res.status(400).json({ error: 'Kies twee verschillende bestemmingen' });
+  const items = ids.map((id) => db.prepare(`SELECT i.id, i.title FROM items i JOIN sections s ON s.id = i.section_id
+    WHERE i.id = ? AND s.team_id = ? AND s.kind = 'map'`).get(id, req.team.id));
+  if (items.some((x) => !x)) return res.status(400).json({ error: 'Kies twee bestemmingen op de kaart' });
+  const index = crypto.randomInt(2);
+  const short = (t) => String(t).split(',')[0].trim();
+  const win = items[index];
+  db.postEvent(req.team.id, req.user.id, `liet de roulette kiezen tussen ${short(items[0].title)} en ${short(items[1].title)}: ${short(win.title)} wint! 🎰`, 'item', win.id);
+  res.json({ index, winner_id: win.id });
+});
+
 /* ---------- echte prijzen ---------- */
 
 // Welke echte prijzen zijn er? (vluchten alleen met een Travelpayouts-token)

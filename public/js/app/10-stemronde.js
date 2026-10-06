@@ -115,8 +115,181 @@
           ${lead ? `<span class="poll-lead">${p.is_closed ? '🏆' : '↑'} ${esc(shortName(lead.it.title))}</span>` : ''}
           <span class="dest-go" aria-hidden="true">›</span>
         </a></li>`;
-      }).join('')}</ul>` : ''}`;
+      }).join('')}</ul>` : ''}
+      ${canMake ? rouletteHtml() : ''}`;
   }
+
+  /* --- roulette: het lot laten kiezen tussen twee bestemmingen --- */
+
+  const rou = { a: null, b: null, wheel: 0, ball: 200, spinning: false };
+  const POCKETS = 12; // afwisselend rood (eerste plek) en zwart (tweede plek)
+  const SEG = 360 / POCKETS;
+  const C = 120;
+
+  // Gelijkspel in een stemronde? Dan die twee alvast klaarzetten.
+  function rouletteTie() {
+    for (const p of state.polls) {
+      const rows = tallyOf(p);
+      if (rows.length >= 2 && rows[0].voters.length && rows[0].voters.length === rows[1].voters.length) return { poll: p, a: rows[0].it, b: rows[1].it };
+    }
+    return null;
+  }
+
+  // Hoek (graden, met de klok mee vanaf boven) en straal naar een punt op het rad.
+  const polar = (deg, r) => { const a = deg * Math.PI / 180; return [C + r * Math.sin(a), C - r * Math.cos(a)]; };
+  const f2 = (n) => n.toFixed(2);
+
+  function pocketPath(i, r1, r2) {
+    const [ax, ay] = polar(i * SEG, r2);
+    const [bx, by] = polar((i + 1) * SEG, r2);
+    const [cx, cy] = polar((i + 1) * SEG, r1);
+    const [dx, dy] = polar(i * SEG, r1);
+    return `M${f2(ax)} ${f2(ay)} A${r2} ${r2} 0 0 1 ${f2(bx)} ${f2(by)} L${f2(cx)} ${f2(cy)} A${r1} ${r1} 0 0 0 ${f2(dx)} ${f2(dy)} Z`;
+  }
+
+  function wheelSvg() {
+    const bulbs = Array.from({ length: 24 }, (_, i) => { const [x, y] = polar(i * 15, 113); return `<circle class="bulb b${i % 2}" cx="${f2(x)}" cy="${f2(y)}" r="2.6"/>`; }).join('');
+    const pockets = Array.from({ length: POCKETS }, (_, i) => {
+      const [tx, ty] = polar(i * SEG + SEG / 2, 84);
+      return `<path class="pocket ${i % 2 ? 'black' : 'red'}" d="${pocketPath(i, 74, 94)}"/>
+        <text class="pocket-num" x="${f2(tx)}" y="${f2(ty)}" transform="rotate(${i * SEG + SEG / 2} ${f2(tx)} ${f2(ty)})">${i + 1}</text>`;
+    }).join('');
+    const frets = Array.from({ length: POCKETS }, (_, i) => { const [x1, y1] = polar(i * SEG, 70); const [x2, y2] = polar(i * SEG, 94); return `<line x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}"/>`; }).join('');
+    const spokes = [0, 90, 180, 270].map((d) => { const [x, y] = polar(d, 30); return `<line x1="${C}" y1="${C}" x2="${f2(x)}" y2="${f2(y)}"/><circle cx="${f2(x)}" cy="${f2(y)}" r="3.4"/>`; }).join('');
+    const [bx, by] = polar(rou.ball, rou.ballR || 101);
+    return `<svg class="wheel" viewBox="0 0 240 240" aria-hidden="true">
+      <defs>
+        <radialGradient id="rouWood" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#6b3a1f"/><stop offset="1" stop-color="#2a140a"/></radialGradient>
+        <linearGradient id="rouGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7e08a"/><stop offset=".5" stop-color="#d4af37"/><stop offset="1" stop-color="#8a6d1d"/></linearGradient>
+        <radialGradient id="rouCone" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#4a2a17"/><stop offset="1" stop-color="#1c0e06"/></radialGradient>
+        <radialGradient id="rouBall" cx="35%" cy="35%" r="65%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#b9b9b9"/></radialGradient>
+      </defs>
+      <circle cx="${C}" cy="${C}" r="119" fill="url(#rouWood)"/>
+      <circle cx="${C}" cy="${C}" r="113" fill="none" stroke="url(#rouGold)" stroke-width="7"/>
+      ${bulbs}
+      <circle cx="${C}" cy="${C}" r="108" fill="#1a0d06"/>
+      <circle cx="${C}" cy="${C}" r="97" fill="none" stroke="url(#rouGold)" stroke-width="2"/>
+      <g class="wheel-rot" style="transform: rotate(${rou.wheel}deg)">
+        ${pockets}
+        <g class="frets" stroke="url(#rouGold)" stroke-width="1.6">${frets}</g>
+        <circle cx="${C}" cy="${C}" r="70" fill="url(#rouCone)" stroke="url(#rouGold)" stroke-width="2"/>
+        <circle cx="${C}" cy="${C}" r="44" fill="none" stroke="#d4af37" stroke-opacity=".35"/>
+        <g class="spokes" stroke="url(#rouGold)" stroke-width="4" stroke-linecap="round" fill="url(#rouGold)">${spokes}</g>
+        <circle cx="${C}" cy="${C}" r="10" fill="url(#rouGold)"/>
+      </g>
+      <circle class="ball" cx="${f2(bx)}" cy="${f2(by)}" r="5.2" fill="url(#rouBall)"/>
+    </svg>`;
+  }
+
+  function rouletteHtml() {
+    const locs = locations();
+    const tie = rouletteTie();
+    if (!rou.a || !findItem(rou.a)) rou.a = tie ? tie.a.id : locs[0].id;
+    if (!rou.b || !findItem(rou.b) || rou.b === rou.a) rou.b = tie ? tie.b.id : (locs.find((l) => l.id !== rou.a) || locs[1]).id;
+    const opts = (sel) => locs.map((l) => `<option value="${l.id}"${l.id === sel ? ' selected' : ''}>${esc(l.title)}</option>`).join('');
+    return `
+      <section class="roulette" aria-labelledby="rouTitle">
+        <div class="roulette-head">
+          <h3 id="rouTitle"><span aria-hidden="true">♠ ♥</span> Casino Roulette <span aria-hidden="true">♦ ♣</span></h3>
+          <p>${tie ? `Gelijkspel in <strong>${esc(tie.poll.title)}</strong>? Laat het lot beslissen.` : 'Komen jullie er niet uit? Zet in op rood of zwart.'}</p>
+        </div>
+        <div class="roulette-bets">
+          <label class="bet red"><span class="chip-dot" aria-hidden="true"></span><span class="bet-col">Rood</span><select id="rouA" aria-label="Plek op rood">${opts(rou.a)}</select></label>
+          <label class="bet black"><span class="chip-dot" aria-hidden="true"></span><span class="bet-col">Zwart</span><select id="rouB" aria-label="Plek op zwart">${opts(rou.b)}</select></label>
+        </div>
+        <div class="wheel-wrap" id="rouWheel">${wheelSvg()}</div>
+        <button type="button" class="spin-chip" data-roulette-spin><span>SPIN</span></button>
+        <div class="roulette-result" id="rouResult" role="status"></div>
+        <p class="roulette-fine">De server trekt de winnaar en de uitslag komt in de groepschat, zodat iedereen hem ziet.</p>
+      </section>`;
+  }
+
+  document.addEventListener('change', (e) => {
+    if (e.target.id !== 'rouA' && e.target.id !== 'rouB') return;
+    rou[e.target.id === 'rouA' ? 'a' : 'b'] = +e.target.value;
+    const r = $('#rouResult');
+    if (r) r.innerHTML = '';
+  });
+
+  // Wiel en balletje tekenen tijdens het draaien (zonder het hele rad opnieuw op te bouwen).
+  function placeWheel() {
+    const g = $('#rouWheel .wheel-rot');
+    if (g) g.style.transform = `rotate(${rou.wheel}deg)`;
+    const ball = $('#rouWheel .ball');
+    if (ball) { const [x, y] = polar(rou.ball, rou.ballR || 101); ball.setAttribute('cx', f2(x)); ball.setAttribute('cy', f2(y)); }
+  }
+
+  function confetti(box) {
+    const colors = ['#d4af37', '#f7e08a', '#c8102e', '#ffffff', '#111111'];
+    for (let i = 0; i < 26; i++) {
+      const s = document.createElement('span');
+      s.className = 'confetti';
+      const a = Math.random() * Math.PI * 2;
+      const d = 70 + Math.random() * 110;
+      s.style.setProperty('--dx', `${Math.cos(a) * d}px`);
+      s.style.setProperty('--dy', `${Math.sin(a) * d - 40}px`);
+      s.style.setProperty('--r', `${Math.random() * 720 - 360}deg`);
+      s.style.background = colors[i % colors.length];
+      box.appendChild(s);
+      setTimeout(() => s.remove(), 1300);
+    }
+  }
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-roulette-spin]');
+    if (!btn || rou.spinning) return;
+    if (rou.a === rou.b) { toast('Kies twee verschillende plekken', true); return; }
+    rou.spinning = true;
+    btn.disabled = true;
+    $('#rouResult').innerHTML = '';
+    let r;
+    try { r = await api('/roulette', 'POST', { item_ids: [rou.a, rou.b] }); } catch (err) {
+      toast(err.message, true); rou.spinning = false; btn.disabled = false; return;
+    }
+    // Een willekeurig vakje van de winnende kleur (rood = eerste plek, zwart = tweede).
+    const choices = Array.from({ length: POCKETS }, (_, i) => i).filter((i) => i % 2 === r.index);
+    const pocket = choices[Math.floor(Math.random() * choices.length)];
+    const w0 = rou.wheel;
+    const w1 = w0 + 360 * 3 + Math.random() * 360;
+    // Het balletje draait de andere kant op en eindigt midden in het vakje (in schermhoek).
+    const target = (((pocket * SEG + SEG / 2 + w1) % 360) + 360) % 360;
+    const b0 = rou.ball;
+    const back = ((b0 - target) % 360 + 360) % 360;
+    const b1 = b0 - (360 * 5 + back);
+    const ms = reducedMotion() ? 0 : 5200;
+    const box = btn.closest('.roulette');
+    box.classList.add('spinning');
+    await new Promise((done) => {
+      const t0 = performance.now();
+      const step = (now) => {
+        const t = ms ? Math.min(1, (now - t0) / ms) : 1;
+        const ew = 1 - (1 - t) ** 3;
+        const eb = 1 - (1 - t) ** 2.4;
+        rou.wheel = w0 + (w1 - w0) * ew;
+        rou.ball = b0 + (b1 - b0) * eb;
+        // Tegen het eind valt het balletje van de baan in het vakje, met een klein stuitertje.
+        const drop = t < 0.72 ? 0 : Math.min(1, (t - 0.72) / 0.2);
+        const bounce = t > 0.72 && t < 0.97 ? Math.sin((t - 0.72) / 0.25 * Math.PI * 3) * 3 * (1 - (t - 0.72) / 0.25) : 0;
+        rou.ballR = 101 - 17 * drop + bounce;
+        placeWheel();
+        if (t < 1) requestAnimationFrame(step); else done();
+      };
+      requestAnimationFrame(step);
+    });
+    rou.wheel %= 360;
+    rou.ball = ((rou.ball % 360) + 360) % 360;
+    box.classList.remove('spinning');
+    rou.spinning = false;
+    btn.disabled = false;
+    const win = findItem(r.winner_id);
+    if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
+    const res = $('#rouResult');
+    if (res && win) {
+      res.innerHTML = `<span class="roulette-win ${r.index ? 'black' : 'red'}"><small>${pocket + 1} ${r.index ? 'zwart' : 'rood'}</small><strong>${esc(shortName(win.title))} wint!</strong></span>
+        <a class="btn sm gold" href="#pin-${win.id}">Verder plannen →</a>`;
+      if (!reducedMotion()) confetti(box.querySelector('.wheel-wrap'));
+    }
+  });
 
   function optionMetaHtml(loc) {
     const p = planOf(loc);
