@@ -4,7 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const db = require('../db');
 const { nearby } = require('../nearby');
-const { linkInfo } = require('../linkinfo');
+const { linkInfo, saveImage } = require('../linkinfo');
 
 const router = express.Router();
 
@@ -396,11 +396,20 @@ router.get('/nearby/:kind', async (req, res, next) => {
 
 /* ---------- uploads ---------- */
 
+let sharp = null;
+try { sharp = require('sharp'); } catch { /* zonder sharp geen controle op uploads */ }
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
 
 // Titel, foto, score enz. uit een geplakte link (Airbnb, Booking, hotelsite).
 router.post('/link-info', async (req, res, next) => {
-  try { res.json(await linkInfo(req.body && req.body.url)); } catch (err) {
+  try {
+    const info = await linkInfo(req.body && req.body.url);
+    if (info.image) {
+      const name = await saveImage(info.image, db.UPLOAD_DIR).catch(() => null);
+      if (name) info.image = `/uploads/${name}`;
+    }
+    res.json(info);
+  } catch (err) {
     if (err.status) return next(err);
     res.json({ blocked: true });
   }
@@ -411,8 +420,14 @@ router.post('/upload', (req, res) => {
   const ext = match && MIME_EXT[match[1].toLowerCase()];
   if (!ext) return res.status(400).json({ error: 'Ongeldig afbeeldingsformaat' });
   const name = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
-  fs.writeFileSync(path.join(db.UPLOAD_DIR, name), Buffer.from(match[2], 'base64'));
-  res.json({ url: `/uploads/${name}` });
+  const buf = Buffer.from(match[2], 'base64');
+  // Controleren dat het echt een afbeelding is (en niet iets anders met een .jpg-naam).
+  const check = sharp ? sharp(buf).metadata() : Promise.resolve({ format: ext });
+  check.then((meta) => {
+    if (!meta || !meta.format) throw new Error('geen afbeelding');
+    fs.writeFileSync(path.join(db.UPLOAD_DIR, name), buf);
+    res.json({ url: `/uploads/${name}` });
+  }, () => res.status(400).json({ error: 'Dit bestand is geen afbeelding' }));
 });
 
 module.exports = router;

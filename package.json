@@ -4,10 +4,13 @@
   "description": "Vakantieblog om aan vrienden te laten zien wat de beste bestemming, vlucht en overnachting is",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --check public/js/app.js && node --test test/*.test.js"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "better-sqlite3": "^11.3.0",
+    "compression": "^1.8.2",
     "express": "^4.19.2",
     "leaflet": "^1.9.4",
     "sharp": "^0.33.5"

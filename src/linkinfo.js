@@ -190,4 +190,25 @@ async function linkInfo(raw) {
   return info;
 }
 
-module.exports = { linkInfo, parse };
+// Foto van een geplakte link zelf bewaren (verkleind tot 1200 px breed), zodat hij blijft werken
+// als de site het adres verandert, en sneller laadt. Geeft de bestandsnaam terug, of null.
+async function saveImage(src, dir) {
+  let sharp;
+  try { sharp = require('sharp'); } catch { return null; }
+  let url = new URL(src);
+  for (let hop = 0; hop < 4; hop++) {
+    await assertPublic(url);
+    const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'User-Agent': UA, Accept: 'image/*' } });
+    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { url = new URL(res.headers.get('location'), url); continue; }
+    if (!res.ok || !/^image\//i.test(res.headers.get('content-type') || '')) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 15 * 1024 * 1024) return null;
+    const out = await sharp(buf, { limitInputPixels: 50e6 }).rotate().resize({ width: 1200, withoutEnlargement: true }).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+    const name = `${Date.now()}-${require('crypto').randomBytes(6).toString('hex')}.jpg`;
+    require('fs').writeFileSync(require('path').join(dir, name), out);
+    return name;
+  }
+  return null;
+}
+
+module.exports = { linkInfo, parse, saveImage, isPrivateIp };

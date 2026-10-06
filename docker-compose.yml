@@ -7,6 +7,23 @@ services:
       - vakantie_data:/app/data
     networks:
       - web
+    # De DNS van de server (NetBird) doet 2,5 s per opzoeking; voor deze app publieke resolvers.
+    # Containernamen (zoals caddy) lossen via de ingebouwde Docker-DNS gewoon op.
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 60s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
 networks:
   web:

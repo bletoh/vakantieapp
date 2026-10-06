@@ -411,9 +411,7 @@ function tripPageHtml(req, v) {
   <meta property="og:image:height" content="630">` : ''}
   <meta name="twitter:card" content="summary_large_image">
   <meta name="description" content="${esc(meta.description)}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/inter/index.css">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <style>
     :root { --bg: #fff; --surface: #fff; --surface-2: #f4f4f4; --ink: #222; --muted: #6a6a6a; --line: #e2e2e2;
@@ -423,7 +421,7 @@ function tripPageHtml(req, v) {
         --brand: #ff5c8a; --good: #4cc26a; --bad: #ff7a66; color-scheme: dark; }
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: inherit; }
     .ic { width: 1.2em; height: 1.2em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .map { height: min(42vh, 360px); background: var(--surface-2); }

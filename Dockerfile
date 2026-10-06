@@ -6,14 +6,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --omit=dev
+# Precies de versies uit package-lock.json, zodat elke build hetzelfde is.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 COPY . .
 
 RUN mkdir -p /app/data
 
-ENV PORT=4000
+ENV PORT=4000 NODE_ENV=production
 EXPOSE 4000
 
 CMD ["node", "src/server.js"]

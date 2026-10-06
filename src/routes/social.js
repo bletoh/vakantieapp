@@ -37,7 +37,7 @@ router.post('/auth/register', (req, res) => {
   const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
   const password = String(req.body.password || '');
   if (!NAME_RE.test(name)) throw fail(400, 'Kies een naam van 1 tot 30 letters of cijfers');
-  if (password.length < 6) throw fail(400, 'Kies een wachtwoord van minstens 6 tekens');
+  if (password.length < auth.MIN_PASSWORD) throw fail(400, `Kies een wachtwoord van minstens ${auth.MIN_PASSWORD} tekens`);
   if (db.prepare('SELECT 1 FROM users WHERE name = ?').get(name)) throw fail(409, 'Deze naam is al bezet. Log in, of kies een andere naam.');
   const id = db.prepare('INSERT INTO users (name, pass_hash) VALUES (?, ?)').run(name, auth.hashPassword(password)).lastInsertRowid;
   auth.startSession(req, res, id);
@@ -86,8 +86,24 @@ router.put('/auth/password', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!auth.checkPassword(String(req.body.current || ''), user.pass_hash)) throw fail(400, 'Je huidige wachtwoord klopt niet');
   const password = String(req.body.password || '');
-  if (password.length < 6) throw fail(400, 'Kies een wachtwoord van minstens 6 tekens');
+  if (password.length < auth.MIN_PASSWORD) throw fail(400, `Kies een wachtwoord van minstens ${auth.MIN_PASSWORD} tekens`);
   db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(auth.hashPassword(password), user.id);
+  res.json({ ok: true });
+});
+
+// Account verwijderen (AVG): naam, wachtwoord, sessies, lidmaatschappen en voorkeuren gaan weg.
+// Chatberichten blijven staan zonder naam; wat iemand aan de groep heeft toegevoegd blijft van de groep.
+router.delete('/auth/account', (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!auth.checkPassword(String(req.body.password || ''), user.pass_hash)) throw fail(400, 'Je wachtwoord klopt niet');
+  const blocking = db.prepare(`
+    SELECT t.name FROM team_members m JOIN teams t ON t.id = m.team_id
+    WHERE m.user_id = ? AND m.role = 'admin'
+      AND (SELECT COUNT(*) FROM team_members x WHERE x.team_id = m.team_id AND x.role = 'admin') = 1
+      AND (SELECT COUNT(*) FROM team_members x WHERE x.team_id = m.team_id) > 1`).all(user.id);
+  if (blocking.length) throw fail(400, `Maak eerst iemand anders beheerder van ${blocking.map((b) => b.name).join(', ')}`);
+  db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+  auth.endSession(req, res);
   res.json({ ok: true });
 });
 
@@ -170,7 +186,7 @@ team.delete('/team/members/:uid', (req, res) => {
 
 /* ---------- voorkeuren ---------- */
 
-const CATS = ['nachtleven', 'strand', 'zon', 'stad', 'goedkoop', 'eten', 'avontuur', 'watersport', 'eiland', 'natuur', 'allin', 'wintersport', 'cultuur', 'kort', 'ver'];
+const CATS = ['nachtleven', 'strand', 'zon', 'stad', 'goedkoop', 'eten', 'avontuur', 'watersport', 'eiland', 'natuur', 'allin', 'wintersport', 'cultuur', 'casino', 'kort', 'ver'];
 const catList = (v) => [...new Set((Array.isArray(v) ? v : []).filter((c) => CATS.includes(c)))];
 
 team.put('/prefs', (req, res) => {

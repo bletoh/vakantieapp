@@ -4,6 +4,13 @@ const db = require('./db');
 
 const COOKIE = 'vp_sid';
 const YEAR = 365 * 24 * 3600;
+// Voor nieuwe wachtwoorden; bestaande (vanaf 6 tekens) blijven gewoon werken.
+const MIN_PASSWORD = 8;
+
+// Verlopen sessies (cookie is een jaar geldig) uit de database halen, bij de start en daarna dagelijks.
+const purgeSessions = () => db.prepare("DELETE FROM sessions WHERE created_at < datetime('now', '-365 days')").run();
+purgeSessions();
+setInterval(purgeSessions, 24 * 3600e3).unref();
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16);
@@ -83,5 +90,5 @@ function noteFail(keys) {
 function clearFails(keys) { for (const k of keys) fails.delete(k); }
 
 module.exports = {
-  hashPassword, checkPassword, startSession, endSession, userFromRequest, requireUser, requireTeam, tooManyFails, noteFail, clearFails,
+  MIN_PASSWORD, hashPassword, checkPassword, startSession, endSession, userFromRequest, requireUser, requireTeam, tooManyFails, noteFail, clearFails,
 };
