@@ -349,7 +349,7 @@
     $('.pkg-flight-links', card).innerHTML = `
       <a href="${flightsUrl(a.iata, trip)}" target="_blank" rel="noopener">Google Flights ↗</a>
       <a href="${skyscannerUrl(a.iata, trip)}?adultsv2=${n}" target="_blank" rel="noopener">Skyscanner voor ${n} ↗</a>`;
-    x.iata = a.iata;
+    x.iatas = airports.slice(0, 3).map((ap) => ap.iata);
     watchRealPrices(card, x, i);
   }
 
@@ -368,6 +368,13 @@
   }
 
   let priceStatus = null;
+  // "Transavia, direct" of "easyJet, 1 overstap"; bij een prijs uit dezelfde maand ook de echte datums.
+  const AIRLINES = { HV: 'Transavia', KL: 'KLM', U2: 'easyJet', FR: 'Ryanair', VY: 'Vueling', TB: 'TUI', OR: 'TUI', W6: 'Wizz Air', A3: 'Aegean', TP: 'TAP', IB: 'Iberia', AZ: 'ITA', LH: 'Lufthansa', BA: 'British Airways', TK: 'Turkish Airlines', PC: 'Pegasus', EK: 'Emirates', QR: 'Qatar Airways', SN: 'Brussels Airlines', LX: 'Swiss', OS: 'Austrian', AF: 'Air France', UX: 'Air Europa', DY: 'Norwegian', D8: 'Norwegian', SK: 'SAS', EW: 'Eurowings', XQ: 'SunExpress', CY: 'Cyprus Airways', KM: 'KM Malta', OU: 'Croatia Airlines', JU: 'Air Serbia', MS: 'EgyptAir', AT: 'Royal Air Maroc', DL: 'Delta', UA: 'United', AA: 'American' };
+  function flightNote(f, approx) {
+    const bits = [AIRLINES[f.airline] || f.airline, f.transfers === 0 ? 'direct' : f.transfers ? `${f.transfers} overstap${f.transfers > 1 ? 'pen' : ''}` : ''].filter(Boolean);
+    const when = approx && f.departAt ? ` · ${shortRange(f.departAt.slice(0, 10), (f.returnAt || f.departAt).slice(0, 10))}` : '';
+    return `(${bits.join(', ')}${when})`;
+  }
   const priceObserver = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
@@ -392,7 +399,9 @@
     const qs = new URLSearchParams({ lat: x.d.lat, lng: x.d.lng, checkin, checkout, adults: n });
     const [stay, flight] = await Promise.all([
       api(`/prices/stay?${qs}`).catch(() => null),
-      priceStatus.flights && x.iata ? api(`/prices/flight?${new URLSearchParams({ destination: x.iata, depart: checkin, ret: checkout })}`).catch(() => null) : null,
+      // De drie dichtstbijzijnde vliegvelden proberen (Lloret: Girona, Barcelona…) en de goedkoopste nemen.
+      priceStatus.flights && x.iatas && x.iatas.length ? Promise.all(x.iatas.map((iata) => api(`/prices/flight?${new URLSearchParams({ destination: iata, depart: checkin, ret: checkout })}`).catch(() => null)))
+        .then((rs) => rs.filter((r) => r && r.cheapest).sort((a, b) => (a.approx - b.approx) || a.cheapest.price - b.cheapest.price)[0] || null) : null,
     ]);
     if (!card.isConnected || ideaCtx.list[i] !== x) return;
     const c = x.cost;
@@ -411,7 +420,8 @@
     if (f) {
       c.flightPP = f.price;
       x.real.flight = flight;
-      $('.pkg-flight-label', card).innerHTML = `retour, ${n} ${n === 1 ? 'persoon' : 'personen'} · <span class="real">echte prijs vanaf</span>`;
+      $('.pkg-flight-label', card).innerHTML = `retour, ${n} ${n === 1 ? 'persoon' : 'personen'} · <span class="real">echte prijs</span> ${esc(flightNote(f, flight.approx))}`;
+      if (x.iatas[0] !== flight.destination) $('.pkg-flight', card).textContent = `${HOME_CODE} → ${flight.destination} · goedkoopste vliegveld in de buurt`;
       $('.pkg-flight-price', card).textContent = euro(f.price * n);
       if (f.link) $('.pkg-flight-links', card).insertAdjacentHTML('afterbegin', `<a href="${esc(f.link)}" target="_blank" rel="noopener">Deze vlucht (${esc(f.airline)}) ↗</a> `);
     }
