@@ -1618,3 +1618,17 @@ body.gate .tabs { display: none; }
 #carForm .euro { position: relative; display: block; }
 #carForm .euro::before { content: '€'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 #carForm .euro input { padding-left: 28px; width: 100%; }
+
+/* toevoegen aan een reis (activiteit, huurauto) */
+.trip-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.trip-add-label { flex-basis: 100%; font-size: .8125rem; color: var(--muted); }
+.trip-add .btn .ic { width: 16px; height: 16px; }
+.trip-add-body { display: grid; gap: 12px; align-content: start; }
+.trip-add-body .mini-label, .trip-add-body .hint { margin: 4px 0 0; }
+.trip-add-body .car-search { margin: 0; }
+.trip-add-body .car-list { grid-template-columns: 1fr; }
+.car-top { display: grid; gap: 10px; }
+.car-top label { display: grid; gap: 6px; font-size: .8125rem; font-weight: 600; max-width: 220px; }
+.car-top .car-filters { margin: 0; }
+.car-card.in-trip { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.car-foot .btn.done { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }

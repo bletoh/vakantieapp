@@ -156,15 +156,13 @@
     </form>
   </dialog>
 
-  <!-- Huurauto aan een reis koppelen -->
-  <dialog class="sheet small" id="carTripDialog">
+  <!-- Toevoegen aan een reis: activiteiten of huurauto -->
+  <dialog class="sheet" id="tripAddDialog" aria-labelledby="tripAddTitle">
     <div class="sheet-head">
-      <h2 id="carTripTitle">Aan reis toevoegen</h2>
+      <h2 id="tripAddTitle">Toevoegen</h2>
       <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
     </div>
-    <div class="sheet-body">
-      <div class="link-list" id="carTripList"></div>
-    </div>
+    <div class="sheet-body trip-add-body" id="tripAddBody"></div>
   </dialog>
 
   <!-- Periode datumprikker -->
