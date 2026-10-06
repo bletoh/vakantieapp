@@ -2610,6 +2610,12 @@
     Seychellen: 'afrika', 'Verenigde Arabische Emiraten': 'afrika',
   };
   const regionOf = (d) => REGION_OF[d.c] || 'eu';
+  // Keuze voor het verblijf; 'auto' = zo goed als het budget toelaat.
+  const STAY_OPTS = [['budget', 'Voordelig'], ['mid', 'Middenklasse'], ['luxe', 'Luxe'], ['auto', 'Beste binnen budget']];
+  const SORTS = [['match', 'Beste match'], ['price', 'Laagste prijs (vlucht + verblijf)']];
+  // Zoeken zonder hoofdletters en accenten: "malaga" vindt Málaga, "indonesie" vindt Indonesië.
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const searchHit = (d, q) => fold(d.c).includes(q) || fold(d.n).includes(q);
   const PAGE = 12;
   const MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
   const euro = (n) => `€ ${Math.round(n).toLocaleString('nl-NL')}`;
@@ -2632,6 +2638,9 @@
     return {
       cats, month: p.month || 'poll', days: +p.days || pollSettings().days, budget: +p.budget || 0,
       region: REGIONS.some(([k]) => k === p.region) ? p.region : 'all',
+      stay: STAY_OPTS.some(([k]) => k === p.stay) ? p.stay : 'mid',
+      sort: SORTS.some(([k]) => k === p.sort) ? p.sort : 'match',
+      q: typeof p.q === 'string' ? p.q.slice(0, 60) : '',
       persons: Math.min(30, Math.max(1, +p.persons || defaultPersons())),
     };
   }
@@ -2685,6 +2694,12 @@
       const stayPP = nightPP * nights;
       return { level, nights, persons: n, nightPP, stayPP, stayGroup: stayPP * n, flightPP: d.f, totalPP: d.f + stayPP, totalGroup: (d.f + stayPP) * n };
     };
+    if (p.stay !== 'auto') {
+      const c = calc(p.stay);
+      return { ...c, over: !!p.budget && c.totalPP > p.budget };
+    }
+    // Bij "laagste prijs" zonder vaste keuze: het voordeligste verblijf.
+    if (p.sort === 'price') return { ...calc('budget'), over: !!p.budget && calc('budget').totalPP > p.budget };
     if (!p.budget) return { ...calc('mid'), over: false };
     for (const level of ['luxe', 'mid', 'budget']) { const c = calc(level); if (c.totalPP <= p.budget) return { ...c, over: false }; }
     return { ...calc('budget'), over: true };
@@ -2696,16 +2711,19 @@
   function rankIdeas(p) {
     const m = ideaMonth(p);
     const wish = p.cats.filter((c) => c !== 'kort' && c !== 'ver');
+    // Zoek je op een land of plek, dan telt alleen dat; regio en wensen bepalen dan alleen de volgorde.
+    const q = fold(p.q);
     const ranked = destinations.map((d) => {
-      if (p.region !== 'all' && regionOf(d) !== p.region) return null;
+      if (q && !searchHit(d, q)) return null;
+      if (!q && p.region !== 'all' && regionOf(d) !== p.region) return null;
       const km = distanceKm(HOME, [d.lat, d.lng]);
       const hours = km / 800 + 0.5;
-      if (p.cats.includes('kort') && hours > 3.5) return null;
-      if (p.cats.includes('ver') && hours < 6) return null;
+      if (!q && p.cats.includes('kort') && hours > 3.5) return null;
+      if (!q && p.cats.includes('ver') && hours < 6) return null;
       const tags = tagsOf(d);
       const matched = wish.filter((c) => tags.includes(c));
-      if (wish.length && !matched.length) return null;
-      if (wish.includes('wintersport') && !tags.includes('wintersport')) return null;
+      if (!q && wish.length && !matched.length) return null;
+      if (!q && wish.includes('wintersport') && !tags.includes('wintersport')) return null;
       const cost = ideaCost(d, p);
       if (cost.over && cost.totalPP > p.budget * 1.15) return null;
       const match = wish.length ? matched.length / wish.length : 0.6;
@@ -2714,7 +2732,10 @@
       score += groupScoreDelta(d, hours);
       if (cost.over) score -= 0.15;
       return { d, km, matched, weather, month: m, cost, score: Math.max(0, Math.min(1, score)), pin: nearbyPin(d) };
-    }).filter(Boolean).sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP);
+    }).filter(Boolean);
+    // Laagste prijs: gewoon van goedkoop naar duur, zonder spreiding over landen.
+    if (p.sort === 'price') return ranked.sort((a, b) => a.cost.totalPP - b.cost.totalPP || b.score - a.score);
+    ranked.sort((a, b) => b.score - a.score || a.cost.totalPP - b.cost.totalPP);
     // Spreiding: bovenaan hooguit twee per land, de rest schuift door naar achteren.
     const perCountry = new Map();
     const first = [];
@@ -2747,6 +2768,12 @@
         <h2>Ideeën</h2>
         <p class="section-intro">Met hoeveel zijn jullie en waar hebben jullie zin in? Je krijgt bestemmingen met een vlucht vanaf Schiphol en een schatting van het verblijf voor de hele groep.</p>
       </div>
+      <div class="idea-search">
+        ${ic('search')}
+        <input id="ideaSearch" type="search" aria-label="Zoek een land of plek" list="ideaPlaces" placeholder="Zoek een land of plek, bijv. Spanje of Bali" value="${esc(p.q)}" autocomplete="off" enterkeyhint="search">
+        <button type="button" class="icon-btn sm" data-idea-clear aria-label="Zoekopdracht wissen"${p.q ? '' : ' hidden'}>✕</button>
+        <datalist id="ideaPlaces"></datalist>
+      </div>
       <div class="idea-opts">
         <label class="idea-when">Wanneer<select id="ideaMonth">${monthOptions(p)}</select></label>
         <label>Personen
@@ -2759,7 +2786,15 @@
         <label>Dagen<input id="ideaDays" type="number" min="2" max="30" inputmode="numeric" value="${p.days}"></label>
         <label><span>Budget p.p. <small>incl. verblijf</small></span><span class="euro"><input id="ideaBudget" type="number" min="0" step="50" inputmode="numeric" placeholder="Geen max" value="${p.budget || ''}"></span></label>
       </div>
-      <p class="mini-label idea-cats-label">Waar naartoe?</p>
+      <p class="mini-label idea-cats-label">Verblijf</p>
+      <div class="idea-cats" role="radiogroup" aria-label="Verblijf">
+        ${STAY_OPTS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-stay="${k}" aria-checked="${p.stay === k}" aria-pressed="${p.stay === k}">${esc(label)}</button>`).join('')}
+      </div>
+      <p class="mini-label idea-cats-label">Sorteren</p>
+      <div class="idea-cats" role="radiogroup" aria-label="Sorteren">
+        ${SORTS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-sort="${k}" aria-checked="${p.sort === k}" aria-pressed="${p.sort === k}">${esc(label)}</button>`).join('')}
+      </div>
+      <p class="mini-label idea-cats-label">Waar naartoe?${p.q ? ' <small class="idea-q-note">(zoekopdracht gaat voor)</small>' : ''}</p>
       <div class="idea-cats idea-regions" role="radiogroup" aria-label="Regio">
         ${REGIONS.map(([k, label]) => `<button type="button" class="cat" role="radio" data-region="${k}" aria-checked="${p.region === k}" aria-pressed="${p.region === k}">${esc(label)}</button>`).join('')}
       </div>
@@ -2778,6 +2813,21 @@
     const all = rankIdeas(p);
     ideaCtx.list = all.slice(0, ideaCtx.limit);
     const m = ideaMonth(p);
+    const dl = $('#ideaPlaces');
+    if (dl && !dl.childElementCount) {
+      const names = [...new Set(destinations.map((d) => d.c))].sort((a, b) => a.localeCompare(b, 'nl'));
+      dl.innerHTML = names.map((n) => `<option value="${esc(n)}">`).join('');
+    }
+    if (p.q) {
+      const n = all.length;
+      box.innerHTML = `
+        <p class="hint">${n ? `${n} ${n === 1 ? 'bestemming' : 'bestemmingen'} voor “${esc(p.q)}”${p.sort === 'price' ? ', goedkoopste eerst' : ''}.` : ''}</p>
+        ${ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')}
+        ${!n ? `<div class="empty"><p>Geen bestemming gevonden voor “${esc(p.q)}”${p.budget ? ' binnen het budget' : ''}. ${p.budget ? 'Verhoog het budget of kies een ander verblijf. ' : ''}Staat het niet in de lijst? <a href="#kaart">Zoek het op de kaart</a> en zet het daar neer.</p></div>` : ''}
+        ${all.length > ideaCtx.list.length ? `<button type="button" class="btn block idea-more" data-idea-more>Meer bestemmingen tonen (nog ${all.length - ideaCtx.list.length})</button>` : ''}`;
+      ideaCtx.list.forEach((x, i) => fillPackage(x, i));
+      return;
+    }
     box.innerHTML = `
       ${!p.cats.length ? '<p class="hint">Nog niets aangetikt: dit zijn bestemmingen met lekker weer in die periode. Tik hierboven aan waar jullie zin in hebben voor betere tips.</p>' : ''}
       ${ideaCtx.list.length ? ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')
@@ -2932,6 +2982,26 @@
       renderIdeaResults();
       return;
     }
+    const choice = e.target.closest('[data-stay], [data-sort]');
+    if (choice) {
+      const key = choice.dataset.stay ? 'stay' : 'sort';
+      const p = ideaPrefs();
+      p[key] = choice.dataset[key];
+      saveIdeaPrefs(p);
+      $$(`[data-${key}]`).forEach((b) => { const on = b.dataset[key] === p[key]; b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-checked', String(on)); });
+      ideaCtx.limit = PAGE;
+      renderIdeaResults();
+      return;
+    }
+    if (e.target.closest('[data-idea-clear]')) {
+      const p = ideaPrefs(); p.q = ''; saveIdeaPrefs(p);
+      $('#ideaSearch').value = '';
+      e.target.closest('[data-idea-clear]').hidden = true;
+      $('.idea-q-note')?.remove();
+      ideaCtx.limit = PAGE;
+      renderIdeaResults();
+      return;
+    }
     if (e.target.closest('[data-idea-more]')) {
       const y = window.scrollY;
       ideaCtx.limit += PAGE;
@@ -2973,6 +3043,20 @@
   });
   let ideaTimer = null;
   document.addEventListener('input', (e) => {
+    if (e.target.id === 'ideaSearch') {
+      clearTimeout(ideaTimer);
+      ideaTimer = setTimeout(() => {
+        const p = ideaPrefs();
+        p.q = e.target.value.trim().slice(0, 60);
+        saveIdeaPrefs(p);
+        $('[data-idea-clear]').hidden = !p.q;
+        const label = $('.idea-regions')?.previousElementSibling;
+        if (label) label.innerHTML = `Waar naartoe?${p.q ? ' <small class="idea-q-note">(zoekopdracht gaat voor)</small>' : ''}`;
+        ideaCtx.limit = PAGE;
+        renderIdeaResults();
+      }, 250);
+      return;
+    }
     if (!['ideaDays', 'ideaBudget', 'ideaPersons'].includes(e.target.id)) return;
     clearTimeout(ideaTimer);
     ideaTimer = setTimeout(() => {
