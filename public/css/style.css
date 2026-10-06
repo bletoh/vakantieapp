@@ -1187,7 +1187,8 @@ button.chip:hover { background: var(--navy-soft); }
     clip: auto; overflow: visible; display: flex; align-items: center;
     font: 700 1.25rem/1 var(--sans); letter-spacing: -.02em; color: var(--brand);
   }
-  .tabs { justify-content: center; }
+  /* Ruimte voor de groepsnaam; bij veel tabs schuiven ze naar rechts in plaats van eronder. */
+  .tabs { justify-content: safe center; padding-left: var(--brand-w, 200px); }
 }
 
 @media (max-width: 600px) {
@@ -1577,3 +1578,43 @@ body.gate .tabs { display: none; }
 .idea-search [data-idea-clear] { position: absolute; right: 6px; }
 .idea-q-note { font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
 .idea-search input::-webkit-calendar-picker-indicator { display: none !important; }
+
+/* huurauto */
+.car-opts { grid-template-columns: 1fr 2fr; max-width: 560px; }
+@media (max-width: 640px) { .car-opts { grid-template-columns: 1fr; } }
+.car-filters { margin: 12px 0 18px; }
+.car-search { max-width: 760px; display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); margin-bottom: 16px; }
+.car-search .hint, .car-search .fineprint, .car-search .pkg-links, .car-search .mini-label { margin: 0; }
+.car-rule { display: flex; gap: 10px; align-items: flex-start; }
+.car-rule .ic { flex-shrink: 0; margin-top: 2px; }
+.car-rule p { margin: 0; line-height: 1.45; }
+.car-rule small { display: block; margin-top: 4px; color: var(--muted); font-size: .75rem; }
+.car-list { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); max-width: 1000px; }
+.car-card { display: grid; gap: 10px; align-content: start; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.car-card.blocked { opacity: .7; }
+.car-head { display: flex; gap: 10px; align-items: flex-start; }
+.car-head > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.car-head h3 { margin: 0; font-size: 1.0625rem; overflow-wrap: anywhere; }
+.car-head small { color: var(--muted); font-size: .8125rem; }
+.car-ic { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--surface-2); flex-shrink: 0; }
+.car-best { font: 600 .6875rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--good); border: 1.5px solid var(--good); border-radius: 4px; padding: 2px 6px; }
+.car-age { justify-self: start; font-size: .8125rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+.car-age.ok { color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+.car-age.no { color: var(--red); background: color-mix(in srgb, var(--red) 10%, var(--surface)); }
+.car-age.unknown { color: var(--muted); background: var(--surface-2); }
+.car-price { margin: 0; display: grid; gap: 4px; }
+.car-price > div { display: flex; justify-content: space-between; gap: 12px; font-size: .9375rem; }
+.car-price dt { color: var(--muted); }
+.car-price dd { margin: 0; font-variant-numeric: tabular-nums; }
+.car-price .car-total { padding-top: 6px; border-top: 1px solid var(--line); font-weight: 700; }
+.car-price .car-total dt { color: var(--ink); }
+.car-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.car-foot .text-btn { margin-left: auto; }
+.car-hidden { margin-top: 12px; }
+.young-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; }
+.young-box legend { font-weight: 600; padding: 0 4px; }
+.fee-row { display: flex; gap: 6px; }
+.fee-row .euro { flex: 1; min-width: 0; }
+#carForm .euro { position: relative; display: block; }
+#carForm .euro::before { content: '€'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+#carForm .euro input { padding-left: 28px; width: 100%; }

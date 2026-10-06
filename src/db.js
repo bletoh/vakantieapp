@@ -107,6 +107,9 @@ const itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name)
 if (!itemCols.includes('added_by')) db.exec('ALTER TABLE items ADD COLUMN added_by TEXT');
 if (!itemCols.includes('lat')) db.exec('ALTER TABLE items ADD COLUMN lat REAL');
 if (!itemCols.includes('lng')) db.exec('ALTER TABLE items ADD COLUMN lng REAL');
+// Huurauto: minimumleeftijd van de verhuurder en de toeslag voor jonge bestuurders (totaal, in euro).
+if (!itemCols.includes('min_age')) db.exec('ALTER TABLE items ADD COLUMN min_age INTEGER');
+if (!itemCols.includes('young_fee')) db.exec('ALTER TABLE items ADD COLUMN young_fee REAL');
 if (!itemCols.includes('location_id')) {
   db.exec('ALTER TABLE items ADD COLUMN location_id INTEGER REFERENCES items(id) ON DELETE SET NULL');
 }

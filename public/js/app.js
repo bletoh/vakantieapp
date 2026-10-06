@@ -32,6 +32,10 @@
     if (/(^|\.)vrbo\.com$/.test(h)) return 'Vrbo';
     if (/(^|\.)hostelworld\.com$/.test(h)) return 'Hostelworld';
     if (/(^|\.)expedia\./.test(h)) return 'Expedia';
+    if (/(^|\.)rentalcars\.com$/.test(h)) return 'Rentalcars';
+    if (/(^|\.)sunnycars\./.test(h)) return 'Sunny Cars';
+    if (/(^|\.)discovercars\.com$/.test(h)) return 'DiscoverCars';
+    if (/(^|\.)kayak\./.test(h)) return 'Kayak';
     return '';
   }
   const linkLabel = (u) => (linkSite(u) ? `Bekijk op ${linkSite(u)}` : 'Bekijk website');
@@ -127,6 +131,7 @@
     vote: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
     plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
     bed: '<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>',
+    car: '<path d="M5 17h14M3 17v-4l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v4a1 1 0 0 1-1 1h-1M5 18H4a1 1 0 0 1-1-1M3 13h18"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>',
     sparkles: '<path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/>',
     utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
     pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
@@ -143,7 +148,7 @@
     thumbDown: '<path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 5.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
   };
   const ic = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
-  const KIND_ICONS = { map: 'pin', flight: 'plane', stay: 'bed', do: 'sparkles', eat: 'utensils' };
+  const KIND_ICONS = { map: 'pin', flight: 'plane', stay: 'bed', car: 'car', do: 'sparkles', eat: 'utensils' };
   // Vaste soorten krijgen een lijn-icoon; eigen tabs houden het icoon dat iemand zelf koos.
   const kindIcon = (kind, own) => (KIND_ICONS[kind] ? ic(KIND_ICONS[kind]) : esc(own || ''));
 
@@ -199,6 +204,7 @@
     if (h === '#stem' || /^#stem-\w+$/.test(h)) return 'stem';
     if (h === '#datum') return 'datum';
     if (h === '#ideeen') return 'ideeen';
+    if (h === '#auto') return 'auto';
     if (h === '#chat') return 'chat';
     if (h === '#groep') return 'groep';
     if (h === '#kaart' || /^#pin-\d+$/.test(h)) return mapSection() ? 'kaart' : fallbackRoute();
@@ -250,6 +256,7 @@
     const title = (state.team && state.team.name) || 'Vakantie';
     document.title = title;
     $('#brand').textContent = title;
+    document.documentElement.style.setProperty('--brand-w', `${$('#brand').offsetWidth + 48}px`);
     renderTabs();
     renderPanel();
   }
@@ -263,7 +270,7 @@
   // Vluchten en overnachtingen beheer je via de pinnen op de kaart; die tabs tonen we niet.
   const listSections = () => {
     const map = mapSection();
-    return state.sections.filter((s) => s.kind !== 'map' && !(map && (s.kind === 'flight' || s.kind === 'stay')));
+    return state.sections.filter((s) => s.kind !== 'map' && s.kind !== 'car' && !(map && (s.kind === 'flight' || s.kind === 'stay')));
   };
   const listTabIcon = (s) => (KIND_ICONS[s.kind] ? kindIcon(s.kind) : s.icon ? `<span class="tab-emoji" aria-hidden="true">${esc(s.icon)}</span>` : '');
   const badge = (n) => (n ? ` <span class="tab-badge">${n > 99 ? '99+' : n}</span>` : '');
@@ -276,7 +283,7 @@
     const vote = pollsToVote().length;
     if (isPhone()) {
       // Telefoon: vaste balk met vijf knoppen; de rest staat onder Meer.
-      const inMore = route === 'datum' || route === 'stem' || route === 'groep' || typeof route === 'number';
+      const inMore = route === 'datum' || route === 'stem' || route === 'groep' || route === 'auto' || typeof route === 'number';
       nav.innerHTML = (map ? tabLink('#kaart', `${ic('map')} <span>${esc(map.title)}</span>`, route === 'kaart', ' tab-map') : '')
         + tabLink('#ideeen', `${ic('compass')} <span>Ideeën</span>`, route === 'ideeen')
         + tabLink('#chat', `${ic('chat')} <span>Chat</span>`, route === 'chat', ' tab-chat')
@@ -290,6 +297,7 @@
       + tabLink('#ideeen', `${ic('compass')} <span>Ideeën</span>`, route === 'ideeen')
       + tabLink('#datum', `${ic('calendar')} <span>Datum</span>`, route === 'datum')
       + tabLink('#reizen', `${ic('suitcase')} <span>Reizen</span>`, route === 'reizen')
+      + tabLink('#auto', `${ic('car')} <span>Huurauto</span>`, route === 'auto')
       + tabLink('#stem', `${ic('vote')} <span>Stemmen</span>${badge(vote)}`, route === 'stem')
       + lists.map((s) => tabLink(`#tab-${s.id}`, `${listTabIcon(s)} <span>${esc(s.title)}</span>`, route === s.id)).join('')
       + tabLink('#groep', `${ic('users')} <span>Groep</span>`, route === 'groep', ' tab-group')
@@ -314,6 +322,7 @@
       <div class="more-grid">
         ${row('#stem', ic('vote'), 'Stemmen', vote ? `${vote} open voor jou` : `${openPolls().length} open`, route === 'stem', badge(vote))}
         ${row('#datum', ic('calendar'), 'Datum', 'Wanneer kan iedereen?', route === 'datum')}
+        ${row('#auto', ic('car'), 'Huurauto', `Vergelijken incl. toeslag onder 25`, route === 'auto')}
         ${listSections().map((s) => row(`#tab-${s.id}`, listTabIcon(s), esc(s.title), `${s.items.length} ${s.items.length === 1 ? 'optie' : 'opties'}`, route === s.id)).join('')}
         <button type="button" class="more-row" data-action="add-section"><span class="more-ic">${ic('plus')}</span><span class="more-text"><strong>Tab toevoegen</strong><small>Eigen lijstje, bijv. budget of inpaklijst</small></span></button>
       </div>
@@ -349,6 +358,11 @@
     }
     if (route === 'groep') { panel.innerHTML = groupHtml(); return; }
     if (route === 'reizen') { panel.innerHTML = tripsHtml(); return; }
+    if (route === 'auto') {
+      if (!$('#carResults')) panel.innerHTML = carHtml();
+      renderCarResults();
+      return;
+    }
     if (route === 'stem') { panel.innerHTML = stemHtml(); return; }
     if (route === 'datum') { panel.innerHTML = pollHtml(); return; }
     if (route === 'ideeen') {
@@ -458,10 +472,10 @@
     const lines = [`✈️ *${t.title}*`];
     if (t.start_date) lines.push(`📅 ${rangeText(t.start_date, t.end_date)} (${dayCount(t.start_date, t.end_date)} dagen)`);
     // Het verblijf met link erbij, zodat iedereen in één tik op Airbnb of Booking zit.
-    for (const s of sectionsOfKind('stay')) {
+    for (const s of [...sectionsOfKind('stay'), ...sectionsOfKind('car')]) {
       for (const it of s.items) {
         const u = t.item_ids.includes(it.id) && safeUrl(it.link);
-        if (u && !u.startsWith('/')) lines.push(`🏠 ${it.title}${s.show_price && it.price ? ` (${it.price})` : ''}: ${u}`);
+        if (u && !u.startsWith('/')) lines.push(`${s.kind === 'car' ? '🚗' : '🏠'} ${it.title}${s.show_price && it.price ? ` (${it.price})` : ''}: ${u}`);
       }
     }
     lines.push(`Bekijk het hele reisplan: ${tripShareUrl(t)}`);
@@ -505,7 +519,7 @@
             <li><a class="trip-pick" href="${tripPickHref(s, it)}">
               <span class="trip-pick-icon" aria-hidden="true">${kindIcon(s.kind, s.icon)}</span>
               <span class="trip-pick-text"><small>${esc(s.kind === 'map' ? 'Bestemming' : s.title)}</small>${esc(it.title)}
-                ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}</span>
+                ${s.show_price && it.price ? `<span class="price">${esc(it.price)}${s.kind === 'car' && it.young_fee ? ` + € ${Math.round(it.young_fee).toLocaleString('nl-NL')} toeslag &lt;25` : ''}</span>` : ''}</span>
             </a>${s.kind !== 'map' && s.kind !== 'flight' && safeUrl(it.link) && !safeUrl(it.link).startsWith('/') ? `<a class="btn sm out-link" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener noreferrer">${esc(linkSite(it.link) || 'Website')} ↗</a>` : ''}</li>`).join('')}</ul>` : ''}
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
           ${tripShareHtml(t)}
@@ -2006,7 +2020,7 @@
   async function ensureSection(kind) {
     const found = sectionsOfKind(kind)[0];
     if (found) return found;
-    const k = KINDS[kind];
+    const k = KINDS[kind] || (kind === 'car' ? { icon: '🚗', title: 'Huurauto', price: true } : null);
     const { id } = await api('/sections', 'POST', { title: k.title, icon: k.icon, kind, show_price: k.price });
     await reload();
     return findSection(id);
@@ -2582,6 +2596,362 @@
 
   $('#pinEdit').addEventListener('click', () => {
     openItemDialog(findItem(pinCtx.locId));
+  });
+
+  /* ---------- huurauto: vergelijken met de leeftijd van de jongste bestuurder ---------- */
+
+  // Indicatie per land bij de grote verhuurders: [minimumleeftijd, toeslag per dag onder 25 (van, tot)].
+  // Dit verschilt per verhuurder en autoklasse; de voorwaarden van de verhuurder gelden altijd.
+  const CAR_RULES = {
+    Spanje: [21, 10, 20], Portugal: [21, 10, 15], Italië: [21, 15, 25], Griekenland: [21, 10, 15], Frankrijk: [21, 30, 40],
+    Kroatië: [21, 10, 15], Bulgarije: [21, 8, 12], Cyprus: [21, 10, 15], Malta: [21, 10, 15], Turkije: [21, 10, 20],
+    Duitsland: [18, 15, 20], Oostenrijk: [19, 15, 20], Zwitserland: [20, 20, 30], Engeland: [21, 30, 45], Schotland: [21, 30, 45],
+    Ierland: [21, 25, 35], Denemarken: [19, 15, 20], Zweden: [19, 15, 20], Noorwegen: [19, 15, 20], Finland: [20, 15, 20],
+    IJsland: [20, 0, 10], Marokko: [21, 8, 12], Egypte: [23, 10, 15], Kaapverdië: [21, 5, 10], 'Zuid-Afrika': [21, 10, 15],
+    Tanzania: [23, 10, 20], Mauritius: [23, 5, 10], 'Verenigde Arabische Emiraten': [21, 10, 20],
+    'Verenigde Staten': [20, 25, 35], Canada: [21, 20, 30], Mexico: [21, 10, 25], 'Costa Rica': [21, 10, 20],
+    Brazilië: [21, 5, 15], Argentinië: [21, 10, 15], Colombia: [21, 5, 15], Peru: [22, 10, 15],
+    Australië: [21, 15, 25], Thailand: [21, 0, 10], Indonesië: [21, 0, 10], Maleisië: [23, 5, 10], Filipijnen: [21, 5, 10],
+    Vietnam: [21, 0, 10], 'Sri Lanka': [21, 0, 10], India: [21, 0, 10], Japan: [18, 0, 0], 'Zuid-Korea': [21, 5, 10],
+  };
+  const CAR_RULE_DEFAULT = [21, 10, 25];
+  const NO_CAR_NEEDED = ['Malediven', 'Singapore', 'Seychellen', 'China'];
+
+  // "€ 1.250", "367,92" of "1,250.50" naar een getal.
+  function parseEuro(v) {
+    let t = String(v ?? '').replace(/[^\d.,]/g, '');
+    if (!t) return null;
+    const lastC = t.lastIndexOf(','), lastD = t.lastIndexOf('.');
+    if (lastC > -1 && lastD > -1) {
+      const dec = lastC > lastD ? ',' : '.';
+      t = t.replace(new RegExp(`\\${dec === ',' ? '.' : ','}`, 'g'), '').replace(dec, '.');
+    } else if (lastC > -1) {
+      t = /,\d{1,2}$/.test(t) && t.split(',').length === 2 ? t.replace(',', '.') : t.replace(/,/g, '');
+    } else if (lastD > -1) {
+      if (/\.\d{3}$/.test(t) || t.split('.').length > 2) t = t.replace(/\./g, '');
+    }
+    const n = parseFloat(t);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function carPrefs() {
+    let p = {};
+    try { p = JSON.parse(store.get('cars') || '{}'); } catch { /* standaard */ }
+    return {
+      age: Math.min(99, Math.max(18, +p.age || 23)),
+      onlyOk: p.onlyOk !== false,
+      sort: p.sort === 'new' ? 'new' : 'total',
+      trip: p.trip === 'all' || state.trips.some((t) => t.id === +p.trip) ? p.trip : (state.trips.length === 1 ? String(state.trips[0].id) : 'all'),
+    };
+  }
+  const saveCarPrefs = (p) => store.set('cars', JSON.stringify(p));
+
+  const carItems = () => sectionsOfKind('car').flatMap((s) => sortedItems(s));
+  const tripsWithItem = (id) => state.trips.filter((t) => t.item_ids.includes(id));
+  const tripDays = (t) => (t && t.start_date ? dayCount(t.start_date, t.end_date) : null);
+
+  // Land van een reis: de dichtstbijzijnde bestemming uit de ideeënlijst.
+  function tripCountry(t) {
+    const loc = t && tripLocation(t);
+    if (!loc || !hasPos(loc) || !destinations) return null;
+    let best = null;
+    for (const d of destinations) {
+      const km = distanceKm([loc.lat, loc.lng], [d.lat, d.lng]);
+      if (!best || km < best.km) best = { c: d.c, km };
+    }
+    return best && best.km < 400 ? best.c : null;
+  }
+
+  // Wat kost de auto voor iemand van deze leeftijd, en mag het wel?
+  function carCost(it, age) {
+    const rent = parseEuro(it.price);
+    const young = age < 25 && it.young_fee ? it.young_fee : 0;
+    const allowed = it.min_age ? age >= it.min_age : null;
+    return { rent, young, total: rent != null ? rent + young : null, allowed };
+  }
+
+  function carHtml() {
+    const p = carPrefs();
+    return `
+      <div class="section-head">
+        <h2>Huurauto</h2>
+        <p class="section-intro">Vergelijk huurauto's voor jullie reis. Vul de leeftijd van de jongste bestuurder in: dan zie je meteen of je de auto mag huren en wat het kost mét de toeslag voor jonge bestuurders.</p>
+      </div>
+      <div class="idea-opts car-opts">
+        <label>Jongste bestuurder
+          <span class="stepper">
+            <button type="button" data-car-age="-1" aria-label="Een jaar jonger">−</button>
+            <input id="carAge" type="number" min="18" max="99" inputmode="numeric" value="${p.age}" aria-label="Leeftijd jongste bestuurder">
+            <button type="button" data-car-age="1" aria-label="Een jaar ouder">+</button>
+          </span>
+        </label>
+        <label class="car-trip">Reis<select id="carTrip">
+          <option value="all"${p.trip === 'all' ? ' selected' : ''}>Alle reizen</option>
+          ${state.trips.map((t) => `<option value="${t.id}"${String(t.id) === String(p.trip) ? ' selected' : ''}>${esc(t.title)}</option>`).join('')}
+        </select></label>
+      </div>
+      <div class="idea-cats car-filters">
+        <button type="button" class="cat" data-car-ok aria-pressed="${p.onlyOk}">Alleen auto's die ik mag huren</button>
+        ${[['total', 'Laagste totaalprijs'], ['new', 'Nieuwste eerst']].map(([k, l]) => `<button type="button" class="cat" role="radio" data-car-sort="${k}" aria-checked="${p.sort === k}" aria-pressed="${p.sort === k}">${l}</button>`).join('')}
+      </div>
+      <div id="carResults"></div>`;
+  }
+
+  function carSearchHtml(t, p) {
+    if (!t) return `<div class="car-search"><p class="hint">Kies hierboven een reis: dan krijg je zoeklinks met de juiste plek en datums, en wat huren op ${p.age} daar ongeveer kost.</p></div>`;
+    const loc = tripLocation(t);
+    const place = loc ? shortName(loc.title) : t.title.replace(/^Reis naar /, '');
+    const country = tripCountry(t);
+    const days = tripDays(t);
+    const [min, lo, hi] = (country && CAR_RULES[country]) || CAR_RULE_DEFAULT;
+    let rule;
+    if (country && NO_CAR_NEEDED.includes(country)) rule = `In ${esc(country)} huur je meestal geen auto: taxi, Grab of boot is gebruikelijker.`;
+    else {
+      const where = country ? `In ${esc(country)}` : 'Bij de meeste verhuurders';
+      const can = p.age >= min;
+      const fee = p.age >= 25 || !hi ? 'zonder toeslag voor jonge bestuurders'
+        : `met meestal € ${lo}–${hi} per dag toeslag${days ? ` (± € ${lo * days}–${hi * days} voor ${days} dagen)` : ''}`;
+      rule = `${where} mag je meestal vanaf <strong>${min} jaar</strong> huren. `
+        + (can ? `Op ${p.age} kan dat dus, ${fee}.` : `Op ${p.age} is dat vaak lastig: zoek naar verhuurders die het wel toestaan.`)
+        + (p.age < 25 ? ' Vaak moet je je rijbewijs ook al 1 à 2 jaar hebben, en dure auto\'s zijn soms pas vanaf 25.' : '');
+    }
+    const dates = t.start_date ? `/${t.start_date}/${t.end_date > t.start_date ? t.end_date : addDays(t.start_date, 1)}` : '';
+    const google = `https://www.google.com/search?q=${encodeURIComponent(`huurauto ${place} ${p.age} jaar jonge bestuurder`)}`;
+    return `
+      <div class="car-search">
+        <div class="car-rule">${ic('car')}<p>${rule}<small>Indicatie bij grote verhuurders; de voorwaarden van de verhuurder gelden altijd.</small></p></div>
+        <p class="mini-label">Zoeken in ${esc(place)}${t.start_date ? ` · ${shortRange(t.start_date, t.end_date)}` : ''}</p>
+        <p class="pkg-links">
+          <a href="https://www.kayak.nl/cars/${encodeURIComponent(place)}${dates}" target="_blank" rel="noopener">Kayak ↗</a>
+          <a href="https://www.discovercars.com/nl" target="_blank" rel="noopener">DiscoverCars ↗</a>
+          <a href="https://www.rentalcars.com/nl/" target="_blank" rel="noopener">Rentalcars ↗</a>
+          <a href="https://www.sunnycars.nl/" target="_blank" rel="noopener">Sunny Cars ↗</a>
+          <a href="${google}" target="_blank" rel="noopener">Google ↗</a>
+        </p>
+        <p class="fineprint">Vul op de site bij "leeftijd bestuurder" ${p.age} in, anders zie je de prijs zonder toeslag. Gevonden? Plak de link hieronder bij "Huurauto toevoegen".</p>
+      </div>`;
+  }
+
+  async function renderCarResults() {
+    const box = $('#carResults');
+    if (!box) return;
+    try { await loadDestinations(); } catch { /* land onbekend, dan algemene regels */ }
+    const p = carPrefs();
+    const trip = p.trip === 'all' ? null : state.trips.find((t) => t.id === +p.trip);
+    let list = carItems().map((it) => ({ it, cost: carCost(it, p.age), trips: tripsWithItem(it.id) }));
+    // Bij één reis: de auto's van die reis en de auto's die nog bij geen reis horen.
+    if (trip) list = list.filter((x) => x.trips.some((t) => t.id === trip.id) || !x.trips.length);
+    const hidden = p.onlyOk ? list.filter((x) => x.cost.allowed === false) : [];
+    if (p.onlyOk) list = list.filter((x) => x.cost.allowed !== false);
+    if (p.sort === 'total') list.sort((a, b) => (a.cost.total ?? Infinity) - (b.cost.total ?? Infinity) || b.it.id - a.it.id);
+    else list.sort((a, b) => b.it.id - a.it.id);
+    box.innerHTML = `
+      ${carSearchHtml(trip, p)}
+      <div class="cta-row"><button type="button" class="add-cta" data-car-new><span class="add-cta-plus">${ic('plus')}</span><span>Huurauto toevoegen</span></button></div>
+      ${list.length ? `<div class="car-list">${list.map((x, i) => carCardHtml(x, p, i === 0 && p.sort === 'total' && list.length > 1)).join('')}</div>`
+        : `<div class="empty"><p>${hidden.length ? `Geen auto die je op ${p.age} mag huren.` : 'Nog geen huurauto toegevoegd.'}</p></div>`}
+      ${hidden.length ? `<p class="hint car-hidden">${hidden.length} ${hidden.length === 1 ? 'auto is' : "auto's zijn"} verborgen omdat je ${hidden.length === 1 ? 'hem' : 'ze'} op ${p.age} niet mag huren. <button type="button" class="text-btn" data-car-ok>Toch tonen</button></p>` : ''}`;
+  }
+
+  function carCardHtml({ it, cost, trips }, p, cheapest) {
+    const link = safeUrl(it.link);
+    const age = cost.allowed === true ? `<span class="car-age ok">✓ Mag op ${p.age}${it.min_age ? ` (vanaf ${it.min_age})` : ''}</span>`
+      : cost.allowed === false ? `<span class="car-age no">✕ Pas vanaf ${it.min_age} jaar</span>`
+        : '<span class="car-age unknown">Minimumleeftijd onbekend</span>';
+    const money = (n) => `€ ${n.toLocaleString('nl-NL', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+    return `
+      <article class="car-card${cost.allowed === false ? ' blocked' : ''}">
+        <div class="car-head">
+          <span class="car-ic">${ic('car')}</span>
+          <div><h3>${esc(it.title)}</h3>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}</div>
+          ${cheapest ? '<span class="car-best">Goedkoopst</span>' : ''}
+        </div>
+        ${age}
+        <dl class="car-price">
+          <div><dt>Huurprijs</dt><dd>${cost.rent != null ? money(cost.rent) : '–'}</dd></div>
+          ${p.age < 25 ? `<div><dt>Toeslag jonge bestuurder</dt><dd>${it.young_fee ? money(it.young_fee) : it.young_fee === 0 ? 'geen' : 'onbekend'}</dd></div>` : ''}
+          <div class="car-total"><dt>Totaal${p.age < 25 ? ` op ${p.age}` : ''}</dt><dd>${cost.total != null ? money(cost.total) : '–'}</dd></div>
+        </dl>
+        ${it.body ? `<p class="card-text">${esc(it.body)}</p>` : ''}
+        <div class="chips">${trips.map((t) => `<span class="chip">${ic('suitcase')} ${esc(t.title)}</span>`).join('')}</div>
+        <div class="car-foot">
+          <button type="button" class="btn sm${trips.length ? '' : ' primary'}" data-car-trip="${it.id}">${trips.length ? 'Reizen aanpassen' : '＋ Aan reis toevoegen'}</button>
+          ${link && !link.startsWith('/') ? `<a class="btn sm out-link" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(linkSite(link) || 'Bekijk')} ↗</a>` : ''}
+          <button type="button" class="text-btn" data-car-edit="${it.id}">Aanpassen</button>
+        </div>
+      </article>`;
+  }
+
+  // Toevoegen / aanpassen
+  const carDialog = $('#carDialog');
+  const carForm = $('#carForm');
+  let carCtx = null;
+
+  function openCarDialog(it) {
+    const p = carPrefs();
+    carCtx = { id: it ? it.id : null };
+    const el = carForm.elements;
+    $('#carDialogTitle').textContent = it ? 'Huurauto aanpassen' : 'Huurauto toevoegen';
+    $('#carDelete').hidden = !it;
+    for (const f of ['link', 'title', 'subtitle', 'body']) el[f].value = it ? it[f] || '' : '';
+    el.price.value = it && it.price ? String(it.price).replace(/^€\s*/, '') : '';
+    el.min_age.value = it && it.min_age ? it.min_age : '';
+    el.fee.value = it && it.young_fee != null ? it.young_fee : '';
+    el.fee_unit.value = it ? 'total' : 'day';
+    const inTrips = it ? tripsWithItem(it.id) : [];
+    const pre = inTrips[0] ? String(inTrips[0].id) : p.trip !== 'all' ? String(p.trip) : '';
+    el.trip.innerHTML = '<option value="">Nog geen reis</option>'
+      + state.trips.map((t) => `<option value="${t.id}"${String(t.id) === pre ? ' selected' : ''}>${esc(t.title)}</option>`).join('');
+    el.trip.disabled = inTrips.length > 1;
+    syncCarDays();
+    carDialog.showModal();
+    setTimeout(() => (it ? el.title : el.link).focus(), 50);
+  }
+
+  function syncCarDays() {
+    const el = carForm.elements;
+    const t = state.trips.find((x) => x.id === +el.trip.value);
+    if (tripDays(t)) el.days.value = tripDays(t);
+    else if (!el.days.value) el.days.value = 7;
+    updateCarFeeNote();
+  }
+  function updateCarFeeNote() {
+    const el = carForm.elements;
+    const fee = parseEuro(el.fee.value);
+    const days = parseInt(el.days.value, 10) || 0;
+    $('#carFeeNote').textContent = fee && el.fee_unit.value === 'day' && days
+      ? `€ ${fee} × ${days} dagen = € ${(fee * days).toLocaleString('nl-NL')} toeslag in totaal.`
+      : 'Staat in de voorwaarden van de verhuurder, vaak onder "jonge bestuurder" of "young driver".';
+  }
+  carForm.elements.trip.addEventListener('change', syncCarDays);
+  for (const f of ['fee', 'days', 'fee_unit']) carForm.elements[f].addEventListener('input', updateCarFeeNote);
+
+  carForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const el = carForm.elements;
+    const rent = parseEuro(el.price.value);
+    const fee = parseEuro(el.fee.value);
+    const days = parseInt(el.days.value, 10) || 1;
+    const tripId = +el.trip.value || null;
+    const trip = state.trips.find((t) => t.id === tripId);
+    const loc = trip && tripLocation(trip);
+    const data = {
+      title: el.title.value, subtitle: el.subtitle.value, body: el.body.value, link: el.link.value,
+      price: rent != null ? `€ ${rent.toLocaleString('nl-NL', rent % 1 ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {})}` : '',
+      min_age: el.min_age.value, young_fee: fee == null ? '' : el.fee_unit.value === 'day' ? fee * days : fee,
+    };
+    try {
+      const isNew = !carCtx.id;
+      if (isNew) {
+        const section = await ensureSection('car');
+        carCtx.id = (await api(`/sections/${section.id}/items`, 'POST', { ...data, location_id: loc ? loc.id : null, added_by: myName() })).id;
+      } else {
+        await api(`/items/${carCtx.id}`, 'PUT', data);
+      }
+      await reload();
+      if (!el.trip.disabled) {
+        // Precies één reis gekozen: de auto zit dan in die reis (en niet meer in een andere).
+        for (const t of tripsWithItem(carCtx.id)) if (t.id !== tripId) await setTripItem(t, carCtx.id, false);
+        if (trip && !trip.item_ids.includes(carCtx.id)) await setTripItem(trip, carCtx.id, true);
+      }
+      carDialog.close();
+      await reload();
+      toast(isNew ? `Huurauto toegevoegd${trip ? ` aan ${trip.title}` : ''} ✓` : 'Opgeslagen ✓');
+    } catch (err) { toast(err.message, true); }
+  });
+
+  $('#carDelete').addEventListener('click', async () => {
+    const it = findItem(carCtx.id);
+    if (!it || !confirm(`"${it.title}" verwijderen?`)) return;
+    try { await api(`/items/${it.id}`, 'DELETE'); carDialog.close(); await reload(); toast('Verwijderd'); } catch (err) { toast(err.message, true); }
+  });
+
+  // Een onderdeel in of uit een reis halen (de rest van de reis blijft gelijk).
+  async function setTripItem(t, itemId, on) {
+    const ids = new Set(t.item_ids);
+    if (on) ids.add(itemId); else ids.delete(itemId);
+    await api(`/trips/${t.id}`, 'PUT', { title: t.title, note: t.note || '', start_date: t.start_date || '', end_date: t.end_date || '', item_ids: [...ids] });
+    t.item_ids = [...ids];
+    // Op de kaart: de auto hoort bij de bestemming van de reis.
+    const loc = on && tripLocation(t);
+    const it = findItem(itemId);
+    if (loc && it && !it.location_id) await api(`/items/${itemId}`, 'PUT', { location_id: loc.id });
+  }
+
+  // Aan reizen koppelen
+  const carTripDialog = $('#carTripDialog');
+  let carTripId = null;
+  function openCarTripDialog(id) {
+    carTripId = id;
+    const it = findItem(id);
+    $('#carTripTitle').textContent = `${it ? it.title : 'Huurauto'} aan reis toevoegen`;
+    renderCarTripList();
+    carTripDialog.showModal();
+  }
+  function renderCarTripList() {
+    $('#carTripList').innerHTML = state.trips.length ? state.trips.map((t) => {
+      const on = t.item_ids.includes(carTripId);
+      return `<button type="button" class="link-option${on ? ' on' : ''}" data-car-trip-pick="${t.id}">
+        <span><strong>${esc(t.title)}</strong>${t.start_date ? `<small>${esc(shortRange(t.start_date, t.end_date))}</small>` : ''}</span>
+        <span class="link-check" aria-hidden="true">${on ? '✓' : ''}</span></button>`;
+    }).join('') : '<p class="hint">Er is nog geen reis. Zet eerst een bestemming op de <a href="#kaart" data-close>kaart</a>.</p>';
+  }
+  $('#carTripList').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-car-trip-pick]');
+    if (!b) return;
+    const t = state.trips.find((x) => x.id === +b.dataset.carTripPick);
+    if (!t) return;
+    b.disabled = true;
+    const on = !t.item_ids.includes(carTripId);
+    try {
+      await setTripItem(t, carTripId, on);
+      await reload();
+      renderCarTripList();
+      toast(on ? `Toegevoegd aan ${t.title} ✓` : `Uit ${t.title} gehaald`);
+    } catch (err) { b.disabled = false; toast(err.message, true); }
+  });
+
+  // Bediening van de huurauto-tab.
+  document.addEventListener('click', (e) => {
+    if (currentRoute() !== 'auto') return;
+    const t = e.target;
+    if (t.closest('[data-car-new]')) { openCarDialog(null); return; }
+    const edit = t.closest('[data-car-edit]');
+    if (edit) { openCarDialog(findItem(+edit.dataset.carEdit)); return; }
+    const pick = t.closest('[data-car-trip]');
+    if (pick) { openCarTripDialog(+pick.dataset.carTrip); return; }
+    const p = carPrefs();
+    if (t.closest('[data-car-ok]')) {
+      p.onlyOk = !p.onlyOk; saveCarPrefs(p);
+      $$('.car-filters [data-car-ok]').forEach((b) => b.setAttribute('aria-pressed', String(p.onlyOk)));
+      renderCarResults(); return;
+    }
+    const sort = t.closest('[data-car-sort]');
+    if (sort) {
+      p.sort = sort.dataset.carSort; saveCarPrefs(p);
+      $$('[data-car-sort]').forEach((b) => { const on = b.dataset.carSort === p.sort; b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-checked', String(on)); });
+      renderCarResults(); return;
+    }
+    const step = t.closest('[data-car-age]');
+    if (step) {
+      const input = $('#carAge');
+      input.value = Math.min(99, Math.max(18, (parseInt(input.value, 10) || 23) + +step.dataset.carAge));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+  let carTimer = null;
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'carAge') return;
+    clearTimeout(carTimer);
+    carTimer = setTimeout(() => {
+      const a = parseInt(e.target.value, 10);
+      if (!(a >= 18 && a <= 99)) return;
+      const p = carPrefs(); p.age = a; saveCarPrefs(p); renderCarResults();
+    }, 250);
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.id !== 'carTrip') return;
+    const p = carPrefs(); p.trip = e.target.value; saveCarPrefs(p); renderCarResults();
   });
 
   /* ---------- ideeën: vakantiepakketten (vlucht + schatting verblijf) voor de groep ---------- */

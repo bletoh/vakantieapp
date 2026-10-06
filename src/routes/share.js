@@ -201,8 +201,8 @@ router.get('/og/site.jpg', async (req, res, next) => {
 
 /* ---------- gedeelde reis: alleen-lezen overzicht (/reis/<code>) ---------- */
 
-const KIND_LABEL = { flight: 'Vlucht', stay: 'Overnachting', do: 'Activiteiten', eat: 'Eten & drinken' };
-const KIND_ICON = { map: 'pin', flight: 'plane', stay: 'bed', do: 'sparkles', eat: 'utensils' };
+const KIND_LABEL = { flight: 'Vlucht', stay: 'Overnachting', car: 'Huurauto', do: 'Activiteiten', eat: 'Eten & drinken' };
+const KIND_ICON = { map: 'pin', flight: 'plane', stay: 'bed', car: 'car', do: 'sparkles', eat: 'utensils' };
 const DOT = { stay: '#e0245e', do: '#008a05', eat: '#d97706' };
 const HOME = [52.3105, 4.7683]; // Schiphol
 
@@ -211,6 +211,7 @@ const ICONS = {
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
   plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
   bed: '<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>',
+  car: '<path d="M5 17h14M3 17v-4l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v4a1 1 0 0 1-1 1h-1M5 18H4a1 1 0 0 1-1-1M3 13h18"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>',
   sparkles: '<path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/>',
   utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
   heart: '<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/>',
@@ -257,7 +258,7 @@ function tripView(trip) {
     g.items.push(x);
   }
   // Vlucht en overnachting eerst, daarna de rest in de volgorde van de tabs.
-  const order = { flight: 0, stay: 1, do: 2, eat: 3 };
+  const order = { flight: 0, stay: 1, car: 2, do: 3, eat: 4 };
   groups.sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
 
   // Wie er kan, alleen als de reis (deels) in de periode van de datumprikker valt.
@@ -308,6 +309,10 @@ function linkSite(u) {
   if (/(^|\.)vrbo\.com$/.test(h)) return 'Vrbo';
   if (/(^|\.)hostelworld\.com$/.test(h)) return 'Hostelworld';
   if (/(^|\.)expedia\./.test(h)) return 'Expedia';
+  if (/(^|\.)rentalcars\.com$/.test(h)) return 'Rentalcars';
+  if (/(^|\.)sunnycars\./.test(h)) return 'Sunny Cars';
+  if (/(^|\.)discovercars\.com$/.test(h)) return 'DiscoverCars';
+  if (/(^|\.)kayak\./.test(h)) return 'Kayak';
   return '';
 }
 const safeLink = (u) => (/^https?:\/\//i.test(u || '') ? u : '');
@@ -322,6 +327,7 @@ function tripMeta(v) {
     trip.start_date && shortDates(trip),
     flight && `vlucht ${(flight.items[0].subtitle || flight.items[0].title).split('·')[0].trim()}`,
     stay && `hotel ${stay.items[0].title}`,
+    groups.find((g) => g.kind === 'car') && `huurauto ${groups.find((g) => g.kind === 'car').items[0].title}`,
     extra && `${extra} ${extra === 1 ? 'plek' : 'plekken'} om te bezoeken`,
   ].filter(Boolean);
   return {
@@ -339,10 +345,12 @@ function itemCard(x, v) {
   } else if (x.kind === 'stay') {
     // Eigen link (Airbnb, Booking, hotelsite) als grote knop; anders zoeken op Booking.
     if (!safeLink(x.link)) links.push(`<a href="${esc(bookingUrl(x, loc, trip))}" target="_blank" rel="noopener">Prijs op Booking ↗</a>`);
+  } else if (x.kind === 'car') {
+    // De knop "Bekijk de huurauto" staat hieronder al.
   } else if (safeLink(x.link)) {
     links.push(`<a href="${esc(x.link)}" target="_blank" rel="noopener">Meer info ↗</a>`);
   }
-  const own = x.kind === 'stay' && safeLink(x.link);
+  const own = (x.kind === 'stay' || x.kind === 'car') && safeLink(x.link);
   const open = (inner, attrs = '') => (own ? `<a href="${esc(own)}" target="_blank" rel="noopener"${attrs}>${inner}</a>` : inner);
   const img = safeImg(x.image);
   const stars = x.rating ? `<span class="stars" aria-label="${x.rating} sterren">${'★'.repeat(x.rating)}</span>` : '';
@@ -353,7 +361,8 @@ function itemCard(x, v) {
       ${x.subtitle || stars ? `<p class="sub">${stars}${stars && x.subtitle ? ' · ' : ''}${esc(x.subtitle || '')}</p>` : ''}
       ${x.show_price && x.price ? `<span class="price">${esc(x.price)}</span>` : ''}
       ${x.body && x.kind !== 'flight' ? `<p class="body">${esc(x.body)}</p>` : ''}
-      ${own ? `<a class="go-btn" href="${esc(own)}" target="_blank" rel="noopener">${linkSite(own) ? `Bekijk op ${linkSite(own)}` : 'Bekijk het verblijf'} ↗</a>` : ''}
+      ${x.kind === 'car' && (x.min_age || x.young_fee) ? `<p class="sub">${[x.min_age ? `Vanaf ${x.min_age} jaar` : '', x.young_fee ? `toeslag jonge bestuurder € ${Math.round(x.young_fee).toLocaleString('nl-NL')}` : ''].filter(Boolean).join(' · ')}</p>` : ''}
+      ${own ? `<a class="go-btn" href="${esc(own)}" target="_blank" rel="noopener">${linkSite(own) ? `Bekijk op ${linkSite(own)}` : x.kind === 'car' ? 'Bekijk de huurauto' : 'Bekijk het verblijf'} ↗</a>` : ''}
       ${links.length ? `<p class="links">${links.join('')}</p>` : ''}
     </div>
   </article>`;
