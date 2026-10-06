@@ -145,3 +145,10 @@ test('health-check met back-up: zonder back-up 503, met verse back-up 200', asyn
   const ok = await fetch(`${srv.base}/healthz?backup=1`);
   assert.equal(ok.status, 200);
 });
+
+test('rijtijden: ongeldige punten worden geweigerd', async () => {
+  const a = await newUser('Rij');
+  a.team = (await a.req('POST', '/api/teams', { name: 'Rijden' })).data.id;
+  assert.equal((await a.req('POST', '/api/drive', { from: [999, 0], to: [[1, 1]] })).status, 400);
+  assert.equal((await a.req('POST', '/api/drive', { from: [39.47, -0.38], to: [] })).status, 400);
+});

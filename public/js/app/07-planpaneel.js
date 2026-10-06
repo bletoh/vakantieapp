@@ -35,7 +35,7 @@
   async function findAirports(loc) {
     const els = await nearbyData('airports', loc);
     const seen = new Set();
-    return els
+    const list = els
       .map((el) => {
         const t = el.tags || {};
         const pos = elPos(el);
@@ -49,9 +49,23 @@
       })
       .filter((a) => /^[A-Z]{3}$/.test(a.iata) && a.iata !== HOME_CODE && !seen.has(a.iata) && seen.add(a.iata))
       .sort((a, b) => (b.international - a.international) || a.km - b.km)
-      .slice(0, 3)
+      .slice(0, 4)
       .sort((a, b) => a.km - b.km);
+    return practicalAirports(loc, list);
   }
+
+  // Alleen vliegvelden waar je praktisch komt: het dichtstbijzijnde altijd, de rest alleen als je er
+  // binnen 2 uur over de weg bent. Zo valt Ibiza af als je naar Valencia gaat (alleen per boot, 4+ uur).
+  const MAX_DRIVE = 120;
+  async function practicalAirports(loc, list) {
+    if (list.length < 2) return list;
+    let minutes = null;
+    try { minutes = (await api('/drive', 'POST', { from: [loc.lat, loc.lng], to: list.map((a) => a.pos) })).minutes; } catch { /* rijtijden niet bereikbaar */ }
+    if (!minutes) return list.filter((a, i) => i === 0 || a.km <= 60).slice(0, 3); // grove terugval
+    list.forEach((a, i) => { a.drive = minutes[i]; });
+    return list.filter((a, i) => i === 0 || (a.drive != null && a.drive <= MAX_DRIVE)).slice(0, 3);
+  }
+  const driveText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)}u${String(min % 60).padStart(2, '0')}`);
 
   const HOTEL_TYPES = { hotel: 'Hotel', resort: 'Resort', apartment: 'Appartement', hostel: 'Hostel', guest_house: 'Pension', motel: 'Motel' };
 
@@ -467,7 +481,7 @@
         ${resultsHtml(airports, 'data-add-airport', titles, (a) => `
           <strong>${HOME_CODE} → ${esc(a.iata)}</strong>
           <span>${esc(a.name)}</span>
-          <small>${kmText(a.km)} van de pin · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen</small>
+          <small>${a.drive != null ? `${driveText(a.drive)} rijden` : kmText(a.km)} van de pin · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen</small>
           ${flightPriceHtml(a, p)}
           <span class="result-links">
             <a href="${flightsUrl(a.iata, p.trip)}" target="_blank" rel="noopener">Google Flights ↗</a>
