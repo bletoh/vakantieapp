@@ -38,3 +38,25 @@ test('interne IP-adressen worden herkend', () => {
   }
   for (const ip of ['8.8.8.8', '65.109.112.52', '2a01:4f8::1']) assert.ok(!isPrivateIp(ip), ip);
 });
+
+test('Airbnb-zoekpagina: prijzen voor de groep uitlezen', () => {
+  const { parseAirbnb } = require('../src/prices');
+  const state = { niobeClientData: [[0, { data: { presentation: { staysSearch: { results: { searchResults: [{
+    structuredDisplayPrice: { primaryLine: { price: '€ 1.354', qualifier: 'in totaal' } },
+    nameLocalized: { localizedStringWithTranslationPreference: 'Penthouse van het kasteel' },
+    avgRatingLocalized: '4,89 (44)',
+    demandStayListing: { id: Buffer.from('DemandStayListing:1584883988494282602').toString('base64'), location: { coordinate: { latitude: 37.5, longitude: 15.08 } } },
+    structuredContent: { primaryLine: [{ body: '3 slaapkamers', type: 'BEDINFO' }, { body: 'Particuliere host', type: 'HOSTINFO' }] },
+    contextualPictures: [{ picture: 'https://a0.muscache.com/im/pictures/x.jpeg?foo=1' }],
+  }] } } } } }]] };
+  const html = `<script id="data-deferred-state-0" type="application/json">${JSON.stringify(state)}</script>`;
+  const [x] = parseAirbnb(html, 4);
+  assert.equal(x.id, '1584883988494282602');
+  assert.equal(x.total, 1354);
+  assert.equal(x.perPerson, 339);
+  assert.equal(x.rating, 4.89);
+  assert.equal(x.reviews, 44);
+  assert.equal(x.rooms, '3 slaapkamers');
+  assert.equal(x.link, 'https://www.airbnb.nl/rooms/1584883988494282602');
+  assert.equal(x.image, 'https://a0.muscache.com/im/pictures/x.jpeg?im_w=720');
+});

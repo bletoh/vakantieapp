@@ -273,7 +273,7 @@
       ${ideaCtx.list.length ? ideaCtx.list.map((x, i) => packageHtml(x, i, p, m)).join('')
         : '<div class="empty"><p>Geen bestemming die bij alles past. Haal een wens weg of verhoog het budget.</p></div>'}
       ${all.length > ideaCtx.list.length ? `<button type="button" class="btn block idea-more" data-idea-more>Meer bestemmingen tonen (nog ${all.length - ideaCtx.list.length})</button>` : ''}
-      ${ideaCtx.list.length ? `<p class="fineprint">Prijzen zijn een indicatie: vlucht retour per persoon, verblijf voor ${p.persons} ${p.persons === 1 ? 'persoon' : 'personen'} (met meer mensen deel je een appartement of villa). De echte prijs zie je via de links.</p>` : ''}`;
+      ${ideaCtx.list.length ? `<p class="fineprint">Verblijf: echte prijzen van Airbnb (hele woning voor ${p.persons} ${p.persons === 1 ? 'persoon' : 'personen'}, ${esc(shortRange(ideaStayDates(p).checkin, ideaStayDates(p).checkout))}, incl. kosten), zodra het kaartje in beeld is. Vlucht: ${priceStatus && priceStatus.flights ? 'echte prijzen (Aviasales), de goedkoopste retour die de afgelopen dagen gevonden is' : 'een schatting'}. De volgorde is op basis van de schatting.</p>` : ''}`;
     ideaCtx.list.forEach((x, i) => fillPackage(x, i));
   }
 
@@ -287,7 +287,7 @@
         <div class="pkg-body">
           <div class="pkg-head">
             <h3>${esc(d.n)}${d.c !== d.n ? ` <small>${esc(d.c)}</small>` : ''}</h3>
-            <span class="pkg-pp"><strong>± ${euro(cost.totalPP)} p.p.</strong><small>incl. vlucht en verblijf</small></span>
+            <span class="pkg-pp"><strong class="pkg-pp-val">± ${euro(cost.totalPP)} p.p.</strong><small>incl. vlucht en verblijf</small></span>
           </div>
           ${x.pin ? '<span class="pkg-on">Staat al op de kaart</span>' : ''}
           <div class="pkg-why">
@@ -299,17 +299,17 @@
           ${groupFeelHtml(x)}
           <div class="pkg-block">
             <div class="pkg-line">${ic('plane')}<span><strong>Vlucht</strong> <span class="pkg-flight">vanaf Schiphol · ± ${flightTime(x.km)}</span></span></div>
-            <div class="pkg-price"><span>retour, ${n} ${n === 1 ? 'persoon' : 'personen'}</span><span>± ${euro(cost.flightPP * n)}</span></div>
+            <div class="pkg-price"><span class="pkg-flight-label">retour, ${n} ${n === 1 ? 'persoon' : 'personen'} · schatting</span><span class="pkg-flight-price">± ${euro(cost.flightPP * n)}</span></div>
             <p class="pkg-links pkg-flight-links"></p>
           </div>
           <div class="pkg-block">
             <div class="pkg-line">${ic('bed')}<span><strong>Verblijf</strong> · ${LEVELS[cost.level].label.toLowerCase()} (${LEVELS[cost.level].what})</span></div>
-            <div class="pkg-price"><span>${cost.nights} ${cost.nights === 1 ? 'nacht' : 'nachten'}, ${n} ${n === 1 ? 'persoon' : 'personen'}</span><span>± ${euro(cost.stayGroup)}</span></div>
-            <p class="pkg-links"><a href="${bookingGroupUrl(d, trip, n)}" target="_blank" rel="noopener">Verblijf zoeken voor ${n} ${n === 1 ? 'persoon' : 'personen'} ↗</a></p>
+            <div class="pkg-price"><span class="pkg-stay-label">${cost.nights} ${cost.nights === 1 ? 'nacht' : 'nachten'}, ${n} ${n === 1 ? 'persoon' : 'personen'} · <span class="loading-dots">echte prijs ophalen</span></span><span class="pkg-stay-price">± ${euro(cost.stayGroup)}</span></div>
+            <p class="pkg-links pkg-stay-links"><a href="${bookingGroupUrl(d, trip, n)}" target="_blank" rel="noopener">Verblijf zoeken voor ${n} ${n === 1 ? 'persoon' : 'personen'} ↗</a></p>
           </div>
           <div class="pkg-foot">
-            <div class="pkg-total"><strong>± ${euro(cost.totalGroup)} voor de groep</strong>
-              <small>± ${euro(cost.totalPP)} p.p. incl. verblijf · ${p.days} dagen${cost.over ? ' · <span class="warn">net boven budget</span>' : ''}</small></div>
+            <div class="pkg-total"><strong class="pkg-total-group">± ${euro(cost.totalGroup)} voor de groep</strong>
+              <small><span class="pkg-total-pp">± ${euro(cost.totalPP)} p.p.</span> incl. verblijf · ${p.days} dagen${cost.over ? ' · <span class="warn">net boven budget</span>' : ''}</small></div>
             ${x.pin ? `<a class="btn" href="#pin-${x.pin.id}">Bekijk op de kaart</a>`
               : `<button type="button" class="btn primary" data-idea-add="${i}">${ic('pin')} Zet op de kaart</button>`}
           </div>
@@ -349,6 +349,79 @@
     $('.pkg-flight-links', card).innerHTML = `
       <a href="${flightsUrl(a.iata, trip)}" target="_blank" rel="noopener">Google Flights ↗</a>
       <a href="${skyscannerUrl(a.iata, trip)}?adultsv2=${n}" target="_blank" rel="noopener">Skyscanner voor ${n} ↗</a>`;
+    x.iata = a.iata;
+    watchRealPrices(card, x, i);
+  }
+
+  /* --- echte prijzen: Airbnb voor het verblijf, Aviasales voor de vlucht (als er een token is) --- */
+
+  // Datums waarvoor we prijzen opvragen: de beste periode als die past, anders midden in de gekozen maand,
+  // anders over zes weken.
+  function ideaStayDates(p) {
+    const w = ideaDates(p);
+    const nights = Math.max(1, p.days - 1);
+    let checkin = w ? w.start_date : /^\d{4}-\d{2}$/.test(p.month) ? `${p.month}-15` : null;
+    const soon = addDays(todayIso(), 14);
+    if (!checkin) checkin = addDays(todayIso(), 42);
+    else if (checkin < soon) checkin = soon;
+    return { checkin, checkout: addDays(checkin, nights), nights };
+  }
+
+  let priceStatus = null;
+  const priceObserver = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      priceObserver.unobserve(e.target);
+      const job = e.target.__prices;
+      if (job) job();
+    }
+  }, { rootMargin: '300px 0px' }) : null;
+
+  // Pas ophalen als het kaartje (bijna) in beeld is: dan hoeven we Airbnb niet voor alles tegelijk te vragen.
+  function watchRealPrices(card, x, i) {
+    card.__prices = () => fillRealPrices(card, x, i);
+    if (priceObserver) priceObserver.observe(card); else card.__prices();
+  }
+
+  async function fillRealPrices(card, x, i) {
+    const p = ideaPrefs();
+    const n = x.cost.persons;
+    const { checkin, checkout } = ideaStayDates(p);
+    const range = shortRange(checkin, checkout);
+    if (!priceStatus) priceStatus = await api('/prices/status').catch(() => ({ flights: false }));
+    const qs = new URLSearchParams({ lat: x.d.lat, lng: x.d.lng, checkin, checkout, adults: n });
+    const [stay, flight] = await Promise.all([
+      api(`/prices/stay?${qs}`).catch(() => null),
+      priceStatus.flights && x.iata ? api(`/prices/flight?${new URLSearchParams({ destination: x.iata, depart: checkin, ret: checkout })}`).catch(() => null) : null,
+    ]);
+    if (!card.isConnected || ideaCtx.list[i] !== x) return;
+    const c = x.cost;
+    x.real = {};
+    if (stay && stay.levels) {
+      c.stayGroup = stay.levels[c.level] || stay.levels.mid;
+      c.stayPP = c.stayGroup / n;
+      x.real.stay = stay;
+      $('.pkg-stay-label', card).innerHTML = `${stay.nights} ${stay.nights === 1 ? 'nacht' : 'nachten'} (${esc(range)}), ${n} ${n === 1 ? 'persoon' : 'personen'} · <span class="real">echte prijs Airbnb</span>`;
+      $('.pkg-stay-price', card).textContent = euro(c.stayGroup);
+      $('.pkg-stay-links', card).insertAdjacentHTML('afterbegin', `<a href="${esc(stay.url)}" target="_blank" rel="noopener">${stay.count} Airbnb's vanaf ${euro(stay.levels.min)} ↗</a> `);
+    } else {
+      $('.pkg-stay-label', card).innerHTML = `${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}, ${n} ${n === 1 ? 'persoon' : 'personen'} · schatting`;
+    }
+    const f = flight && flight.cheapest;
+    if (f) {
+      c.flightPP = f.price;
+      x.real.flight = flight;
+      $('.pkg-flight-label', card).innerHTML = `retour, ${n} ${n === 1 ? 'persoon' : 'personen'} · <span class="real">echte prijs vanaf</span>`;
+      $('.pkg-flight-price', card).textContent = euro(f.price * n);
+      if (f.link) $('.pkg-flight-links', card).insertAdjacentHTML('afterbegin', `<a href="${esc(f.link)}" target="_blank" rel="noopener">Deze vlucht (${esc(f.airline)}) ↗</a> `);
+    }
+    c.totalPP = c.flightPP + c.stayPP;
+    c.totalGroup = c.totalPP * n;
+    const sure = x.real.stay && x.real.flight;
+    const pre = sure ? '' : '± ';
+    $('.pkg-pp-val', card).textContent = `${pre}${euro(c.totalPP)} p.p.`;
+    $('.pkg-total-group', card).textContent = `${pre}${euro(c.totalGroup)} voor de groep`;
+    $('.pkg-total-pp', card).textContent = `${pre}${euro(c.totalPP)} p.p.`;
   }
 
   const ideaTitle = (d) => (d.c && d.c !== d.n ? `${d.n}, ${d.c}` : d.n);
@@ -378,6 +451,9 @@
     const p = ideaPrefs();
     const by = myName();
     const c = x.cost;
+    // "±" alleen bij een schatting; echte prijzen (Airbnb, Aviasales) zonder.
+    const fl = x.real && x.real.flight ? '' : '± ';
+    const st = x.real && x.real.stay ? '' : '± ';
     let loc = nearbyPin(x.d);
     if (!loc) {
       const section = mapSection();
@@ -393,16 +469,16 @@
       await api(`/sections/${s.id}/items`, 'POST', {
         title: `Amsterdam → ${a.name} (${a.iata})`,
         subtitle: `${HOME_CODE} → ${a.iata} · ± ${flightTime(distanceKm(HOME, a.pos))} vliegen`,
-        body: `Indicatie per persoon: vlucht retour ± ${euro(c.flightPP)} + verblijf ± ${euro(c.stayPP)} (${LEVELS[c.level].label.toLowerCase()}, ${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}) = ± ${euro(c.totalPP)}.\n`
+        body: `Per persoon: vlucht retour ${fl}${euro(c.flightPP)} + verblijf ${st}${euro(c.stayPP)} (${x.real && x.real.stay ? 'echte Airbnb-prijs' : LEVELS[c.level].label.toLowerCase()}, ${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}) = ${fl || st}${euro(c.totalPP)}.\n`
           + `Voor de groep van ${c.persons}: ± ${euro(c.totalGroup)}. Zoek de echte prijs op via de link.`,
-        price: `± ${euro(c.totalPP)} p.p. incl. verblijf`,
+        price: `${fl || st}${euro(c.totalPP)} p.p. incl. verblijf`,
         link: flightsUrl(a.iata, trip),
         location_id: loc.id,
         added_by: by,
       });
     }
     await reload();
-    const note = `Schatting: ± ${euro(c.totalPP)} p.p. incl. verblijf (vlucht ± ${euro(c.flightPP)} + verblijf ± ${euro(c.stayPP)}, `
+    const note = `${fl || st ? 'Schatting' : 'Prijs'}: ${fl || st}${euro(c.totalPP)} p.p. incl. verblijf (vlucht ${fl}${euro(c.flightPP)} + verblijf ${st}${euro(c.stayPP)}, `
       + `${LEVELS[c.level].label.toLowerCase()}, ${c.nights} ${c.nights === 1 ? 'nacht' : 'nachten'}). `
       + `Voor de groep van ${c.persons}: ± ${euro(c.totalGroup)}.`;
     const existing = tripsFor(loc.id)[0];

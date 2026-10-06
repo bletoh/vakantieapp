@@ -1651,3 +1651,11 @@ body.gate .tabs { display: none; }
 .pkg-casino { margin: 0; font-size: .875rem; font-weight: 500; }
 .idea-search [data-idea-clear][hidden] { display: none; }
 .text-btn.danger { color: var(--red); }
+
+/* echte prijzen */
+.pkg .pkg-price .real { color: var(--good); font-weight: 600; }
+.airbnb-for small { display: block; color: var(--muted); font-size: .75rem; }
+.airbnb-levels { margin: 4px 0 8px; font-size: .9375rem; }
+.airbnb-levels small { color: var(--muted); }
+.airbnb-price { font-size: .875rem; }
+.airbnb-price strong { color: var(--ink); }
