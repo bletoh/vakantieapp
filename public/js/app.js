@@ -23,6 +23,19 @@
     } catch { return ''; }
   }
 
+  // Naam van de site achter een link, voor knoppen als "Bekijk op Airbnb".
+  function linkSite(u) {
+    let h;
+    try { h = new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; }
+    if (/(^|\.)airbnb\./.test(h) || h === 'abnb.me') return 'Airbnb';
+    if (/(^|\.)booking\.com$/.test(h)) return 'Booking';
+    if (/(^|\.)vrbo\.com$/.test(h)) return 'Vrbo';
+    if (/(^|\.)hostelworld\.com$/.test(h)) return 'Hostelworld';
+    if (/(^|\.)expedia\./.test(h)) return 'Expedia';
+    return '';
+  }
+  const linkLabel = (u) => (linkSite(u) ? `Bekijk op ${linkSite(u)}` : 'Bekijk website');
+
   function lines(s) {
     return String(s || '').split('\n').map((l) => l.trim()).filter(Boolean);
   }
@@ -394,7 +407,7 @@
 
     return `
       <article class="card${it.is_best ? ' best' : ''}${feature && img ? ' feature' : ''}" data-item="${it.id}" tabindex="0" aria-label="${esc(it.title)} aanpassen">
-        ${img ? `<div class="card-media"><img src="${esc(img)}" alt="" loading="lazy"></div>` : ''}
+        ${img ? `<div class="card-media">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-hidden="true">` : ''}<img src="${esc(img)}" alt="" loading="lazy">${link ? '</a>' : ''}</div>` : ''}
         <div class="card-body">
           <span class="card-hint" aria-hidden="true">Aanpassen</span>
           ${it.is_best ? '<span class="badge-best">Beste keuze</span>' : ''}
@@ -412,7 +425,7 @@
           ${cons.length ? `<ul class="pc cons">${cons.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
           <div class="card-foot">
             ${likeBtn('item', it.id, it.likes)}
-            ${link ? `<a class="link-btn" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Bekijk ↗</a>` : ''}
+            ${link ? `<a class="btn sm out-link" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel(link))} ↗</a>` : ''}
           </div>
         </div>
       </article>`;
@@ -444,6 +457,13 @@
   function tripShareText(t) {
     const lines = [`✈️ *${t.title}*`];
     if (t.start_date) lines.push(`📅 ${rangeText(t.start_date, t.end_date)} (${dayCount(t.start_date, t.end_date)} dagen)`);
+    // Het verblijf met link erbij, zodat iedereen in één tik op Airbnb of Booking zit.
+    for (const s of sectionsOfKind('stay')) {
+      for (const it of s.items) {
+        const u = t.item_ids.includes(it.id) && safeUrl(it.link);
+        if (u && !u.startsWith('/')) lines.push(`🏠 ${it.title}${s.show_price && it.price ? ` (${it.price})` : ''}: ${u}`);
+      }
+    }
     lines.push(`Bekijk het hele reisplan: ${tripShareUrl(t)}`);
     return lines.join('\n');
   }
@@ -486,7 +506,7 @@
               <span class="trip-pick-icon" aria-hidden="true">${kindIcon(s.kind, s.icon)}</span>
               <span class="trip-pick-text"><small>${esc(s.kind === 'map' ? 'Bestemming' : s.title)}</small>${esc(it.title)}
                 ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}</span>
-            </a></li>`).join('')}</ul>` : ''}
+            </a>${s.kind !== 'map' && s.kind !== 'flight' && safeUrl(it.link) && !safeUrl(it.link).startsWith('/') ? `<a class="btn sm out-link" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener noreferrer">${esc(linkSite(it.link) || 'Website')} ↗</a>` : ''}</li>`).join('')}</ul>` : ''}
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
           ${tripShareHtml(t)}
           <div class="card-foot">
@@ -908,9 +928,88 @@
       + locs.map((l) => `<option value="${l.id}"${l.id === locId ? ' selected' : ''}>${esc(l.title)}</option>`).join('');
     if (!item && preset.title) itemForm.elements.title.value = preset.title;
     renderItemImage();
+    resetLinkFetch(item);
     itemDialog.showModal();
-    if (!item) setTimeout(() => itemForm.elements.title.focus(), 50);
+    if (!item) setTimeout(() => (section && (section.kind === 'stay' || preset.focusLink) ? $('#itemLink') : itemForm.elements.title).focus(), 50);
   }
+
+  /* --- link plakken: naam, foto, score en ligging ophalen --- */
+
+  let fetchedLink = '';
+  const LINK_HINT = 'Plak een link, dan vullen we de naam, foto en score voor je in.';
+  function setLinkStatus(text, kind = '') {
+    const el = $('#linkFetchStatus');
+    el.textContent = text;
+    el.className = `link-status${kind ? ' ' + kind : ''}`;
+  }
+  function resetLinkFetch(item) {
+    fetchedLink = item ? item.link || '' : '';
+    setLinkStatus(item && item.link ? 'Andere link geplakt? Tik op Ophalen om lege velden aan te vullen.' : LINK_HINT);
+    $('#linkFetchBtn').disabled = false;
+  }
+
+  async function fetchLinkInfo() {
+    if ($('#linkFetchBtn').disabled) return;
+    const input = $('#itemLink');
+    const raw = input.value.trim();
+    // Uit een gedeeld Airbnb-bericht alleen de link halen ("Bekijk dit verblijf: https://…").
+    const m = /https?:\/\/\S+/.exec(raw);
+    if (!m) { if (raw) setLinkStatus('Dat lijkt geen link. Hij begint meestal met https://', 'warn'); return; }
+    const url = m[0];
+    if (url !== raw) input.value = url;
+    fetchedLink = url;
+    const ctx = itemCtx;
+    const btn = $('#linkFetchBtn');
+    btn.disabled = true;
+    setLinkStatus('Gegevens ophalen…', 'loading-dots');
+    let info;
+    try { info = await api('/link-info', 'POST', { url }); } catch (err) { info = { blocked: true, error: err.message }; }
+    btn.disabled = false;
+    if (ctx !== itemCtx || !itemDialog.open) return;
+    if (info.link && info.link !== url) { input.value = info.link; fetchedLink = info.link; }
+    const el = itemForm.elements;
+    const filled = [];
+    const fill = (name, value, label) => {
+      if (!value || !el[name] || String(el[name].value).trim()) return;
+      el[name].value = value;
+      filled.push(label);
+    };
+    fill('title', info.title, 'naam');
+    const sub = [info.ratingText, info.subtitle, info.guests ? `max ${info.guests} gasten` : ''].filter(Boolean).join(' · ');
+    fill('subtitle', sub, 'details');
+    if (!$('#priceField').hidden) fill('price', info.price, 'prijs');
+    fill('rating', info.rating ? String(info.rating) : '', 'score');
+    fill('body', info.body, 'beschrijving');
+    if (info.image && !itemCtx.image) { itemCtx.image = info.image; renderItemImage(); filled.push('foto'); }
+    if (info.lat != null && info.lng != null) {
+      if (itemCtx.lat == null) { itemCtx.lat = info.lat; itemCtx.lng = info.lng; }
+      // Nog geen bestemming gekozen: de dichtstbijzijnde pin (binnen 150 km).
+      if (!$('#locationField').hidden && !el.location_id.value) {
+        const near = locations().filter(hasPos)
+          .map((l) => ({ l, km: distanceKm([info.lat, info.lng], [l.lat, l.lng]) }))
+          .sort((a, b) => a.km - b.km)[0];
+        if (near && near.km < 150) { el.location_id.value = String(near.l.id); filled.push(`bestemming ${shortName(near.l.title)}`); }
+      }
+    }
+    const site = info.site ? ` van ${info.site}` : '';
+    const needPrice = !$('#priceField').hidden && !el.price.value.trim();
+    if (info.blocked) {
+      setLinkStatus(`${info.site || 'Deze site'} laat ons de gegevens niet ophalen${filled.length ? `; de ${filled.join(', ')} staat er al in` : ''}. Vul de rest even zelf in. De link blijft gewoon werken.`, 'warn');
+    } else if (filled.length) {
+      setLinkStatus(`✓ Ingevuld${site}: ${filled.join(', ')}.${needPrice ? ' De prijs staat niet in de link: vul de totaalprijs zelf in.' : ''}`, 'ok');
+    } else {
+      setLinkStatus(`Opgehaald${site}; de velden waren al ingevuld.`, 'ok');
+    }
+    if (needPrice) el.price.placeholder = 'Bijv. € 1.250 totaal';
+    if (needPrice && !info.blocked) el.price.focus();
+    else if (!el.title.value.trim()) el.title.focus();
+  }
+
+  $('#linkFetchBtn').addEventListener('click', fetchLinkInfo);
+  // Bij plakken meteen ophalen; bij typen pas als je het veld verlaat.
+  $('#itemLink').addEventListener('paste', () => setTimeout(fetchLinkInfo, 0));
+  $('#itemLink').addEventListener('change', () => { if ($('#itemLink').value.trim() && $('#itemLink').value.trim() !== fetchedLink) fetchLinkInfo(); });
+  $('#itemLink').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); fetchLinkInfo(); } });
 
   $('#itemImageField').addEventListener('click', (e) => {
     if (!e.target.closest('[data-pick-image]')) return;
@@ -2112,6 +2211,7 @@
           <span><strong>${esc(it.title)}</strong>${it.subtitle ? `<small>${esc(it.subtitle)}</small>` : ''}</span>
           ${s.show_price && it.price ? `<span class="price">${esc(it.price)}</span>` : ''}
         </button>
+        ${safeUrl(it.link) && !safeUrl(it.link).startsWith('/') ? `<a class="btn sm out-link" href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener noreferrer">${esc(linkSite(it.link) || 'Website')} ↗</a>` : ''}
         <button type="button" class="icon-btn sm" data-unlink="${it.id}" aria-label="${esc(it.title)} weghalen bij deze bestemming">✕</button>
       </li>`).join('')}</ul>`;
   }
@@ -2186,7 +2286,9 @@
     const titles = new Set(chosen.map(({ it }) => it.title));
     const own = section && section.items.length
       ? `<button type="button" class="text-btn" data-action="link-item" data-loc="${loc.id}" data-section="${section.id}">Kies uit eerdere suggesties</button>` : '';
-    const ownNew = `<button type="button" class="text-btn" data-new-kind="${kind}">＋ Zelf ${k.title.toLowerCase()} invullen</button>`;
+    const ownNew = kind === 'stay'
+      ? `<button type="button" class="btn sm" data-new-kind="stay">＋ Airbnb- of Booking-link plakken</button>`
+      : `<button type="button" class="text-btn" data-new-kind="${kind}">＋ Zelf ${k.title.toLowerCase()} invullen</button>`;
     let found = '';
     if (!hasPos(loc)) {
       found = '<p class="hint">Zet de bestemming op de kaart om suggesties in de buurt te zien.</p>';
@@ -2383,7 +2485,7 @@
     const newKind = t.closest('[data-new-kind]');
     if (newKind) {
       const section = await ensureSection(newKind.dataset.newKind);
-      openItemDialog(null, section.id, { location_id: loc.id });
+      openItemDialog(null, section.id, { location_id: loc.id, focusLink: newKind.dataset.newKind === 'stay' });
       return;
     }
     const unlink = t.closest('[data-unlink]');

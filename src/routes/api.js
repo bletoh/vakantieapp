@@ -4,6 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const db = require('../db');
 const { nearby } = require('../nearby');
+const { linkInfo } = require('../linkinfo');
 
 const router = express.Router();
 
@@ -388,6 +389,14 @@ router.get('/nearby/:kind', async (req, res, next) => {
 /* ---------- uploads ---------- */
 
 const MIME_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+// Titel, foto, score enz. uit een geplakte link (Airbnb, Booking, hotelsite).
+router.post('/link-info', async (req, res, next) => {
+  try { res.json(await linkInfo(req.body && req.body.url)); } catch (err) {
+    if (err.status) return next(err);
+    res.json({ blocked: true });
+  }
+});
 
 router.post('/upload', (req, res) => {
   const match = /^data:(image\/[a-z]+);base64,(.+)$/i.exec(req.body.data || '');

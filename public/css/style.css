@@ -1546,3 +1546,24 @@ body.gate .tabs { display: none; }
   .chip-btn { min-height: 44px; }
   .msg-del { padding: 6px 8px; margin: -6px -8px; }
 }
+
+/* link plakken in het toevoegscherm: gegevens van Airbnb, Booking of een website ophalen */
+.link-fetch { display: grid; gap: 6px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface-2); }
+.link-fetch > label { font-weight: 600; }
+.input-btn { display: flex; gap: 8px; }
+.input-btn input { flex: 1; min-width: 0; }
+.input-btn .btn { flex-shrink: 0; }
+.link-status { margin: 0; color: var(--muted); font-size: .8125rem; line-height: 1.4; }
+.link-status.ok { color: var(--good); }
+.link-status.warn { color: var(--ink); }
+
+/* knop naar de site van het verblijf (Airbnb, Booking…) */
+.btn.out-link { flex-shrink: 0; white-space: nowrap; border-color: var(--ink); }
+.btn.out-link:hover { background: var(--ink); color: var(--paper); }
+.card-foot .btn.out-link { margin-left: auto; }
+.card-media a { display: block; width: 100%; height: 100%; }
+.trip-picks li { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+.trip-picks li .trip-pick { flex: 1; min-width: 0; border-bottom: none; }
+.chosen li:has(.out-link) { display: grid; grid-template-columns: 1fr auto; }
+.chosen li .btn.out-link { grid-column: 1; justify-self: start; min-height: 34px; }
+.chosen li:has(.out-link) .icon-btn { grid-column: 2; grid-row: 1; }
