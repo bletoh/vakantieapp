@@ -1718,3 +1718,27 @@ body.gate .tabs { display: none; }
 @media (max-width: 420px) { .roulette-bets { grid-template-columns: 1fr; } }
 @media (prefers-color-scheme: dark) { .roulette { --pocket-black: #0a0a0a; } }
 @media (prefers-reduced-motion: reduce) { .roulette.spinning .bulb { animation: none; } }
+
+/* ---------- paasei: fiesta-modus ---------- */
+.fiesta-layer { position: fixed; inset: 0; z-index: 9999; pointer-events: none; overflow: hidden; }
+.fiesta-plane { position: absolute; top: 14%; left: 0; display: flex; align-items: center; white-space: nowrap;
+  transform: translateX(-100%); animation: fiesta-fly 7s linear forwards; }
+.fiesta-banner { background: #ffd23f; color: #222; font-weight: 800; font-size: 15px; letter-spacing: .02em; text-transform: uppercase;
+  padding: 7px 14px; border: 2px solid #222; border-radius: 3px; box-shadow: var(--shadow); animation: fiesta-flap .5s ease-in-out infinite alternate; }
+.fiesta-rope { width: 34px; border-top: 2px dashed #222; }
+.fiesta-jet { font-size: 34px; display: inline-block; transform: rotate(45deg); animation: fiesta-bob 1s ease-in-out infinite alternate; }
+.fiesta-flamingo { position: absolute; bottom: calc(80px + env(safe-area-inset-bottom)); right: 16px; font-size: 54px;
+  transform-origin: 50% 100%; animation: fiesta-dance .45s ease-in-out infinite alternate; }
+.fiesta-drop { position: absolute; top: -60px; animation: fiesta-fall 4s linear both; }
+body.fiesta #panel { animation: fiesta-disco 1.2s linear infinite, fiesta-wobble .6s ease-in-out infinite alternate; }
+@keyframes fiesta-fly { to { transform: translateX(100vw); } }
+@keyframes fiesta-flap { from { transform: skewY(-2deg); } to { transform: skewY(2deg) translateY(2px); } }
+@keyframes fiesta-bob { to { transform: rotate(38deg) translateY(-6px); } }
+@keyframes fiesta-dance { from { transform: rotate(-14deg) scaleY(.92); } to { transform: rotate(14deg) translateY(-12px); } }
+@keyframes fiesta-fall { to { transform: translate(var(--drift), calc(100vh + 120px)) rotate(var(--spin)); } }
+@keyframes fiesta-disco { to { filter: hue-rotate(360deg) saturate(1.6); } }
+@keyframes fiesta-wobble { from { transform: rotate(-.6deg); } to { transform: rotate(.6deg) scale(1.005); } }
+@media (prefers-reduced-motion: reduce) {
+  .fiesta-plane { animation: none; transform: none; left: 50%; translate: -50% 0; }
+  .fiesta-banner, .fiesta-jet, .fiesta-flamingo, body.fiesta #panel { animation: none; }
+}
