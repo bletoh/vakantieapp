@@ -148,38 +148,31 @@
   }
 
   function wheelSvg() {
-    const bulbs = Array.from({ length: 24 }, (_, i) => { const [x, y] = polar(i * 15, 113); return `<circle class="bulb b${i % 2}" cx="${f2(x)}" cy="${f2(y)}" r="2.6"/>`; }).join('');
+    const bulbs = Array.from({ length: 24 }, (_, i) => { const [x, y] = polar(i * 15, 113); return `<circle class="bulb b${i % 2}" cx="${f2(x)}" cy="${f2(y)}" r="2"/>`; }).join('');
     const pockets = Array.from({ length: POCKETS }, (_, i) => {
       const [tx, ty] = polar(i * SEG + SEG / 2, 84);
       return `<path class="pocket ${i % 2 ? 'black' : 'red'}" d="${pocketPath(i, 74, 94)}"/>
         <text class="pocket-num" x="${f2(tx)}" y="${f2(ty)}" transform="rotate(${i * SEG + SEG / 2} ${f2(tx)} ${f2(ty)})">${i + 1}</text>`;
     }).join('');
-    const frets = Array.from({ length: POCKETS }, (_, i) => { const [x1, y1] = polar(i * SEG, 70); const [x2, y2] = polar(i * SEG, 94); return `<line x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}"/>`; }).join('');
-    const spokes = [0, 90, 180, 270].map((d) => { const [x, y] = polar(d, 30); return `<line x1="${C}" y1="${C}" x2="${f2(x)}" y2="${f2(y)}"/><circle cx="${f2(x)}" cy="${f2(y)}" r="3.4"/>`; }).join('');
+    const frets = Array.from({ length: POCKETS }, (_, i) => { const [x1, y1] = polar(i * SEG, 74); const [x2, y2] = polar(i * SEG, 94); return `<line x1="${f2(x1)}" y1="${f2(y1)}" x2="${f2(x2)}" y2="${f2(y2)}"/>`; }).join('');
+    const spokes = [0, 90, 180, 270].map((d) => { const [x, y] = polar(d, 30); return `<line x1="${C}" y1="${C}" x2="${f2(x)}" y2="${f2(y)}"/>`; }).join('');
     const [bx, by] = polar(rou.ball, rou.ballR || 101);
     return `<svg class="wheel" viewBox="0 0 240 240" aria-hidden="true">
-      <defs>
-        <radialGradient id="rouWood" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#6b3a1f"/><stop offset="1" stop-color="#2a140a"/></radialGradient>
-        <linearGradient id="rouGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7e08a"/><stop offset=".5" stop-color="#d4af37"/><stop offset="1" stop-color="#8a6d1d"/></linearGradient>
-        <radialGradient id="rouCone" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#4a2a17"/><stop offset="1" stop-color="#1c0e06"/></radialGradient>
-        <radialGradient id="rouBall" cx="35%" cy="35%" r="65%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#b9b9b9"/></radialGradient>
-      </defs>
-      <circle cx="${C}" cy="${C}" r="119" fill="url(#rouWood)"/>
-      <circle cx="${C}" cy="${C}" r="113" fill="none" stroke="url(#rouGold)" stroke-width="7"/>
+      <circle class="w-rim" cx="${C}" cy="${C}" r="119"/>
       ${bulbs}
-      <circle cx="${C}" cy="${C}" r="108" fill="#1a0d06"/>
-      <circle cx="${C}" cy="${C}" r="97" fill="none" stroke="url(#rouGold)" stroke-width="2"/>
+      <circle class="w-track" cx="${C}" cy="${C}" r="107"/>
       <g class="wheel-rot" style="transform: rotate(${rou.wheel}deg)">
         ${pockets}
-        <g class="frets" stroke="url(#rouGold)" stroke-width="1.6">${frets}</g>
-        <circle cx="${C}" cy="${C}" r="70" fill="url(#rouCone)" stroke="url(#rouGold)" stroke-width="2"/>
-        <circle cx="${C}" cy="${C}" r="44" fill="none" stroke="#d4af37" stroke-opacity=".35"/>
-        <g class="spokes" stroke="url(#rouGold)" stroke-width="4" stroke-linecap="round" fill="url(#rouGold)">${spokes}</g>
-        <circle cx="${C}" cy="${C}" r="10" fill="url(#rouGold)"/>
+        <g class="w-frets">${frets}</g>
+        <circle class="w-cone" cx="${C}" cy="${C}" r="74"/>
+        <circle class="w-ring" cx="${C}" cy="${C}" r="44"/>
+        <g class="w-spokes">${spokes}</g>
+        <circle class="w-hub" cx="${C}" cy="${C}" r="9"/>
       </g>
-      <circle class="ball" cx="${f2(bx)}" cy="${f2(by)}" r="5.2" fill="url(#rouBall)"/>
+      <circle class="ball" cx="${f2(bx)}" cy="${f2(by)}" r="5.2"/>
     </svg>`;
   }
+
 
   function rouletteHtml() {
     const locs = locations();
@@ -188,19 +181,20 @@
     if (!rou.b || !findItem(rou.b) || rou.b === rou.a) rou.b = tie ? tie.b.id : (locs.find((l) => l.id !== rou.a) || locs[1]).id;
     const opts = (sel) => locs.map((l) => `<option value="${l.id}"${l.id === sel ? ' selected' : ''}>${esc(l.title)}</option>`).join('');
     return `
+      <p class="label">Roulette</p>
       <section class="roulette" aria-labelledby="rouTitle">
         <div class="roulette-head">
-          <h3 id="rouTitle"><span aria-hidden="true">♠ ♥</span> Casino Roulette <span aria-hidden="true">♦ ♣</span></h3>
-          <p>${tie ? `Gelijkspel in <strong>${esc(tie.poll.title)}</strong>? Laat het lot beslissen.` : 'Komen jullie er niet uit? Zet in op rood of zwart.'}</p>
+          <h3 id="rouTitle">Laat het lot kiezen</h3>
+          <p>${tie ? `Gelijkspel in <strong>${esc(tie.poll.title)}</strong>? Draai aan het wiel.` : 'Komen jullie er niet uit? Kies twee plekken en draai aan het wiel.'}</p>
         </div>
         <div class="roulette-bets">
           <label class="bet red"><span class="chip-dot" aria-hidden="true"></span><span class="bet-col">Rood</span><select id="rouA" aria-label="Plek op rood">${opts(rou.a)}</select></label>
           <label class="bet black"><span class="chip-dot" aria-hidden="true"></span><span class="bet-col">Zwart</span><select id="rouB" aria-label="Plek op zwart">${opts(rou.b)}</select></label>
         </div>
         <div class="wheel-wrap" id="rouWheel">${wheelSvg()}</div>
-        <button type="button" class="spin-chip" data-roulette-spin><span>SPIN</span></button>
+        <button type="button" class="btn primary spin-btn" data-roulette-spin>Draai aan het wiel</button>
         <div class="roulette-result" id="rouResult" role="status"></div>
-        <p class="roulette-fine">De server trekt de winnaar en de uitslag komt in de groepschat, zodat iedereen hem ziet.</p>
+        <p class="roulette-fine">De server trekt de winnaar en de uitslag komt in de groepschat, zodat iedereen hem ziet. <button type="button" class="link-btn" data-roulette-clear>Uitslagen uit de chat halen</button></p>
       </section>`;
   }
 
@@ -220,7 +214,8 @@
   }
 
   function confetti(box) {
-    const colors = ['#d4af37', '#f7e08a', '#c8102e', '#ffffff', '#111111'];
+    const css = getComputedStyle(document.documentElement);
+    const colors = [css.getPropertyValue('--red').trim() || '#e0245e', '#222222', '#ffb400', '#00a699', '#9aa0a6'];
     for (let i = 0; i < 26; i++) {
       const s = document.createElement('span');
       s.className = 'confetti';
@@ -236,6 +231,16 @@
   }
 
   document.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-roulette-clear]')) {
+      if (!confirm('Alle roulette-uitslagen uit de groepschat halen?')) return;
+      try {
+        const { removed } = await api('/messages/roulette', 'DELETE');
+        const gone = new Set(removed);
+        if (chat.loaded) chat.messages = chat.messages.filter((m) => !gone.has(m.id));
+        toast(removed.length ? `${removed.length} ${removed.length === 1 ? 'uitslag' : 'uitslagen'} uit de chat gehaald` : 'Er staan geen roulette-uitslagen in de chat');
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
     const btn = e.target.closest('[data-roulette-spin]');
     if (!btn || rou.spinning) return;
     if (rou.a === rou.b) { toast('Kies twee verschillende plekken', true); return; }
@@ -286,7 +291,7 @@
     const res = $('#rouResult');
     if (res && win) {
       res.innerHTML = `<span class="roulette-win ${r.index ? 'black' : 'red'}"><small>${pocket + 1} ${r.index ? 'zwart' : 'rood'}</small><strong>${esc(shortName(win.title))} wint!</strong></span>
-        <a class="btn sm gold" href="#pin-${win.id}">Verder plannen →</a>`;
+        <a class="btn sm primary" href="#pin-${win.id}">Verder plannen →</a>`;
       if (!reducedMotion()) confetti(box.querySelector('.wheel-wrap'));
     }
   });

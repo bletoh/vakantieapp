@@ -359,11 +359,25 @@ team.post('/messages', (req, res) => {
   res.json({ id });
 });
 
+// Roulette-uitslagen zijn een spelletje: iedereen in de groep mag ze uit de chat halen.
+const ROULETTE = "kind = 'event' AND body LIKE 'liet de roulette kiezen%'";
+const isRoulette = (m) => m.kind === 'event' && m.body.startsWith('liet de roulette kiezen');
+// Weggehaald: ook uit de chats van de anderen die openstaan.
+const forget = (teamId, ids) => { const at = Date.now(); for (const id of ids) cleaned.push({ team: teamId, id, drop: true, at }); };
+
+team.delete('/messages/roulette', (req, res) => {
+  const ids = db.prepare(`SELECT id FROM messages WHERE team_id = ? AND ${ROULETTE}`).all(req.team.id).map((r) => r.id);
+  db.prepare(`DELETE FROM messages WHERE team_id = ? AND ${ROULETTE}`).run(req.team.id);
+  forget(req.team.id, ids);
+  res.json({ removed: ids });
+});
+
 team.delete('/messages/:id', (req, res) => {
   const msg = db.prepare('SELECT * FROM messages WHERE id = ? AND team_id = ?').get(req.params.id, req.team.id);
   if (!msg) throw fail(404, 'Bericht niet gevonden');
-  if (msg.user_id !== req.user.id && req.team.role !== 'admin') throw fail(403, 'Je kunt alleen je eigen berichten verwijderen');
+  if (msg.user_id !== req.user.id && req.team.role !== 'admin' && !isRoulette(msg)) throw fail(403, 'Je kunt alleen je eigen berichten verwijderen');
   db.prepare('DELETE FROM messages WHERE id = ?').run(msg.id);
+  forget(req.team.id, [msg.id]);
   res.json({ ok: true });
 });
 
