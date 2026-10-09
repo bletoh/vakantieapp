@@ -13,6 +13,9 @@
       $('.count', btn).textContent = likes;
     },
     'add-trip': () => openTripDialog(null),
+    'select-trips': () => { tripSelect = []; render(); },
+    'select-cancel': () => { tripSelect = null; render(); },
+    'share-bundle': () => shareBundle(),
     'plan-window': (btn) => openDestDialog(btn.dataset.start, btn.dataset.end),
     'edit-poll': () => openPollDialog(),
     async 'remove-person'(btn) {
@@ -57,6 +60,7 @@
 
   function openCard(card) {
     if (!card) return;
+    if (tripSelect && card.dataset.trip) { toggleTripSelect(+card.dataset.trip); return; }
     if (card.dataset.item) openItemDialog(findItem(+card.dataset.item));
     else openTripDialog(state.trips.find((t) => t.id === +card.dataset.trip));
   }

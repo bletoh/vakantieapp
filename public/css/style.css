@@ -1742,3 +1742,35 @@ body.fiesta #panel { animation: fiesta-disco 1.2s linear infinite, fiesta-wobble
   .fiesta-plane { animation: none; transform: none; left: 50%; translate: -50% 0; }
   .fiesta-banner, .fiesta-jet, .fiesta-flamingo, body.fiesta #panel { animation: none; }
 }
+
+/* ---------- reizen: meerdere selecteren en in één link delen ---------- */
+.select-hint { margin: -10px 0 16px; color: var(--muted); font-size: .9375rem; }
+.grid.selecting { padding-bottom: 96px; }
+.grid.selecting .card.trip > :not(.select-check) { pointer-events: none; }
+.grid.selecting .card.trip .card-hint, .grid.selecting .card.trip .trip-add, .grid.selecting .card.trip .trip-share { display: none; }
+.grid.selecting .card.trip { user-select: none; -webkit-tap-highlight-color: transparent; }
+.card.trip.selected { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+.select-check {
+  position: absolute; z-index: 2; top: 14px; right: 14px; pointer-events: none;
+  display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(255, 255, 255, .92); border: 2px solid var(--muted); color: transparent;
+  box-shadow: var(--shadow-sm);
+}
+.select-check .ic { width: 18px; height: 18px; stroke-width: 3; }
+.card.trip.selected .select-check { background: var(--red); border-color: var(--red); color: #fff; }
+.select-bar {
+  position: fixed; z-index: 900; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + var(--tabbar, 0px) + var(--safe-b));
+  display: flex; align-items: center; gap: 8px; width: min(560px, calc(100% - 32px));
+  padding: 10px 10px 10px 18px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.select-count { flex: 1; min-width: 0; font-weight: 600; }
+.select-bar .btn { flex: none; }
+.select-bar .btn[disabled] { opacity: .45; }
+@media (max-width: 600px) { .select-bar { bottom: calc(10px + var(--tabbar)); } .select-bar .btn.ghost { padding-inline: 10px; } }
+.bundle-list { margin: 0 0 18px; padding-left: 22px; display: grid; gap: 6px; font-weight: 600; }
+.bundle-list small { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.bundle-actions { display: grid; gap: 10px; justify-items: stretch; }
+.bundle-actions .btn.wa { display: inline-flex; justify-content: center; gap: 8px; }
+.bundle-actions .text-btn { justify-self: center; margin-top: 4px; }

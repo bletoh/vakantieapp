@@ -277,6 +277,36 @@ router.delete('/trips/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Eén deellink voor meerdere reizen. Dezelfde selectie geeft dezelfde link terug.
+router.post('/trip-bundles', (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body.trip_ids) ? req.body.trip_ids : []).map((n) => parseInt(n, 10)))]
+    .filter((n) => tripOfTeam(req.team.id, n));
+  if (ids.length < 2) {
+    const err = new Error('Kies minstens twee reizen');
+    err.status = 400;
+    throw err;
+  }
+  if (ids.length > 20) {
+    const err = new Error('Kies maximaal 20 reizen');
+    err.status = 400;
+    throw err;
+  }
+  const key = [...ids].sort((a, b) => a - b).join(',');
+  const found = db.prepare(`
+    SELECT b.slug FROM trip_bundles b WHERE b.team_id = ? AND b.trip_key = ?
+      AND (SELECT COUNT(*) FROM trip_bundle_trips x WHERE x.bundle_id = b.id) = ?`).get(req.team.id, key, ids.length);
+  if (found) return res.json({ slug: found.slug });
+  const slug = db.transaction(() => {
+    const s = db.shareSlug();
+    const id = db.prepare('INSERT INTO trip_bundles (team_id, slug, trip_key, created_by) VALUES (?, ?, ?, ?)')
+      .run(req.team.id, s, key, req.user.name).lastInsertRowid;
+    const add = db.prepare('INSERT INTO trip_bundle_trips (bundle_id, trip_id, position) VALUES (?, ?, ?)');
+    ids.forEach((tripId, i) => add.run(id, tripId, i));
+    return s;
+  })();
+  res.json({ slug });
+});
+
 /* ---------- datumprikker ---------- */
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

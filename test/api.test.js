@@ -92,6 +92,37 @@ test('reis met huurauto: minimumleeftijd en toeslag worden bewaard', async () =>
   assert.equal(raar.young_fee, null);
 });
 
+test('meerdere reizen in één deellink', async () => {
+  const a = await newUser('Reiziger');
+  a.team = (await a.req('POST', '/api/teams', { name: 'Reisclub' })).data.id;
+  const map = (await a.req('GET', '/api/content')).data.sections.find((s) => s.kind === 'map');
+  const ids = [];
+  for (const [title, lat, lng] of [['Barcelona, Spanje', 41.39, 2.17], ['Lissabon, Portugal', 38.72, -9.14], ['Rome, Italië', 41.9, 12.5]]) {
+    const pin = await a.req('POST', `/api/sections/${map.id}/items`, { title, lat, lng });
+    ids.push((await a.req('POST', '/api/trips', { title: `Weekje ${title.split(',')[0]}`, item_ids: [pin.data.id], start_date: '2027-07-01', end_date: '2027-07-08' })).data.id);
+  }
+  assert.equal((await a.req('POST', '/api/trip-bundles', { trip_ids: [ids[0]] })).status, 400, 'minstens twee reizen');
+  const r = await a.req('POST', '/api/trip-bundles', { trip_ids: [ids[2], ids[0], ids[1]] });
+  assert.equal(r.status, 200);
+  assert.match(r.data.slug, /^[A-Za-z0-9]{10}$/);
+  // Dezelfde selectie (andere volgorde) geeft dezelfde link.
+  assert.equal((await a.req('POST', '/api/trip-bundles', { trip_ids: ids })).data.slug, r.data.slug);
+
+  const html = await (await fetch(`${srv.base}/reizen/${r.data.slug}`)).text();
+  assert.match(html, /3 reizen om uit te kiezen/);
+  assert.match(html, /og:title" content="🧳 3 reizen: Rome, Barcelona of Lissabon\?"/, 'volgorde van selecteren');
+  assert.ok(html.indexOf('Weekje Rome') < html.indexOf('Weekje Barcelona'));
+
+  // Een verwijderde reis valt eruit; reizen van een andere groep kun je niet toevoegen.
+  await a.req('DELETE', `/api/trips/${ids[1]}`);
+  assert.doesNotMatch(await (await fetch(`${srv.base}/reizen/${r.data.slug}`)).text(), /Weekje Lissabon/);
+  const b = await newUser('Buitenstaander');
+  b.team = (await b.req('POST', '/api/teams', { name: 'Anders' })).data.id;
+  const own = (await b.req('POST', '/api/trips', { title: 'Eigen reis' })).data.id;
+  assert.equal((await b.req('POST', '/api/trip-bundles', { trip_ids: [own, ids[0]] })).status, 400);
+  assert.equal((await fetch(`${srv.base}/reizen/bestaatniet`)).status, 404);
+});
+
 test('link ophalen: interne adressen worden geweigerd', async () => {
   const a = await newUser('Finn');
   a.team = (await a.req('POST', '/api/teams', { name: 'Links' })).data.id;
