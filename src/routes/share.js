@@ -110,7 +110,7 @@ router.get('/join/:code', (req, res) => {
 /* ---------- plaatjes voor het voorbeeld (1200 × 630) ---------- */
 
 // Zelfde kleuren als de app: wit, grijstinten en één accentkleur.
-const C = { paper: '#ffffff', ink: '#222222', muted: '#6a6a6a', red: '#e0245e', navy: '#222222', line: '#ebebeb', good: '#008a05' };
+const C = { paper: '#f8f7f3', ink: '#1d2a30', muted: '#5f6c72', red: '#2b6a80', navy: '#1d2a30', line: '#e2e1da', good: '#2f7a45' };
 
 function wrap(text, max) {
   const words = String(text).split(/\s+/);
@@ -204,7 +204,7 @@ router.get('/og/site.jpg', async (req, res, next) => {
 
 const KIND_LABEL = { flight: 'Vlucht', stay: 'Overnachting', car: 'Huurauto', do: 'Activiteiten', eat: 'Eten & drinken' };
 const KIND_ICON = { map: 'pin', flight: 'plane', stay: 'bed', car: 'car', do: 'sparkles', eat: 'utensils' };
-const DOT = { stay: '#e0245e', do: '#008a05', eat: '#d97706' };
+const DOT = { stay: '#2b6a80', do: '#2f7a45', eat: '#c0782a' };
 const HOME = [52.3105, 4.7683]; // Schiphol
 
 const ICONS = {
@@ -372,11 +372,11 @@ function itemCard(x, v) {
 
 // Opmaak van de deelpagina's (losse reis en overzicht van meerdere reizen).
 const PAGE_CSS = `
-    :root { --bg: #fff; --surface: #fff; --surface-2: #f4f4f4; --ink: #222; --muted: #6a6a6a; --line: #e2e2e2;
-      --brand: #e0245e; --good: #008a05; --bad: #c13515; color-scheme: light; }
+    :root { --bg: #f8f7f3; --surface: #fff; --surface-2: #efeee8; --ink: #1d2a30; --muted: #5f6c72; --line: #e2e1da;
+      --brand: #2b6a80; --on-brand: #fff; --good: #2f7a45; --bad: #b4472c; color-scheme: light; }
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #121212; --surface: #1c1c1c; --surface-2: #262626; --ink: #f2f2f2; --muted: #a3a3a3; --line: #333;
-        --brand: #ff5c8a; --good: #4cc26a; --bad: #ff7a66; color-scheme: dark; }
+      :root { --bg: #12171a; --surface: #1a2125; --surface-2: #232b30; --ink: #eef2f2; --muted: #9eabb0; --line: #2f383d;
+        --brand: #7cbcd1; --on-brand: #0e1a1f; --good: #6cc28a; --bad: #f08a6c; color-scheme: dark; }
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -421,13 +421,13 @@ const PAGE_CSS = `
     .item-img-link { display: flex; flex: none; }
     .item h3 a { color: inherit; text-decoration: none; }
     .go-btn { justify-self: start; display: inline-flex; align-items: center; margin-top: 8px; min-height: 44px; padding: 10px 18px;
-      border-radius: 10px; background: #e0245e; color: #fff; font-weight: 600; text-decoration: none; }
+      border-radius: 10px; background: var(--brand); color: var(--on-brand); font-weight: 600; text-decoration: none; }
     .go-btn:hover { filter: brightness(.92); }
     .empty { color: var(--muted); }
     footer { max-width: 680px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .8125rem; display: flex; align-items: center; gap: 8px; }
     .lock { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); }
     .pin { width: 30px; height: 40px; position: relative; filter: drop-shadow(0 2px 2px rgba(0,0,0,.3)); }
-    .pin::before { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; background: #e0245e; border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+    .pin::before { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; background: #2b6a80; border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
     .pin-icon { background: none; border: none; }
     .leaflet-container { font-family: inherit; }
     .leaflet-tooltip.lbl { border: none; border-radius: 999px; padding: 3px 10px; box-shadow: 0 2px 8px rgba(0,0,0,.2); font-weight: 600; font-size: .75rem; }
@@ -467,8 +467,8 @@ function tripPageHtml(req, v) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12171a" media="(prefers-color-scheme: dark)">
   <title>${esc(trip.title)} · ${esc(site)}</title>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="${esc(site)}">
@@ -512,7 +512,7 @@ function tripPageHtml(req, v) {
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
     var dest = d.points.filter(function (p) { return p.kind === 'map'; })[0];
     if (dest && d.flight) {
-      L.polyline([d.home, [dest.lat, dest.lng]], { color: '#e0245e', weight: 2, dashArray: '2 7', lineCap: 'round', opacity: .8 }).addTo(map);
+      L.polyline([d.home, [dest.lat, dest.lng]], { color: '#2b6a80', weight: 2, dashArray: '2 7', lineCap: 'round', opacity: .8 }).addTo(map);
       L.circleMarker(d.home, { radius: 5, color: '#fff', weight: 2, fillColor: '#f97316', fillOpacity: 1 }).addTo(map);
     }
     d.points.forEach(function (p) {
@@ -577,7 +577,7 @@ function bundleBySlug(slug) {
 }
 
 const placeOf = (v) => (v.loc ? shortName(v.loc.title) : '');
-const BUNDLE_COLORS = ['#e0245e', '#2563eb', '#008a05', '#d97706', '#7c3aed', '#0891b2', '#be123c', '#4d7c0f'];
+const BUNDLE_COLORS = ['#2b6a80', '#c0612f', '#2f7a45', '#9a7a1c', '#6d5a9e', '#3f8f9a', '#a8466a', '#5a6f2e'];
 
 function bundleMeta(views) {
   const names = views.map((v) => placeOf(v) || v.trip.title);
@@ -652,8 +652,8 @@ function bundlePageHtml(req, bundle, views) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12171a" media="(prefers-color-scheme: dark)">
   <title>${views.length} reizen · ${esc(site)}</title>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="${esc(site)}">

@@ -1,7 +1,7 @@
   /* ---------- accounts, groepen en chat ---------- */
 
   // Vaste kleur per persoon, zodat je op de kaart en in de chat snel ziet wie wat deed.
-  const PERSON_COLORS = ['#e0245e', '#0a7cff', '#008a05', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#4d7c0f', '#b45309', '#4f46e5'];
+  const PERSON_COLORS = ['#2b6a80', '#c0612f', '#2f7a45', '#9a7a1c', '#6d5a9e', '#3f8f9a', '#a8466a', '#5a6f2e', '#b0562a', '#4a5f9e'];
   function colorOf(name) {
     let h = 0;
     for (const ch of String(name || '').toLowerCase()) h = (h * 31 + ch.codePointAt(0)) >>> 0;

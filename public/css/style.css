@@ -1,20 +1,23 @@
-/* Stijl: zakelijk en licht. Wit, grijstinten, één warme accentkleur, ronde hoeken en zachte schaduwen. */
+/* Stijl: zakelijk en licht, in de kleuren van de kaart (sinds 2026-10-14): warm gebroken wit zoals het land,
+   petrolblauw als accent (het water, donkerder), leisteen voor tekst, saliegroen en terracotta voor goed/fout. */
 
 :root {
-  --paper: #ffffff;
+  --paper: #f8f7f3;
   --surface: #ffffff;
-  --surface-2: #f4f4f4;
-  --ink: #222222;
-  --muted: #6a6a6a;
-  --line: #e2e2e2;
-  --red: #e0245e;
-  --red-soft: #fdeef2;
-  --brand: #e0245e;
-  --brand-dark: #c01650;
-  --navy: #222222;
-  --navy-soft: #f2f2f2;
-  --good: #008a05;
-  --bad: #c13515;
+  --surface-2: #efeee8;
+  --ink: #1d2a30;
+  --muted: #5f6c72;
+  --line: #e2e1da;
+  --red: #2b6a80;
+  --red-soft: #e3eef1;
+  --brand: #2b6a80;
+  --brand-dark: #21566a;
+  --navy: #1d2a30;
+  --navy-soft: #eceee9;
+  --good: #2f7a45;
+  --bad: #b4472c;
+  --on-brand: #ffffff;
+  --warn-soft: #f8e9e3;
   --radius: 12px;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .06), 0 2px 8px rgba(0, 0, 0, .06);
   --shadow: 0 6px 20px rgba(0, 0, 0, .12);
@@ -27,18 +30,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #121212;
-    --surface: #1c1c1c;
-    --surface-2: #262626;
-    --ink: #f2f2f2;
-    --muted: #a3a3a3;
-    --line: #333333;
-    --red: #ff5c8a;
-    --red-soft: #3a1a24;
-    --navy: #f2f2f2;
-    --navy-soft: #2a2a2a;
-    --good: #4cc26a;
-    --bad: #ff7a66;
+    --paper: #12171a;
+    --surface: #1a2125;
+    --surface-2: #232b30;
+    --ink: #eef2f2;
+    --muted: #9eabb0;
+    --line: #2f383d;
+    --red: #7cbcd1;
+    --red-soft: #1c3139;
+    --brand: #7cbcd1;
+    --brand-dark: #9ccfe0;
+    --on-brand: #0e1a1f;
+    --warn-soft: #3a241d;
+    --navy: #eef2f2;
+    --navy-soft: #232b30;
+    --good: #6cc28a;
+    --bad: #f08a6c;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4), 0 2px 8px rgba(0, 0, 0, .3);
     --shadow: 0 6px 20px rgba(0, 0, 0, .5);
     color-scheme: dark;
@@ -425,7 +432,7 @@ a.chip:hover { background: var(--navy-soft); }
 .step-chip.ok > span[aria-hidden] { color: var(--good); }
 .step-chip .ic { width: 13px; height: 13px; }
 .dest-done { font-size: .75rem; font-weight: 600; color: var(--good); }
-.step-chip .warn, .warn { color: var(--red); font-weight: 600; }
+.step-chip .warn, .warn { color: var(--bad); font-weight: 600; }
 .dest-go { display: none; } /* het hele kaartje is klikbaar */
 .dest-side {
   display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 8px;
@@ -624,7 +631,7 @@ button.chip:hover { background: var(--navy-soft); }
   content: '✓'; position: absolute; left: 3px; top: 0; font-size: .625rem; font-weight: 700; color: var(--ink);
 }
 .day.trip-ok { box-shadow: inset 0 -3px 0 var(--good); }
-.day.trip-conflict { box-shadow: inset 0 -3px 0 var(--red); }
+.day.trip-conflict { box-shadow: inset 0 -3px 0 var(--bad); }
 @media (prefers-color-scheme: dark) {
   .day { background: color-mix(in srgb, var(--navy) calc(var(--heat) * 45%), var(--surface)); }
 }
@@ -636,8 +643,8 @@ button.chip:hover { background: var(--navy-soft); }
 }
 .planned-row span { color: var(--muted); font-size: .875rem; }
 .planned-row small { color: var(--good); }
-.planned-row.conflict { border-left-color: var(--red); background: var(--red-soft); }
-.planned-row.conflict small { color: var(--red); }
+.planned-row.conflict { border-left-color: var(--bad); background: var(--warn-soft); }
+.planned-row.conflict small { color: var(--bad); }
 
 .people { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .people li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -652,13 +659,13 @@ button.chip:hover { background: var(--navy-soft); }
 }
 .ok-note, .date-warn.ok { font-size: .875rem; color: var(--good); }
 .date-warn { margin: 0; }
-.card.trip.conflict { border-color: var(--red); border-width: 2px; }
+.card.trip.conflict { border-color: var(--bad); border-width: 2px; }
 
 /* ---------- stemronde ---------- */
 
 .tab-badge {
   display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 2px;
-  border-radius: 999px; background: var(--red); color: #fff; font: 700 .6875rem var(--sans); vertical-align: 1px;
+  border-radius: 999px; background: var(--red); color: var(--on-brand); font: 700 .6875rem var(--sans); vertical-align: 1px;
 }
 .back-link { display: inline-block; margin-top: 22px; font-size: .875rem; color: var(--muted); }
 .back-link + .section-head { margin-top: 10px; }
@@ -1080,13 +1087,13 @@ button.chip:hover { background: var(--navy-soft); }
 .count-pill { font-size: .75rem; font-weight: 600; color: var(--ink); padding: 2px 8px; }
 .badge-best {
   transform: none; border: none; border-radius: 999px; padding: 3px 10px;
-  background: var(--brand); color: #fff; font-size: .75rem; font-weight: 600;
+  background: var(--brand); color: var(--on-brand); font-size: .75rem; font-weight: 600;
 }
 
 /* knoppen en links */
 .btn { border-radius: 8px; border-color: var(--line); }
 .btn:hover { border-color: var(--ink); }
-.btn.primary, .add-cta { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.primary, .add-cta { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
 .btn.primary:hover, .add-cta:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
 .btn.ghost:hover { background: var(--surface-2); border-color: transparent; }
 .add-cta { border-radius: 8px; padding: 13px 20px; }
@@ -1145,7 +1152,7 @@ button.chip:hover { background: var(--navy-soft); }
 .dest { border-radius: 16px; }
 .dest-thumb { border-radius: 12px; background: var(--surface-2); }
 .dest-num { background: var(--ink); color: var(--paper); }
-.dest.best .dest-num { background: var(--brand); color: #fff; }
+.dest.best .dest-num { background: var(--brand); color: var(--on-brand); }
 .step-chip { padding: 3px 9px; color: var(--ink); background: var(--surface-2); }
 .step-chip .ic { width: 14px; height: 14px; vertical-align: -.15em; }
 .step-chip.ok { background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
@@ -1164,7 +1171,7 @@ button.chip:hover { background: var(--navy-soft); }
 .sheet input, .sheet textarea, .sheet select { border-radius: 8px; background: var(--surface); }
 .sheet label { color: var(--ink); }
 .sheet label small { color: var(--muted); }
-.plan-num { background: var(--brand); color: #fff; }
+.plan-num { background: var(--brand); color: var(--on-brand); }
 .step { border-radius: 12px; }
 .step[open] { border-color: var(--line); box-shadow: var(--shadow-sm); }
 .step-icon { background: var(--surface-2); color: var(--ink); }
@@ -1199,7 +1206,7 @@ button.chip:hover { background: var(--navy-soft); }
     clip: auto; overflow: visible; display: flex; align-items: center; gap: 8px; white-space: nowrap;
     font: 700 1.25rem/1 var(--sans); letter-spacing: -.02em; color: var(--brand);
   }
-  #brand .logo-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: #fff; }
+  #brand .logo-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: var(--on-brand); }
   #brand .logo-mark .ic { width: 18px; height: 18px; stroke-width: 2.2; }
   #brand .team-pill { margin-left: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink);
     font-size: .8125rem; font-weight: 600; letter-spacing: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
@@ -1332,7 +1339,7 @@ button.chip:hover { background: var(--navy-soft); }
 .pkg-pp small { font-size: .75rem; color: var(--muted); }
 .idea-opts label small { font-weight: 400; color: var(--muted); }
 .pkg-why .chip.rain { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
-.idea-regions .cat[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+.idea-regions .cat[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
 .idea-more { grid-column: 1 / -1; min-height: 48px; }
 
 /* ---------- accounts, groepen en chat ---------- */
@@ -1354,7 +1361,7 @@ body.gate .tabs { display: none; }
 .gate-wrap { min-height: calc(100dvh - 40px); display: grid; place-items: center; padding: 24px 0; }
 .gate-card { width: min(420px, 100%); display: grid; gap: 14px; }
 .gate-brand { display: flex; align-items: center; gap: 8px; font: 700 1.35rem/1 var(--sans); color: var(--brand); letter-spacing: -.02em; }
-.gate-brand .logo-mark { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--brand); color: #fff; }
+.gate-brand .logo-mark { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--brand); color: var(--on-brand); }
 .gate-brand .logo-mark .ic { width: 22px; height: 22px; stroke-width: 2.2; }
 .gate-tag { margin: -4px 0 6px; color: var(--muted); }
 .gate-hero { display: none; }
@@ -1683,7 +1690,7 @@ body.gate .tabs { display: none; }
 .idea-bar { display: flex; gap: 8px; align-items: center; max-width: 760px; margin: 10px 0 0; }
 .idea-filter-btn { gap: 8px; }
 .idea-filter-btn .ic { width: 18px; height: 18px; }
-.idea-filter-btn .filter-count:not(:empty) { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--red); color: #fff; font-size: .75rem; display: inline-grid; place-items: center; }
+.idea-filter-btn .filter-count:not(:empty) { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--red); color: var(--on-brand); font-size: .75rem; display: inline-grid; place-items: center; }
 .idea-filter-btn .chev { transition: transform .15s; color: var(--muted); }
 .idea-filter-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .idea-sort { margin-left: auto; }
@@ -1696,7 +1703,7 @@ body.gate .tabs { display: none; }
 .idea-filters + .idea-results, .idea-summary + .idea-filters[hidden] + .idea-results { margin-top: 16px; }
 .pkg-casino { margin: 0; font-size: .875rem; font-weight: 500; }
 .idea-search [data-idea-clear][hidden] { display: none; }
-.text-btn.danger { color: var(--red); }
+.text-btn.danger { color: var(--bad); }
 
 /* echte prijzen */
 .pkg .pkg-price .real { color: var(--good); font-weight: 600; }
@@ -1802,7 +1809,7 @@ body.fiesta #panel { animation: fiesta-disco 1.2s linear infinite, fiesta-wobble
   box-shadow: var(--shadow-sm);
 }
 .select-check .ic { width: 18px; height: 18px; stroke-width: 3; }
-.card.trip.selected .select-check { background: var(--red); border-color: var(--red); color: #fff; }
+.card.trip.selected .select-check { background: var(--red); border-color: var(--red); color: var(--on-brand); }
 .select-bar {
   position: fixed; z-index: 900; left: 50%; transform: translateX(-50%);
   bottom: calc(16px + var(--tabbar, 0px) + var(--safe-b));
@@ -1824,8 +1831,8 @@ body.fiesta #panel { animation: fiesta-disco 1.2s linear infinite, fiesta-wobble
    Telefoon: de tabbalk zweeft als afgeronde balk boven de inhoud (zoals iOS en de Airbnb-app); de kaart
    loopt eronder door. Breed scherm: tabs als pillen, het actieve tab gevuld. */
 @media (max-width: 600px) {
-  /* 56px balk + 10px marge onder + 8px lucht erboven */
-  :root { --tabbar: calc(74px + var(--safe-b)); }
+  /* ± 63px balk + 10px marge eronder + 9px lucht erboven; --peek = hoogte van het ingeklapte bestemmingenpaneel */
+  :root { --tabbar: calc(82px + var(--safe-b)); --peek: 212px; }
   .tabs {
     left: 12px; right: 12px; bottom: calc(10px + var(--safe-b));
     gap: 2px; padding: 4px;
@@ -1840,11 +1847,21 @@ body.fiesta #panel { animation: fiesta-disco 1.2s linear infinite, fiesta-wobble
   .panel, .planner { padding-bottom: calc(var(--tabbar) + 24px); }
   .toast { bottom: calc(var(--tabbar) + 8px); }
   .select-bar { bottom: calc(8px + var(--tabbar)); }
-  /* kaart: loopt door tot de onderrand, het bestemmingenpaneel steekt erboven uit */
+  /* Kaart over het hele scherm. De bestemmingen zweven als losse kaart net boven de tabbalk, in dezelfde
+     stijl (marges, ronde hoeken, schaduw, doorschijnend), zodat er niets onder de balk door loopt. */
   .route-map .panel { padding-bottom: 0; }
-  .map-stage { inset: 0 0 calc(var(--peek) + var(--tabbar) - 16px) 0; }
-  .dest-sheet { height: calc(var(--peek) + var(--tabbar)); }
-  .dest-sheet .planner { padding-bottom: calc(20px + var(--tabbar)); }
+  .map-stage { inset: 0; }
+  .map .leaflet-bottom { bottom: calc(var(--peek) + var(--tabbar) + 6px); }
+  .dest-sheet {
+    left: 12px; right: 12px; bottom: var(--tabbar); height: var(--peek);
+    border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 22px;
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 1px 3px rgba(0, 0, 0, .08);
+  }
+  /* open: tot net onder het zoekveld */
+  .dest-sheet.open { height: calc(100% - var(--tabbar) - 76px); }
+  .dest-sheet .planner { padding-bottom: 16px; }
   .route-chat .panel { padding-bottom: var(--tabbar); }
 }
 

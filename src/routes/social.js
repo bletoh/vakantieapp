@@ -129,7 +129,7 @@ router.post('/auth/forgot', wrap(async (req, res) => {
       to: user.email,
       subject: 'Nieuw wachtwoord voor Reismannetje',
       text: `Hoi ${user.name},\n\nJe (of iemand anders) vroeg een nieuw wachtwoord aan voor Reismannetje.\nKies een nieuw wachtwoord via deze link (een uur geldig, één keer te gebruiken):\n\n${link}\n\nHeb je dit niet zelf aangevraagd? Dan kun je deze mail negeren; je wachtwoord blijft hetzelfde.`,
-      html: `<p>Hoi ${user.name.replace(/[<>&"]/g, '')},</p><p>Je (of iemand anders) vroeg een nieuw wachtwoord aan voor Reismannetje.</p><p><a href="${link}" style="display:inline-block;padding:10px 18px;background:#e0245e;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Nieuw wachtwoord kiezen</a></p><p style="color:#6a6a6a">De link is een uur geldig en werkt één keer. Heb je dit niet zelf aangevraagd? Dan kun je deze mail negeren; je wachtwoord blijft hetzelfde.</p>`,
+      html: `<p>Hoi ${user.name.replace(/[<>&"]/g, '')},</p><p>Je (of iemand anders) vroeg een nieuw wachtwoord aan voor Reismannetje.</p><p><a href="${link}" style="display:inline-block;padding:10px 18px;background:#2b6a80;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Nieuw wachtwoord kiezen</a></p><p style="color:#6a6a6a">De link is een uur geldig en werkt één keer. Heb je dit niet zelf aangevraagd? Dan kun je deze mail negeren; je wachtwoord blijft hetzelfde.</p>`,
     });
   } catch (err) {
     console.error(new Date().toISOString(), 'mail versturen mislukt', err.message);

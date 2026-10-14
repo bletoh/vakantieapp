@@ -2,7 +2,7 @@
 
   const HOME = [52.3105, 4.7683]; // Schiphol
   const HOME_CODE = 'AMS';
-  const DOT_COLORS = { stay: '#e0245e', do: '#008a05', eat: '#d97706' };
+  const DOT_COLORS = { stay: '#2b6a80', do: '#2f7a45', eat: '#c0782a' };
   let map = null;
   let markers = {};
   let dataLayer = null;
@@ -180,8 +180,9 @@
       if (y0 === null || !target) return;
       const dy = e.clientY - y0;
       if (Math.abs(dy) < 4) return;
+      // Een zwevend paneel (bestemmingen) mag tot net onder het zoekveld; vanaf zijn eigen onderkant gerekend.
       const max = target.parentElement === document.body || target.tagName === 'DIALOG'
-        ? window.innerHeight - 20 : target.parentElement.getBoundingClientRect().height - 8;
+        ? window.innerHeight - 20 : target.getBoundingClientRect().bottom - target.parentElement.getBoundingClientRect().top - 76;
       target.style.transition = 'none';
       target.style.height = `${Math.max(60, Math.min(max, h0 - dy))}px`;
     });
@@ -466,8 +467,11 @@
     const pins = locations().filter(hasPos);
     if (pins.length) {
       const b = L.latLngBounds([HOME, ...pins.map((p) => [p.lat, p.lng])]);
-      // Bovenaan extra ruimte, zodat geen pin achter het zoekveld valt.
-      map.fitBounds(b, { paddingTopLeft: [50, 150], paddingBottomRight: [70, 40], maxZoom: 7, animate });
+      // Bovenaan extra ruimte, zodat geen pin achter het zoekveld valt; op de telefoon onderaan ook
+      // ruimte voor het zwevende bestemmingenpaneel en de tabbalk.
+      const sheet = isPhone() && $('#destSheet');
+      const below = sheet ? Math.max(0, Math.round(map.getContainer().getBoundingClientRect().bottom - sheet.getBoundingClientRect().top)) : 0;
+      map.fitBounds(b, { paddingTopLeft: [50, 150], paddingBottomRight: [70, 40 + below], maxZoom: 7, animate });
     } else {
       map.setView([44, 12], 3.5, { animate });
     }

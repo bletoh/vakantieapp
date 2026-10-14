@@ -115,7 +115,7 @@ const GIDS_CSS = `
     .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1080px; margin: 0 auto; padding: 14px 16px; }
     .logo { font-weight: 700; letter-spacing: -.02em; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
     .logo { font-size: 1.125rem; }
-    .logo-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: #fff; }
+    .logo-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: var(--on-brand); }
     .logo-mark .ic { width: 18px; height: 18px; stroke-width: 2.2; }
     .top nav { display: flex; gap: 16px; font-weight: 600; font-size: .9375rem; }
     .top nav a { text-decoration: none; }
@@ -172,8 +172,8 @@ function shell(req, { title, description, canonical, image, body, jsonld, wide }
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12171a" media="(prefers-color-scheme: dark)">
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}">
   <link rel="canonical" href="${esc(canonical)}">
