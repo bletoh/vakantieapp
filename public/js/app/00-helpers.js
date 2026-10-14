@@ -21,6 +21,20 @@
     } catch { return ''; }
   }
 
+  // Partnerlinks: links naar boekingssites lopen via /go (partnercode erin en de klik tellen,
+  // zie src/affiliate.js). Pas bij het klikken, zodat de getoonde en gekopieerde link gewoon blijven.
+  const PARTNER_HOST = /(^|\.)(booking\.com|aviasales\.[a-z.]+|discovercars\.com|getyourguide\.[a-z.]+|skyscanner\.[a-z.]+|airbnb\.[a-z.]+|kayak\.[a-z.]+|rentalcars\.com|sunnycars\.[a-z.]+)$/;
+  function viaPartnerLink(e) {
+    const a = e.target.closest && e.target.closest('a[href^="http"]');
+    if (!a) return;
+    let u;
+    try { u = new URL(a.href); } catch { return; }
+    const flights = u.hostname === 'www.google.com' && u.pathname.startsWith('/travel/flights');
+    if (PARTNER_HOST.test(u.hostname) || flights) a.href = `/go?u=${encodeURIComponent(u.href)}`;
+  }
+  document.addEventListener('click', viaPartnerLink, true);
+  document.addEventListener('auxclick', viaPartnerLink, true);
+
   // Naam van de site achter een link, voor knoppen als "Bekijk op Airbnb".
   function linkSite(u) {
     let h;

@@ -3,6 +3,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db');
+const { rewriteLinks } = require('../affiliate');
 
 let sharp = null;
 try { sharp = require('sharp'); } catch { /* zonder sharp geen gegenereerd plaatje */ }
@@ -534,7 +535,7 @@ function tripPageHtml(req, v) {
 router.get('/reis/:slug', (req, res, next) => {
   const trip = tripBySlug(req.params.slug);
   if (!trip) return next();
-  res.set('Cache-Control', 'no-cache').type('html').send(tripPageHtml(req, tripView(trip)));
+  res.set('Cache-Control', 'no-cache').type('html').send(rewriteLinks(tripPageHtml(req, tripView(trip))));
 });
 
 router.get('/og/reis/:slug.jpg', async (req, res, next) => {
@@ -731,7 +732,7 @@ function bundlePageHtml(req, bundle, views) {
 router.get('/reizen/:slug', (req, res, next) => {
   const bundle = bundleBySlug(req.params.slug);
   if (!bundle) return next();
-  res.set('Cache-Control', 'no-cache').type('html').send(bundlePageHtml(req, bundle, bundle.trips.map(tripView)));
+  res.set('Cache-Control', 'no-cache').type('html').send(rewriteLinks(bundlePageHtml(req, bundle, bundle.trips.map(tripView))));
 });
 
 router.get('/og/reizen/:slug.jpg', async (req, res, next) => {

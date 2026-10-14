@@ -8,6 +8,7 @@ const apiRouter = require('./routes/api');
 const social = require('./routes/social');
 const auth = require('./auth');
 const shareRouter = require('./routes/share');
+const affiliate = require('./affiliate');
 const { appRoute } = require('./bundle');
 
 const app = express();
@@ -52,6 +53,7 @@ app.use('/api', auth.requireUser, social.team);
 app.use('/api', auth.requireUser, auth.requireTeam, apiRouter);
 app.get('/reset/:token', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'reset.html')));
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
+app.use(affiliate.router);
 app.use(shareRouter);
 // Lettertype zelf aanbieden in plaats van via Google Fonts (dan gaat er geen IP-adres naar Google).
 app.use('/vendor/inter', express.static(path.dirname(require.resolve('@fontsource-variable/inter/package.json')), { maxAge: '30d' }));
