@@ -231,12 +231,29 @@
       + `<span class="sr-only">${esc(label)}: </span>${text}</span>`;
   }
 
+  // Foto bij een pin zonder eigen foto: de gecontroleerde foto uit de bestemmingenlijst (Ideeën) als de
+  // plaatsnaam overeenkomt. De lijst wordt één keer opgehaald; daarna tekenen we de lijst opnieuw.
+  let photoList = null;
+  function destPhoto(loc) {
+    const own = safeUrl(loc.image);
+    if (own) return own;
+    if (!photoList) {
+      photoList = 'loading';
+      loadDestinations().then((list) => {
+        photoList = new Map(list.filter((d) => d.img).map((d) => [fold(d.n.replace(/\s*\(.*\)$/, '')), d.img]));
+        if (currentRoute() === 'kaart') render();
+      }).catch(() => { photoList = new Map(); });
+      return '';
+    }
+    return photoList === 'loading' ? '' : photoList.get(fold(shortName(loc.title))) || '';
+  }
+
   function destRowHtml(loc) {
     const n = pinNumber(loc.id);
     const p = planOf(loc);
-    const img = safeUrl(loc.image);
+    const img = destPhoto(loc);
     const t = p.trip;
-    const dateText = t && t.start_date ? shortRange(t.start_date, t.end_date) : 'datum?';
+    const dateText = t && t.start_date ? shortRange(t.start_date, t.end_date) : 'Datum';
     const conflict = p.conflicts && p.conflicts.length;
     const active = pinCtx && pinCtx.locId === loc.id && pinDialog.open;
     return `
@@ -247,15 +264,15 @@
             <strong>${esc(loc.title)}</strong>
             <span class="dest-steps">
               ${stepChip(ic('calendar'), t && t.start_date && !conflict, 'Datum', conflict ? `<span class="warn">${dateText}</span>` : dateText)}
-              ${stepChip(ic('plane'), p.per.flight.length, 'Vlucht', p.per.flight.length ? '✓' : '–')}
-              ${stepChip(ic('bed'), p.per.stay.length, 'Overnachting', p.per.stay.length ? '✓' : '–')}
+              ${stepChip(ic('plane'), p.per.flight.length, 'Vlucht', 'Vlucht')}
+              ${stepChip(ic('bed'), p.per.stay.length, 'Overnachting', 'Verblijf')}
               ${p.per.do.length + p.per.eat.length ? stepChip(ic('sparkles'), true, 'Activiteiten en eten', p.per.do.length + p.per.eat.length) : ''}
             </span>
           </span>
           <span class="dest-go" aria-hidden="true">›</span>
         </button>
         <div class="dest-side">
-          <span class="progress" role="img" aria-label="${p.done} van ${p.total} geregeld"><span style="width:${Math.round(p.done / p.total * 100)}%"></span></span>
+          ${p.done ? `<span class="dest-done" title="${p.done} van ${p.total} geregeld">${p.done}/${p.total}</span>` : ''}
           ${t ? likeBtn('trip', t.id, t.likes) : likeBtn('item', loc.id, loc.likes)}
         </div>
       </li>`;

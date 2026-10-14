@@ -29,8 +29,21 @@
     unmountMap();
     $$('dialog[open]').forEach((d) => d.close());
     $('#tabs').innerHTML = '';
+    if ($('#me')) $('#me').hidden = true;
     $('#panel').innerHTML = `<div class="gate-wrap"><div class="gate-card">
-      <div class="gate-brand">${ic('compass')} Reismannetje</div>${html}</div></div>`;
+      <div class="gate-brand"><span class="logo-mark">${ic('compass')}</span> Reismannetje</div>
+      <p class="gate-tag">Plan samen met je vrienden de vakantie van het jaar.</p>${html}</div>
+      <aside class="gate-hero" aria-hidden="true">
+        <img src="https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Evening_light_over_Barcelona.jpg/960px-Evening_light_over_Barcelona.jpg" alt="" onerror="this.remove()">
+        <div class="gate-hero-text">
+          <strong>Van groepsapp naar geboekte reis</strong>
+          <ul>
+            <li>${ic('map')} Prik bestemmingen samen op de kaart</li>
+            <li>${ic('calendar')} Vind de week waarin iedereen kan</li>
+            <li>${ic('vote')} Stem en deel de uitslag in WhatsApp</li>
+          </ul>
+        </div>
+      </aside></div>`;
     document.title = 'Reismannetje';
   }
 
@@ -427,7 +440,7 @@
     const top = log.scrollTop;
     log.innerHTML = !chat.loaded ? '<p class="hint center">Laden…</p>'
       : chat.messages.length ? chat.messages.map((m, i) => msgHtml(m, chat.messages[i - 1])).join('')
-      : `<div class="empty"><p>Nog geen berichten. Zeg hoi, of deel een reis, pin of stemronde met de ${ic('plus')}-knop.</p></div>`;
+      : `<div class="empty">${ic('chat')}<strong>Nog geen berichten</strong><p>Zeg hoi, of deel een reis, pin of stemronde met de ${ic('plus')}-knop.</p></div>`;
     log.scrollTop = atBottom || !log.dataset.ready ? log.scrollHeight : top;
     log.dataset.ready = '1';
   }

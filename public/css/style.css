@@ -397,12 +397,12 @@ a.chip:hover { background: var(--navy-soft); }
 .dest.best { border-color: var(--red); }
 .dest.active { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
 .dest-main {
-  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
   border: none; background: none; padding: 12px; text-align: left; border-radius: var(--radius);
 }
 .dest-main:focus-visible { outline: 2px solid var(--navy); outline-offset: -2px; }
 .dest-thumb {
-  position: relative; width: 52px; height: 52px; flex-shrink: 0; border-radius: 8px; overflow: hidden;
+  position: relative; width: 56px; height: 56px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
   background: var(--navy-soft);
 }
 .dest-thumb img { width: 100%; height: 100%; object-fit: cover; }
@@ -415,15 +415,18 @@ a.chip:hover { background: var(--navy-soft); }
 .dest-thumb:not(:has(img)) .dest-num { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 30px; height: 30px; font-size: .875rem; }
 .dest-text { display: grid; gap: 6px; min-width: 0; flex: 1; }
 .dest-text strong { font-family: var(--serif); font-size: 1.125rem; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
-.dest-steps { display: flex; flex-wrap: wrap; gap: 5px; }
+.dest-steps { display: flex; flex-wrap: wrap; gap: 4px; }
 .step-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: .75rem; padding: 2px 7px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: .75rem; padding: 2px 6px 2px 5px; border-radius: 999px;
   background: var(--surface-2); color: var(--muted); white-space: nowrap;
 }
-.step-chip.ok { background: color-mix(in srgb, var(--good) 16%, var(--surface)); color: var(--ink); }
+.step-chip.ok { background: color-mix(in srgb, var(--good) 14%, var(--surface)); color: var(--ink); }
+.step-chip.ok > span[aria-hidden] { color: var(--good); }
+.step-chip .ic { width: 13px; height: 13px; }
+.dest-done { font-size: .75rem; font-weight: 600; color: var(--good); }
 .step-chip .warn, .warn { color: var(--red); font-weight: 600; }
-.dest-go { font-size: 1.5rem; color: var(--muted); line-height: 1; }
+.dest-go { display: none; } /* het hele kaartje is klikbaar */
 .dest-side {
   display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 8px;
   padding: 12px 12px 8px 0;
@@ -1053,6 +1056,13 @@ button.chip:hover { background: var(--navy-soft); }
 .planner-head h2 { font-weight: 700; font-size: 1.375rem; }
 .card-title { font-size: 1.2rem; }
 .empty { font-family: var(--sans); font-style: normal; font-size: 1rem; }
+/* Lege toestand als rustig vlak in het midden, met een icoon als dat er is (zoals Airbnb). */
+.empty { display: grid; justify-items: center; gap: 6px; text-align: center; margin-top: 8px; padding: 40px 20px;
+  border: 1px dashed var(--line); border-radius: 18px; }
+.empty > .ic { width: 36px; height: 36px; color: var(--muted); stroke-width: 1.5; margin-bottom: 4px; }
+.empty strong { color: var(--ink); font-size: 1.0625rem; }
+.empty p { margin: 0; max-width: 46ch; }
+.empty .btn, .empty .add-cta { margin: 10px 0 0; }
 
 /* labels zonder typemachine-hoofdletters */
 .label, .mini-label, .plan-kicker, .sheet-label, .place-head, .window-tag, .winner small,
@@ -1099,7 +1109,8 @@ button.chip:hover { background: var(--navy-soft); }
 .chip { border-radius: 999px; padding: 3px 10px; }
 
 /* de kaart */
-.map .leaflet-tile-pane { filter: saturate(.85) contrast(.97); }
+/* Rustige kaart (zoals Airbnb): minder verzadigd en iets lichter, zodat pinnen en prijzen opvallen. */
+.map .leaflet-tile-pane { filter: saturate(.5) contrast(.9) brightness(1.04); }
 @media (prefers-color-scheme: dark) { .map .leaflet-tile-pane { filter: brightness(.72) saturate(.55); } }
 .map.sat .leaflet-tile-pane { filter: none; }
 .map-search input {
@@ -1180,13 +1191,27 @@ button.chip:hover { background: var(--navy-soft); }
 .tab.add { display: inline-grid; place-items: center; }
 .tab-emoji { font-size: 1.05em; }
 
-/* naam van de site linksboven op een breed scherm */
+/* naam van de site linksboven en je profiel rechtsboven, alleen op een breed scherm */
+@media (max-width: 1099px) { .me-link { display: none !important; } }
 @media (min-width: 1100px) {
   #brand.sr-only {
     position: absolute !important; top: 0; left: 24px; z-index: 30; width: auto; height: 50px; margin: 0;
-    clip: auto; overflow: visible; display: flex; align-items: center;
+    clip: auto; overflow: visible; display: flex; align-items: center; gap: 8px; white-space: nowrap;
     font: 700 1.25rem/1 var(--sans); letter-spacing: -.02em; color: var(--brand);
   }
+  #brand .logo-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: #fff; }
+  #brand .logo-mark .ic { width: 18px; height: 18px; stroke-width: 2.2; }
+  #brand .team-pill { margin-left: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink);
+    font-size: .8125rem; font-weight: 600; letter-spacing: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .me-link:not([hidden]) {
+    position: fixed; top: 6px; right: 20px; z-index: 30; display: inline-flex; align-items: center; gap: 10px;
+    height: 40px; padding: 0 5px 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper);
+    color: var(--ink); text-decoration: none; transition: box-shadow .15s;
+  }
+  .me-link:hover { box-shadow: var(--shadow-sm); }
+  .me-link .ic { width: 16px; height: 16px; }
+  .me-link .av { width: 30px; height: 30px; font-size: .8125rem; }
+  .tabs { padding-right: 96px; }
   /* Ruimte voor de groepsnaam; bij veel tabs schuiven ze naar rechts in plaats van eronder. */
   .tabs { justify-content: safe center; padding-left: var(--brand-w, 200px); }
 }
@@ -1268,7 +1293,10 @@ button.chip:hover { background: var(--navy-soft); }
   background: var(--surface); color: var(--ink); font-size: .8125rem; font-weight: 700; box-shadow: var(--shadow-sm);
 }
 .pkg-body { display: grid; gap: 10px; padding: 16px; }
-.pkg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+/* Titel links, prijs rechts (zoals Booking): nooit onder elkaar, de titel mag wel afbreken. */
+.pkg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pkg-head h3 { min-width: 0; overflow-wrap: anywhere; }
+.pkg-head h3 small { display: block; margin-top: 2px; font-size: .875rem; }
 .pkg-head h3 { margin: 0; font-size: 1.25rem; letter-spacing: -.015em; }
 .pkg-head small { font-weight: 500; color: var(--muted); font-size: .9375rem; }
 .pkg-on { font-size: .75rem; font-weight: 600; color: var(--good); }
@@ -1300,7 +1328,7 @@ button.chip:hover { background: var(--navy-soft); }
   .idea-cats { gap: 6px; }
 }
 .pkg-pp { display: grid; justify-items: end; text-align: right; line-height: 1.2; }
-.pkg-pp strong { font-size: 1.125rem; color: var(--brand); }
+.pkg-pp strong { font-size: 1.25rem; color: var(--ink); letter-spacing: -.01em; white-space: nowrap; }
 .pkg-pp small { font-size: .75rem; color: var(--muted); }
 .idea-opts label small { font-weight: 400; color: var(--muted); }
 .pkg-why .chip.rain { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
@@ -1326,7 +1354,23 @@ body.gate .tabs { display: none; }
 .gate-wrap { min-height: calc(100dvh - 40px); display: grid; place-items: center; padding: 24px 0; }
 .gate-card { width: min(420px, 100%); display: grid; gap: 14px; }
 .gate-brand { display: flex; align-items: center; gap: 8px; font: 700 1.35rem/1 var(--sans); color: var(--brand); letter-spacing: -.02em; }
-.gate-brand .ic { width: 28px; height: 28px; }
+.gate-brand .logo-mark { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--brand); color: #fff; }
+.gate-brand .logo-mark .ic { width: 22px; height: 22px; stroke-width: 2.2; }
+.gate-tag { margin: -4px 0 6px; color: var(--muted); }
+.gate-hero { display: none; }
+/* Breed scherm: formulier links, sfeerfoto met wat de app doet rechts (zoals Airbnb/Booking). */
+@media (min-width: 900px) {
+  .gate-wrap { grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); gap: 56px; align-items: center; place-items: center stretch; }
+  .gate-card { width: 100%; }
+  .gate-hero { display: block; position: relative; height: min(620px, calc(100dvh - 120px)); border-radius: 24px; overflow: hidden; background: var(--surface-2); }
+  .gate-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gate-hero-text { position: absolute; left: 20px; right: 20px; bottom: 20px; padding: 20px 22px; border-radius: 18px;
+    background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(8px); box-shadow: var(--shadow); }
+  .gate-hero-text strong { font-size: 1.25rem; letter-spacing: -.015em; }
+  .gate-hero-text ul { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; color: var(--muted); }
+  .gate-hero-text li { display: flex; align-items: center; gap: 10px; }
+  .gate-hero-text .ic { color: var(--brand); }
+}
 .gate-title { margin: 6px 0 0; font-size: 1.6rem; letter-spacing: -.02em; }
 .gate-form { display: grid; gap: 12px; }
 .gate-form label { display: grid; gap: 6px; font-size: .8125rem; font-weight: 600; color: var(--muted); }

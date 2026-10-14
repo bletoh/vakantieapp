@@ -114,7 +114,9 @@ const GIDS_CSS = `
     main.wide { max-width: 1080px; margin-top: 0; border-radius: 0; }
     .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1080px; margin: 0 auto; padding: 14px 16px; }
     .logo { font-weight: 700; letter-spacing: -.02em; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
-    .logo .ic { color: var(--brand); }
+    .logo { font-size: 1.125rem; }
+    .logo-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: #fff; }
+    .logo-mark .ic { width: 18px; height: 18px; stroke-width: 2.2; }
     .top nav { display: flex; gap: 16px; font-weight: 600; font-size: .9375rem; }
     .top nav a { text-decoration: none; }
     .hero { padding: 28px 0 8px; }
@@ -187,7 +189,7 @@ function shell(req, { title, description, canonical, image, body, jsonld, wide }
 </head>
 <body>
   <header class="top">
-    <a class="logo" href="/bestemmingen">${icon('pin')}Reismannetje</a>
+    <a class="logo" href="/bestemmingen"><span class="logo-mark">${icon('compass')}</span>Reismannetje</a>
     <nav><a href="/bestemmingen">Bestemmingen</a><a href="/">Inloggen</a></nav>
   </header>
   ${body}
