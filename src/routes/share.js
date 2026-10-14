@@ -755,3 +755,7 @@ router.get('/og/reizen/:slug.jpg', async (req, res, next) => {
 });
 
 module.exports = router;
+// Voor de openbare bestemmingspagina's (src/routes/gids.js): dezelfde stijl en iconen.
+module.exports.PAGE_CSS = PAGE_CSS;
+module.exports.icon = icon;
+module.exports.esc = esc;
