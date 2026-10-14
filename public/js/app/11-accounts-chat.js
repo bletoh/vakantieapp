@@ -608,6 +608,8 @@
             <button type="button" class="danger" data-member-remove="${m.id}">Uit de groep halen</button></div></details>` : ''}
         </li>`).join('')}</ul>
 
+      ${appBlockHtml()}
+
       <div class="label">Mijn groepen</div>
       ${others.length ? `<div class="team-list">${teamsListHtml().replace(/<button type="button" class="team-row on"[\s\S]*?<\/button>/, '')}</div>` : '<p class="hint">Je zit alleen in deze groep.</p>'}
       <details class="new-team"><summary class="btn block">${ic('plus')} Nieuwe groep maken</summary>${newTeamFormHtml()}</details>

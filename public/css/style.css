@@ -1901,3 +1901,11 @@ body.fiesta #panel { animation: fiesta-disco 1.2s linear infinite, fiesta-wobble
 .gate-hero-text { padding-left: 108px !important; min-height: 140px; }
 .gate-mascot { position: absolute; left: 18px; bottom: 14px; width: 76px; height: auto; }
 @media (prefers-reduced-motion: reduce) { .loading-mascot { animation: none; } }
+
+/* App en meldingen (Groep-pagina) */
+.app-block { display: grid; gap: 10px; }
+.app-block .row-btns { align-items: center; }
+.app-block .hint .ic { width: 1.05em; height: 1.05em; vertical-align: -2px; }
+.app-ok { color: var(--good); font-weight: 500; }
+
+.tabs:empty { display: none; } /* bijv. offline, voordat er een groep is geladen */

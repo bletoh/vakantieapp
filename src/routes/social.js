@@ -356,6 +356,7 @@ team.post('/messages', (req, res) => {
   const id = db.prepare('INSERT INTO messages (team_id, user_id, kind, body, ref_type, ref_id) VALUES (?, ?, ?, ?, ?, ?)')
     .run(req.team.id, req.user.id, 'text', body, refType, refId).lastInsertRowid;
   db.prepare('UPDATE team_members SET last_read = MAX(last_read, ?) WHERE team_id = ? AND user_id = ?').run(id, req.team.id, req.user.id);
+  if (db.onMessage) db.onMessage(req.team.id, req.user.id, 'text', body, refType);
   res.json({ id });
 });
 

@@ -287,6 +287,7 @@ function createTeam(name, userId) {
 function postEvent(teamId, userId, body, refType = null, refId = null) {
   db.prepare("INSERT INTO messages (team_id, user_id, kind, body, ref_type, ref_id) VALUES (?, ?, 'event', ?, ?, ?)")
     .run(teamId, userId, body, refType, refId);
+  if (module.exports.onMessage) module.exports.onMessage(teamId, userId, 'event', body, refType);
 }
 
 // Stemrondes met opties, stemmen en of ze (ook door de sluitdatum) gesloten zijn.

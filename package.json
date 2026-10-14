@@ -14,7 +14,8 @@
     "express": "^4.19.2",
     "leaflet": "^1.9.4",
     "nodemailer": "^10.0.15",
-    "sharp": "^0.33.5"
+    "sharp": "^0.33.5",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0"

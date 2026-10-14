@@ -1,6 +1,13 @@
   /* ---------- init ---------- */
 
   async function boot() {
+    // Vanuit een pushmelding (/?team=3#chat): eerst die groep openen.
+    const params = new URLSearchParams(location.search);
+    if (params.has('team')) {
+      store.set('team', params.get('team'));
+      params.delete('team');
+      history.replaceState(null, '', location.pathname + (params.size ? `?${params}` : '') + location.hash);
+    }
     // Uitnodigingslink /join/<code>: onthouden tot je bent ingelogd.
     const join = /^\/join\/([\w-]+)\/?$/.exec(location.pathname);
     if (join) {
@@ -23,5 +30,14 @@
   }
 
   boot().catch((err) => {
+    // Geen verbinding (de app zelf komt dan uit de cache van de service worker): rustig melden en vanzelf
+    // opnieuw proberen zodra er weer internet is.
+    if (!navigator.onLine || err instanceof TypeError) {
+      $('#panel').innerHTML = `<div class="empty offline"><img class="empty-mascot" src="/img/reismannetje.svg" alt="" width="64" height="91">
+        <strong>Je bent offline</strong><p>Zodra je weer verbinding hebt, laadt Reismannetje vanzelf.</p>
+        <button type="button" class="btn" onclick="location.reload()">Opnieuw proberen</button></div>`;
+      window.addEventListener('online', () => location.reload(), { once: true });
+      return;
+    }
     $('#panel').innerHTML = `<div class="empty">Kon de app niet laden: ${esc(err.message)}</div>`;
   });
