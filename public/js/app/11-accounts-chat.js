@@ -31,11 +31,12 @@
     $('#tabs').innerHTML = '';
     if ($('#me')) $('#me').hidden = true;
     $('#panel').innerHTML = `<div class="gate-wrap"><div class="gate-card">
-      <div class="gate-brand"><span class="logo-mark">${ic('compass')}</span> Reismannetje</div>
+      <div class="gate-brand"><img class="logo-img" src="/img/logo.svg" alt="" width="44" height="44"> Reismannetje</div>
       <p class="gate-tag">Plan samen met je vrienden de vakantie van het jaar.</p>${html}</div>
       <aside class="gate-hero" aria-hidden="true">
         <img src="https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Evening_light_over_Barcelona.jpg/960px-Evening_light_over_Barcelona.jpg" alt="" onerror="this.remove()">
         <div class="gate-hero-text">
+          <img class="gate-mascot" src="/img/reismannetje.svg" alt="" width="74" height="105">
           <strong>Van groepsapp naar geboekte reis</strong>
           <ul>
             <li>${ic('map')} Prik bestemmingen samen op de kaart</li>
@@ -440,7 +441,7 @@
     const top = log.scrollTop;
     log.innerHTML = !chat.loaded ? '<p class="hint center">Laden…</p>'
       : chat.messages.length ? chat.messages.map((m, i) => msgHtml(m, chat.messages[i - 1])).join('')
-      : `<div class="empty">${ic('chat')}<strong>Nog geen berichten</strong><p>Zeg hoi, of deel een reis, pin of stemronde met de ${ic('plus')}-knop.</p></div>`;
+      : `<div class="empty"><img class="empty-mascot" src="/img/reismannetje.svg" alt="" width="64" height="91"><strong>Nog geen berichten</strong><p>Zeg hoi, of deel een reis, pin of stemronde met de ${ic('plus')}-knop.</p></div>`;
     log.scrollTop = atBottom || !log.dataset.ready ? log.scrollHeight : top;
     log.dataset.ready = '1';
   }

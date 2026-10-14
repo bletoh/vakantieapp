@@ -425,6 +425,7 @@ const PAGE_CSS = `
     .go-btn:hover { filter: brightness(.92); }
     .empty { color: var(--muted); }
     footer { max-width: 680px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .8125rem; display: flex; align-items: center; gap: 8px; }
+    .made-with { display: inline-flex; align-items: center; gap: 5px; color: inherit; font-weight: 600; text-decoration: none; }
     .lock { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); }
     .pin { width: 30px; height: 40px; position: relative; filter: drop-shadow(0 2px 2px rgba(0,0,0,.3)); }
     .pin::before { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; background: #2b6a80; border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
@@ -480,6 +481,8 @@ function tripPageHtml(req, v) {
   <meta property="og:image:height" content="630">` : ''}
   <meta name="twitter:card" content="summary_large_image">
   <meta name="description" content="${esc(meta.description)}">
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="stylesheet" href="/vendor/inter/index.css">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <style>${PAGE_CSS}</style>
@@ -502,7 +505,7 @@ function tripPageHtml(req, v) {
       <div class="items">${g.items.map((x) => itemCard(x, v)).join('')}</div>`).join('')
       : '<p class="empty">Er zijn nog geen vlucht, hotel of activiteiten gekozen.</p>'}
   </main>
-  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)}</footer>
+  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)} · <a class="made-with" href="/bestemmingen"><img src="/img/logo.svg" alt="" width="18" height="18">Reismannetje</a></footer>
   ${points.length ? `<script src="/vendor/leaflet/leaflet.js"></script>
   <script>
   (function () {
@@ -665,6 +668,8 @@ function bundlePageHtml(req, bundle, views) {
   <meta property="og:image:height" content="630">` : ''}
   <meta name="twitter:card" content="summary_large_image">
   <meta name="description" content="${esc(meta.description)}">
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="stylesheet" href="/vendor/inter/index.css">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <style>${PAGE_CSS}
@@ -708,7 +713,7 @@ function bundlePageHtml(req, bundle, views) {
     <ul class="jump">${views.map((v, i) => `<li><a href="#reis-${i + 1}"><span class="num" style="background:${BUNDLE_COLORS[i % BUNDLE_COLORS.length]}">${i + 1}</span>${esc(placeOf(v) || v.trip.title)}</a></li>`).join('')}</ul>
     ${cards}
   </main>
-  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)}</footer>
+  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)} · <a class="made-with" href="/bestemmingen"><img src="/img/logo.svg" alt="" width="18" height="18">Reismannetje</a></footer>
   ${points.length ? `<script src="/vendor/leaflet/leaflet.js"></script>
   <script>
   (function () {

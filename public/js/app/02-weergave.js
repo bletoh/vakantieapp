@@ -14,7 +14,7 @@
     const title = (state.team && state.team.name) || 'Vakantie';
     document.title = `${title} · Reismannetje`;
     // Breed scherm: logo links met de groepsnaam ernaast, je eigen profiel rechts (zoals Airbnb).
-    $('#brand').innerHTML = `<span class="logo-mark">${ic('compass')}</span><span class="logo-word">Reismannetje</span><span class="team-pill">${esc(title)}</span>`;
+    $('#brand').innerHTML = `<img class="logo-img" src="/img/logo.svg" alt="" width="34" height="34"><span class="logo-word">Reismannetje</span><span class="team-pill">${esc(title)}</span>`;
     const me = $('#me');
     if (me && session.user) { me.innerHTML = `${ic('bars')}${avatar(session.user.name)}`; me.setAttribute('aria-label', `Groep en account (${session.user.name})`); me.hidden = false; }
     document.documentElement.style.setProperty('--brand-w', `${$('#brand').offsetWidth + 48}px`);
@@ -219,7 +219,7 @@
       </div>
       ${tripSelect ? '<p class="select-hint">Tik op de reizen die je in één overzicht wilt delen.</p>' : ''}
       ${trips.length ? `<div class="grid${tripSelect ? ' selecting' : ''}">${trips.map(tripCardHtml).join('')}</div>`
-        : `<div class="empty">${ic('suitcase')}<strong>Nog geen reizen</strong>
+        : `<div class="empty"><img class="empty-mascot" src="/img/reismannetje.svg" alt="" width="64" height="91"><strong>Nog geen reizen</strong>
             <p>Kies een bestemming op de kaart of in Ideeën. Zodra iemand een datum, vlucht of verblijf kiest, staat de reis hier.</p>
             <a class="btn" href="#ideeen">${ic('compass')} Bekijk ideeën</a></div>`}
       ${tripSelect ? selectBarHtml() : ''}`;

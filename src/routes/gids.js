@@ -115,11 +115,13 @@ const GIDS_CSS = `
     .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1080px; margin: 0 auto; padding: 14px 16px; }
     .logo { font-weight: 700; letter-spacing: -.02em; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
     .logo { font-size: 1.125rem; }
-    .logo-mark { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--brand); color: var(--on-brand); }
-    .logo-mark .ic { width: 18px; height: 18px; stroke-width: 2.2; }
+    .logo img { width: 34px; height: 34px; }
     .top nav { display: flex; gap: 16px; font-weight: 600; font-size: .9375rem; }
     .top nav a { text-decoration: none; }
     .hero { padding: 28px 0 8px; }
+    .hero-split { position: relative; }
+    .hero-mascot { float: right; width: clamp(84px, 22vw, 170px); height: auto; margin: 0 0 8px 12px; shape-outside: margin-box; }
+    @media (min-width: 900px) { .hero-mascot { float: none; position: absolute; right: 4%; top: 18px; } }
     .hero h1 { font-size: clamp(2rem, 8vw, 3rem); max-width: 16ch; }
     .lead { margin: 8px 0 0; font-size: 1.125rem; color: var(--muted); max-width: 52ch; }
     .cta { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 0; }
@@ -183,13 +185,16 @@ function shell(req, { title, description, canonical, image, body, jsonld, wide }
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:url" content="${esc(canonical)}">
   ${image ? `<meta property="og:image" content="${esc(image)}">\n  <meta name="twitter:card" content="summary_large_image">` : ''}
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/vendor/inter/index.css">
   <style>${PAGE_CSS}${GIDS_CSS}</style>
   ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c')}</script>` : ''}
 </head>
 <body>
   <header class="top">
-    <a class="logo" href="/bestemmingen"><span class="logo-mark">${icon('compass')}</span>Reismannetje</a>
+    <a class="logo" href="/bestemmingen"><img src="/img/logo.svg" alt="" width="34" height="34">Reismannetje</a>
     <nav><a href="/bestemmingen">Bestemmingen</a><a href="/">Inloggen</a></nav>
   </header>
   ${body}
@@ -213,7 +218,8 @@ function send(res, html) {
 
 router.get('/bestemmingen', (req, res) => {
   const body = `<main class="wide">
-    <section class="hero">
+    <section class="hero hero-split">
+      <img class="hero-mascot" src="/img/reismannetje.svg" alt="Reismannetje, het poppetje met een kompas als hoofd" width="150" height="212">
       <h1>Vakantie plannen met je vrienden</h1>
       <p class="lead">Kies samen waar je heen gaat, prik datums die voor iedereen werken, vergelijk vluchten en verblijf en laat de groep stemmen. Gratis, in één gedeelde app.</p>
       <p class="cta"><a class="go-btn" href="/?nieuw=1">Gratis beginnen</a><a class="btn2" href="#alle">Bekijk bestemmingen</a></p>
