@@ -7,7 +7,14 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'vakantieplanner.db'));
+// Tot 2026-10-14 heette de app Vakantieplanner en de database vakantieplanner.db. Een bestaande (of
+// teruggezette oude back-up) krijgt bij het starten de nieuwe naam, met de -wal/-shm-bestanden erbij.
+const DB_FILE = path.join(DATA_DIR, 'reismannetje.db');
+const OLD_DB_FILE = path.join(DATA_DIR, 'vakantieplanner.db');
+if (!fs.existsSync(DB_FILE) && fs.existsSync(OLD_DB_FILE)) {
+  for (const ext of ['', '-wal', '-shm']) if (fs.existsSync(OLD_DB_FILE + ext)) fs.renameSync(OLD_DB_FILE + ext, DB_FILE + ext);
+}
+const db = new Database(DB_FILE);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 

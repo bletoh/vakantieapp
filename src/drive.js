@@ -44,7 +44,7 @@ async function driveMinutes(from, tos) {
     const coords = [from, ...missing.map((i) => tos[i])].map((p) => `${(+p[1]).toFixed(5)},${(+p[0]).toFixed(5)}`).join(';');
     const data = await throttled(async () => {
       const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=duration`, {
-        headers: { 'User-Agent': 'vakantieplanner (github.com/bletoh/vakantieapp)' }, signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'reismannetje (github.com/bletoh/reismannetje)' }, signal: AbortSignal.timeout(15000),
       });
       if (!res.ok) throw new Error(`osrm: HTTP ${res.status}`);
       return res.json();

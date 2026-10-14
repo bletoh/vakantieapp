@@ -1,5 +1,5 @@
 // Hoe vaak er per site op een partnerlink is geklikt (zie src/affiliate.js).
-// Gebruik: node scripts/kliks.js [dagen]   (in Docker: docker exec vakantieplanner node scripts/kliks.js 30)
+// Gebruik: node scripts/kliks.js [dagen]   (in Docker: docker exec reismannetje node scripts/kliks.js 30)
 const db = require('../src/db');
 require('../src/affiliate'); // maakt de tabel aan als die er nog niet is
 const days = Math.max(1, parseInt(process.argv[2], 10) || 30);

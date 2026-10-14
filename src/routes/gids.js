@@ -176,7 +176,7 @@ function shell(req, { title, description, canonical, image, body, jsonld, wide }
   <meta name="description" content="${esc(description)}">
   <link rel="canonical" href="${esc(canonical)}">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Vakantieplanner">
+  <meta property="og:site_name" content="Reismannetje">
   <meta property="og:title" content="${esc(title)}">
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:url" content="${esc(canonical)}">
@@ -187,7 +187,7 @@ function shell(req, { title, description, canonical, image, body, jsonld, wide }
 </head>
 <body>
   <header class="top">
-    <a class="logo" href="/bestemmingen">${icon('pin')}Vakantieplanner</a>
+    <a class="logo" href="/bestemmingen">${icon('pin')}Reismannetje</a>
     <nav><a href="/bestemmingen">Bestemmingen</a><a href="/">Inloggen</a></nav>
   </header>
   ${body}
@@ -227,7 +227,7 @@ router.get('/bestemmingen', (req, res) => {
     <div class="grid">${LIST.map(cardHtml).join('')}</div>
   </main>`;
   send(res, shell(req, {
-    title: 'Vakantie plannen met vrienden · Vakantieplanner',
+    title: 'Vakantie plannen met vrienden · Reismannetje',
     description: `Plan samen een vakantie: ${LIST.length} bestemmingen vanaf Schiphol met vliegtijd, beste reistijd en kosten voor een groep. Prik datums, vergelijk en stem in één app.`,
     canonical: `${origin(req)}/bestemmingen`, image: big(LIST[0].img), body, wide: true,
   }));
@@ -248,7 +248,7 @@ router.get('/bestemmingen/:cat', (req, res, next) => {
     <p class="cta"><a class="go-btn" href="/?nieuw=1">Plan met je vrienden</a></p>
   </main>`;
   send(res, shell(req, {
-    title: `${cat.title} · Vakantieplanner`,
+    title: `${cat.title} · Reismannetje`,
     description: `${list.length} ${cat.label.toLowerCase()}-bestemmingen vanaf Schiphol: ${list.slice(0, 5).map((d) => d.place).join(', ')} en meer, met vliegtijd en kosten voor een groep.`,
     canonical: `${origin(req)}/bestemmingen/${cat.slug}`, image: list[0] && big(list[0].img), body, wide: true,
   }));
@@ -303,7 +303,7 @@ router.get('/bestemming/:slug', (req, res, next) => {
     ${d.cats.length ? `<h2>Meer van dit soort</h2>${catChips('', d.cats)}` : ''}
   </main>`;
   send(res, shell(req, {
-    title: `${d.place} met vrienden: vliegtijd, beste reistijd en kosten · Vakantieplanner`,
+    title: `${d.place} met vrienden: vliegtijd, beste reistijd en kosten · Reismannetje`,
     description, canonical: `${origin(req)}/bestemming/${d.slug}`, image: big(d.img), body,
     jsonld: {
       '@context': 'https://schema.org', '@type': 'TouristDestination', name: d.place, description, image: big(d.img),

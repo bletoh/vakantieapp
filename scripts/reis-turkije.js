@@ -2,7 +2,7 @@
 // een locatie, een vlucht, een overnachting en een reis die ze bundelt.
 //
 // Gebruik (op de server):
-//   docker compose exec vakantieplanner node scripts/reis-turkije.js
+//   docker compose exec reismannetje node scripts/reis-turkije.js
 // of lokaal:
 //   node scripts/reis-turkije.js
 //

@@ -28,8 +28,8 @@ function getTransport() {
 const mailEnabled = () => !!(process.env.SMTP_HOST || process.env.MAIL_TRANSPORT === 'file');
 
 async function sendMail({ to, subject, text, html }) {
-  const from = process.env.MAIL_FROM || process.env.SMTP_USER || 'vakantieplanner@localhost';
-  await getTransport().sendMail({ from: `Vakantieplanner <${from.replace(/^.*<|>.*$/g, '')}>`, to, subject, text, html });
+  const from = process.env.MAIL_FROM || process.env.SMTP_USER || 'reismannetje@localhost';
+  await getTransport().sendMail({ from: `Reismannetje <${from.replace(/^.*<|>.*$/g, '')}>`, to, subject, text, html });
 }
 
 module.exports = { mailEnabled, sendMail };
