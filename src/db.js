@@ -316,6 +316,26 @@ CREATE TABLE IF NOT EXISTS password_resets (
 // Wanneer de pin, reis of stemronde van een bericht verwijderd is (daarna gaat het bericht weg).
 if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'gone_at')) db.exec('ALTER TABLE messages ADD COLUMN gone_at TEXT');
 
+// Meerdere reizen in één deellink (/reizen/<code>). `trip_key` is de gesorteerde lijst reis-id's,
+// zodat dezelfde selectie opnieuw delen dezelfde link geeft. Een verwijderde reis valt er vanzelf uit.
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_bundles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  slug TEXT NOT NULL UNIQUE,
+  trip_key TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS trip_bundles_key ON trip_bundles (team_id, trip_key);
+CREATE TABLE IF NOT EXISTS trip_bundle_trips (
+  bundle_id INTEGER NOT NULL REFERENCES trip_bundles(id) ON DELETE CASCADE,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bundle_id, trip_id)
+);
+`);
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;

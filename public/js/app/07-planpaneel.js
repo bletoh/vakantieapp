@@ -514,7 +514,8 @@
           <span class="result-links">
             ${x.website ? `<a href="${esc(x.website)}" target="_blank" rel="noopener">Website ↗</a>` : ''}
             <a href="${esc(x.osm)}" target="_blank" rel="noopener">Op OpenStreetMap ↗</a>
-          </span>`)}`;
+          </span>`)}
+        ${kind === 'do' ? `<p class="pkg-links tours-link"><a href="${toursUrl(shortName(loc.title), p.trip)}" target="_blank" rel="noopener">Tours en tickets in ${esc(shortName(loc.title))} ↗</a></p>` : ''}`;
     }
     const n = chosen.length;
     const summary = n ? chosen.map(({ it }) => esc(it.title)).slice(0, 2).join(', ') + (n > 2 ? ` en ${n - 2} meer` : '')
@@ -536,6 +537,11 @@
     const d = (iso) => iso.slice(2).replace(/-/g, '');
     const dates = trip && trip.start_date ? `${d(trip.start_date)}/${d(trip.end_date)}/` : '';
     return `https://www.skyscanner.nl/transport/vluchten/${HOME_CODE.toLowerCase()}/${esc(iata.toLowerCase())}/${dates}`;
+  }
+  function toursUrl(place, trip) {
+    const qs = new URLSearchParams({ q: place });
+    if (trip && trip.start_date) { qs.set('date_from', trip.start_date); qs.set('date_to', trip.end_date || trip.start_date); }
+    return `https://www.getyourguide.nl/s/?${qs}`;
   }
   function bookingUrl(q, trip) {
     const dates = trip && trip.start_date ? `&checkin=${trip.start_date}&checkout=${trip.end_date > trip.start_date ? trip.end_date : addDays(trip.start_date, 1)}` : '';

@@ -212,9 +212,72 @@
       <div class="cta-row">
         ${mapSection() ? `<a class="add-cta" href="#kaart"><span class="add-cta-plus">${ic('map')}</span><span>Plan een reis op de kaart</span></a>` : ''}
         <button type="button" class="btn ghost" data-action="add-trip">＋ Reis zonder kaart</button>
+        ${trips.length >= 2 && !tripSelect ? `<button type="button" class="btn ghost" data-action="select-trips">${ic('check')} Meerdere reizen delen</button>` : ''}
       </div>
-      ${trips.length ? `<div class="grid">${trips.map(tripCardHtml).join('')}</div>`
-        : '<div class="empty"><p>Nog geen reizen voorgesteld. Wees de eerste!</p></div>'}`;
+      ${tripSelect ? '<p class="select-hint">Tik op de reizen die je in één overzicht wilt delen.</p>' : ''}
+      ${trips.length ? `<div class="grid${tripSelect ? ' selecting' : ''}">${trips.map(tripCardHtml).join('')}</div>`
+        : '<div class="empty"><p>Nog geen reizen voorgesteld. Wees de eerste!</p></div>'}
+      ${tripSelect ? selectBarHtml() : ''}`;
+  }
+
+  /* --- meerdere reizen selecteren en in één link delen --- */
+
+  // null = gewone weergave; anders de id's van de aangevinkte reizen, in de volgorde van aanvinken.
+  let tripSelect = null;
+
+  function selectBarHtml() {
+    const n = tripSelect.length;
+    return `<div class="select-bar" role="region" aria-label="Selectie">
+      <span class="select-count" aria-live="polite">${n ? `${n} ${n === 1 ? 'reis' : 'reizen'} gekozen` : 'Kies minstens 2 reizen'}</span>
+      <button type="button" class="btn ghost" data-action="select-cancel">Annuleren</button>
+      <button type="button" class="btn primary" data-action="share-bundle"${n < 2 ? ' disabled' : ''}>Deel overzicht</button>
+    </div>`;
+  }
+
+  function toggleTripSelect(id) {
+    const i = tripSelect.indexOf(id);
+    if (i >= 0) tripSelect.splice(i, 1);
+    else tripSelect.push(id);
+    const card = $(`.card.trip[data-trip="${id}"]`);
+    if (card) {
+      card.classList.toggle('selected', i < 0);
+      card.setAttribute('aria-checked', String(i < 0));
+    }
+    const bar = $('.select-bar');
+    if (bar) bar.outerHTML = selectBarHtml();
+  }
+
+  // Verlaat je de Reizen-tab, dan stopt het selecteren.
+  window.addEventListener('hashchange', () => { if (tripSelect && currentRoute() !== 'reizen') tripSelect = null; });
+
+  const bundleTripsText = (trips, url) => [
+    `🧳 *${trips.length} reizen om uit te kiezen*`,
+    ...trips.map((t, i) => `${i + 1}. ${t.title}${t.start_date ? ` (${rangeText(t.start_date, t.end_date)})` : ''}`),
+    `Vergelijk ze hier: ${url}`,
+  ].join('\n');
+
+  async function shareBundle() {
+    const trips = tripSelect.map((id) => state.trips.find((t) => t.id === id)).filter(Boolean);
+    const { slug } = await api('/trip-bundles', 'POST', { trip_ids: trips.map((t) => t.id) });
+    const url = `${location.origin}/reizen/${slug}`;
+    const text = bundleTripsText(trips, url);
+    $('#bundleTitle').textContent = `${trips.length} reizen delen`;
+    $('#bundleBody').innerHTML = `
+      <p class="section-intro">Iedereen met de link ziet deze reizen in één overzicht, ook zonder account.</p>
+      <ol class="bundle-list">${trips.map((t) => `<li>${esc(t.title)}${t.start_date ? ` <small>${esc(shortRange(t.start_date, t.end_date))}</small>` : ''}</li>`).join('')}</ol>
+      <div class="bundle-actions">
+        <a class="btn wa block" href="${esc(waLink(text))}" target="_blank" rel="noopener">${WA_ICON} Deel via WhatsApp</a>
+        ${navigator.share ? '<button type="button" class="btn block" data-bundle-native>Delen via…</button>' : ''}
+        <button type="button" class="btn block" data-copy="${esc(url)}">Link kopiëren</button>
+        <a class="text-btn" href="${esc(url)}" target="_blank" rel="noopener">Bekijk wat zij zien ↗</a>
+      </div>`;
+    const native = $('[data-bundle-native]');
+    if (native) {
+      native.addEventListener('click', async () => {
+        try { await navigator.share({ title: `${trips.length} reizen om uit te kiezen`, text: text.split('\n').slice(0, -1).join('\n'), url }); } catch { /* geannuleerd */ }
+      });
+    }
+    $('#bundleDialog').showModal();
   }
 
   // Alleen-lezen overzicht van een reis, te delen in WhatsApp.
@@ -258,8 +321,11 @@
     picks.sort((a, b) => (a.s.kind === 'map' ? -1 : 0) - (b.s.kind === 'map' ? -1 : 0));
     const loc = tripLocation(t);
     const img = loc && safeUrl(loc.image);
+    const sel = !!tripSelect && tripSelect.includes(t.id);
     return `
-      <article class="card trip${conflictsOf(t)?.length ? ' conflict' : ''}" data-trip="${t.id}" tabindex="0" aria-label="${esc(t.title)} aanpassen">
+      <article class="card trip${conflictsOf(t)?.length ? ' conflict' : ''}${sel ? ' selected' : ''}" data-trip="${t.id}" tabindex="0"
+        ${tripSelect ? `role="checkbox" aria-checked="${sel}" aria-label="${esc(t.title)} kiezen"` : `aria-label="${esc(t.title)} aanpassen"`}>
+        ${tripSelect ? `<span class="select-check" aria-hidden="true">${ic('check')}</span>` : ''}
         ${img ? `<div class="card-media"><img src="${esc(img)}" alt="" loading="lazy"></div>` : ''}
         <div class="card-body">
           <span class="card-hint" aria-hidden="true">Aanpassen</span>
