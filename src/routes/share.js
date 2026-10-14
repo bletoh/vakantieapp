@@ -56,7 +56,7 @@ function page(req, meta) {
   const html = fs.readFileSync(INDEX, 'utf8');
   const tags = `
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="${esc(meta.site || 'Vakantieplanner')}">
+  <meta property="og:site_name" content="${esc(meta.site || 'Reismannetje')}">
   <meta property="og:title" content="${esc(meta.title)}">
   <meta property="og:description" content="${esc(meta.description)}">
   <meta property="og:url" content="${esc(meta.url)}">
@@ -71,7 +71,7 @@ function page(req, meta) {
 // Startpagina met een algemeen voorbeeld.
 router.get('/', (req, res) => {
   res.type('html').send(page(req, {
-    title: 'Vakantieplanner',
+    title: 'Reismannetje',
     description: 'Plan samen jullie vakantie: bestemming, datum, vlucht en hotel, met chat en stemrondes in je eigen groep.',
     url: origin(req) + '/',
     image: sharp ? `${origin(req)}/og/site.jpg` : '',
@@ -96,12 +96,12 @@ router.get('/stem/:slug', (req, res, next) => {
 router.get('/join/:code', (req, res) => {
   const team = db.prepare('SELECT id, name FROM teams WHERE invite_code = ?').get(String(req.params.code));
   // Verlopen link: toch de app openen, die meldt dat de link niet (meer) werkt.
-  if (!team) return res.status(404).type('html').send(page(req, { title: 'Vakantieplanner', description: 'Deze uitnodigingslink werkt niet (meer).', url: `${origin(req)}/` }));
+  if (!team) return res.status(404).type('html').send(page(req, { title: 'Reismannetje', description: 'Deze uitnodigingslink werkt niet (meer).', url: `${origin(req)}/` }));
   const n = db.prepare('SELECT COUNT(*) AS n FROM team_members WHERE team_id = ?').get(team.id).n;
   res.set('Cache-Control', 'no-cache').type('html').send(page(req, {
     title: `Doe mee met ${team.name}`,
     description: `Je bent uitgenodigd voor de groep ${team.name}${n ? ` (${n} ${n === 1 ? 'lid' : 'leden'})` : ''}. Plan samen de vakantie: kaart, chat en stemrondes.`,
-    site: 'Vakantieplanner',
+    site: 'Reismannetje',
     url: `${origin(req)}/join/${req.params.code}`,
     image: sharp ? `${origin(req)}/og/site.jpg` : '',
   }));
@@ -192,7 +192,7 @@ router.get('/og/site.jpg', async (req, res, next) => {
     // Algemeen plaatje: groepen zijn privé, dus hier niets uit een groep.
     const img = await renderCard({
       kicker: 'Vakantie plannen',
-      title: 'Vakantieplanner',
+      title: 'Reismannetje',
       rows: ['Eigen groep met chat', 'Pinnen op de kaart', 'Stemrondes en datumprikker'].map((label) => ({ label, votes: null })),
       footer: 'Kies samen bestemming, datum, vlucht en hotel',
     });
@@ -438,7 +438,7 @@ const PAGE_CSS = `
 
 function tripPageHtml(req, v) {
   const { trip, loc, groups, who } = v;
-  const site = teamName(trip.team_id) || 'Vakantieplanner';
+  const site = teamName(trip.team_id) || 'Reismannetje';
   const meta = tripMeta(v);
   const url = `${origin(req)}/reis/${trip.share_slug}`;
   const ver = `${groups.reduce((n, g) => n + g.items.length, 0)}${trip.start_date || ''}${trip.likes}`;
@@ -609,7 +609,7 @@ function bundleFacts(v) {
 }
 
 function bundlePageHtml(req, bundle, views) {
-  const site = teamName(bundle.team_id) || 'Vakantieplanner';
+  const site = teamName(bundle.team_id) || 'Reismannetje';
   const meta = bundleMeta(views);
   const url = `${origin(req)}/reizen/${bundle.slug}`;
   const ver = views.map((v) => `${v.trip.id}.${v.groups.reduce((n, g) => n + g.items.length, 0)}${v.trip.start_date || ''}${v.trip.likes}`).join('-');

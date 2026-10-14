@@ -57,7 +57,7 @@ async function fetchOverpass(query, urls = [...MIRRORS, MIRRORS[0]]) {
       const res = await fetch(url, {
         method: 'POST',
         body: 'data=' + encodeURIComponent(query),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'vakantieplanner (prive groepsapp)' },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'reismannetje (https://reismannetje.nl)' },
         signal: AbortSignal.timeout(20000),
       });
       if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
@@ -103,7 +103,7 @@ async function fetchPhoton(kind, lat, lng) {
   const qs = new URLSearchParams({ lat, lon: lng, radius: cfg.radius, limit: cfg.limit });
   for (const t of cfg.tags) qs.append('osm_tag', t);
   const res = await fetch(`https://photon.komoot.io/reverse?${qs}`, {
-    headers: { 'User-Agent': 'vakantieplanner (prive groepsapp)' },
+    headers: { 'User-Agent': 'reismannetje (https://reismannetje.nl)' },
     // Photon is meestal binnen een paar seconden klaar, maar soms veel trager; niet te vroeg opgeven.
     signal: AbortSignal.timeout(20000),
   });

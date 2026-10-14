@@ -30,8 +30,8 @@
     $$('dialog[open]').forEach((d) => d.close());
     $('#tabs').innerHTML = '';
     $('#panel').innerHTML = `<div class="gate-wrap"><div class="gate-card">
-      <div class="gate-brand">${ic('compass')} Vakantieplanner</div>${html}</div></div>`;
-    document.title = 'Vakantieplanner';
+      <div class="gate-brand">${ic('compass')} Reismannetje</div>${html}</div></div>`;
+    document.title = 'Reismannetje';
   }
 
   function inviteNoteHtml() {
@@ -570,7 +570,7 @@
         <div class="invite-link"><input readonly value="${esc(inviteUrl())}" aria-label="Uitnodigingslink" onclick="this.select()"></div>
         <div class="row-btns">
           <button type="button" class="btn sm primary" data-invite-share>Link delen</button>
-          <a class="btn sm" href="https://wa.me/?text=${encodeURIComponent(`Doe mee met ${state.team.name} in de vakantieplanner: ${inviteUrl()}`)}" target="_blank" rel="noopener">WhatsApp</a>
+          <a class="btn sm" href="https://wa.me/?text=${encodeURIComponent(`Doe mee met ${state.team.name} in Reismannetje: ${inviteUrl()}`)}" target="_blank" rel="noopener">WhatsApp</a>
           <button type="button" class="btn sm ghost" data-copy="${esc(inviteUrl())}">Kopiëren</button>
           ${admin ? '<button type="button" class="btn sm ghost" data-invite-new>Nieuwe link</button>' : ''}
         </div>
@@ -647,7 +647,7 @@
     if (e.target.closest('[data-invite-share]')) {
       const url = inviteUrl();
       if (navigator.share) {
-        try { await navigator.share({ title: state.team.name, text: `Doe mee met ${state.team.name} in de vakantieplanner`, url }); } catch { /* geannuleerd */ }
+        try { await navigator.share({ title: state.team.name, text: `Doe mee met ${state.team.name} in Reismannetje`, url }); } catch { /* geannuleerd */ }
       } else {
         try { await navigator.clipboard.writeText(url); toast('Link gekopieerd ✓'); } catch { toast(url); }
       }

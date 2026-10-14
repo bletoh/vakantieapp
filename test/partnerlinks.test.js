@@ -25,7 +25,7 @@ test('partnerlinks: code uit .env erin, onbekende sites geweigerd, kliks geteld'
     }
 
     const Database = require('better-sqlite3');
-    const rows = new Database(require('path').join(srv.dataDir, 'vakantieplanner.db'), { readonly: true })
+    const rows = new Database(require('path').join(srv.dataDir, 'reismannetje.db'), { readonly: true })
       .prepare('SELECT partner, tagged, n FROM outbound_clicks ORDER BY partner').all();
     assert.deepEqual(rows.map((x) => ({ ...x })), [{ partner: 'aviasales', tagged: 0, n: 1 }, { partner: 'booking', tagged: 1, n: 1 }]);
   } finally { await srv.stop(); }

@@ -74,7 +74,7 @@ app.use((err, req, res, next) => {
 process.on('unhandledRejection', (err) => console.error(new Date().toISOString(), 'unhandledRejection', err));
 
 const server = app.listen(PORT, () => {
-  console.log(`Vakantieapp draait op poort ${PORT}`);
+  console.log(`Reismannetje draait op poort ${PORT}`);
 });
 
 // Netjes stoppen bij `docker stop` / een update: lopende verzoeken afmaken en de database sluiten.

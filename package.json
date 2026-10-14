@@ -1,5 +1,5 @@
 {
-  "name": "vakantieplanner",
+  "name": "reismannetje",
   "version": "4.0.0",
   "description": "Vakantieblog om aan vrienden te laten zien wat de beste bestemming, vlucht en overnachting is",
   "main": "src/server.js",

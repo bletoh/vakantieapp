@@ -1,4 +1,4 @@
-# Vakantieapp
+# Reismannetje
 
 Een blogachtige website waarmee je je vrienden laat zien wat de beste vakantieplek, vlucht, overnachting en andere keuzes zijn.
 
@@ -69,21 +69,22 @@ Start de app met een lege tijdelijke database en test o.a. inloggen (en de rem o
 ## Productie
 
 - **Health-check:** `GET /healthz` (app en database). Docker gebruikt hem als `healthcheck`. `GET /healthz?backup=1` geeft 503 als de laatste back-up ouder is dan 30 uur; de NAS controleert dat elk kwartier.
-- **Back-ups:** `/usr/local/sbin/vakantieplanner-backup.sh` draait elke nacht om 02:30 (`/etc/cron.d/vakantieplanner-backup`). Hij maakt een consistente kopie van de database (SQLite online backup + `integrity_check`) en pakt die in met de uploads: 30 dagelijkse back-ups in `/srv/backups/vakantieplanner/daily`, één per maand een half jaar in `monthly/`, en de laatste 30 ook op de NAS (`backups/vakantieplanner`). Log: `/var/log/vakantieplanner-backup.log`.
+- **Back-ups:** `/usr/local/sbin/reismannetje-backup.sh` draait elke nacht om 02:30 (`/etc/cron.d/reismannetje-backup`). Hij maakt een consistente kopie van de database (SQLite online backup + `integrity_check`) en pakt die in met de uploads: 30 dagelijkse back-ups in `/srv/backups/reismannetje/daily`, één per maand een half jaar in `monthly/`, en de laatste 30 ook op de NAS (`backups/reismannetje`). Log: `/var/log/reismannetje-backup.log`.
 - **Terugzetten:**
   ```bash
-  cd /srv/docker/vakantieplanner && sudo docker compose stop
-  V=/var/lib/docker/volumes/vakantieplanner_vakantie_data/_data
-  sudo rm -f $V/vakantieplanner.db-wal $V/vakantieplanner.db-shm
-  sudo tar -xzf /srv/backups/vakantieplanner/daily/vakantieplanner-JJJJMMDD-UUMM.tar.gz -C $V
+  cd /srv/docker/reismannetje && sudo docker compose stop
+  V=/var/lib/docker/volumes/reismannetje_data/_data
+  sudo rm -f $V/reismannetje.db-wal $V/reismannetje.db-shm
+  sudo tar -xzf /srv/backups/reismannetje/daily/reismannetje-JJJJMMDD-UUMM.tar.gz -C $V
   sudo docker compose start
   ```
+  Een back-up van vóór 14 oktober 2026 (`vakantieplanner-…tar.gz`) bevat nog `vakantieplanner.db`: haal dan eerst `$V/reismannetje.db*` weg, dan hernoemt de app hem bij het starten.
 - **Beveiliging:** wachtwoorden met scrypt, sessiecookie `HttpOnly`/`SameSite=Lax`/`Secure`, max. 10 mislukte inlogpogingen per kwartier per naam en per IP (alleen Caddy mag het echte IP doorgeven), beveiligingsheaders (o.a. `X-Frame-Options`, `nosniff`, HSTS), uploads worden gecontroleerd op echte afbeeldingen, en het ophalen van links weigert interne adressen.
 - **Privacy:** `/privacy` legt uit wat er bewaard wordt. Leden kunnen hun account zelf verwijderen (Groep → Account). Het lettertype (Inter) en Leaflet komen van de eigen server, niet van Google.
 - **Opsplitsing van de app:** de voorkant staat in `public/js/app/*.js` (in volgorde van naam: helpers, routing, weergave, … , start). De server plakt ze samen tot `/js/app.js` (`src/bundle.js`); `npm test` controleert of het geheel geldige JavaScript is. Een nieuw bestand kan gewoon in de map; de nummering bepaalt de volgorde.
 - **Browsertests:** `test/e2e.test.js` klikt met Chromium door inloggen, kaart, planpaneel, reizen, ideeën en chat. GitHub draait ze altijd; lokaal met `E2E=1 npm test` (Chromium nodig) of met `E2E_BASE=http://…` tegen een draaiende server met een lege database.
 - **Openbare bestemmingsgids** (`src/routes/gids.js`): `/bestemmingen` is de landingspagina voor nieuwe bezoekers (wat de app doet + alle bestemmingen), `/bestemmingen/<categorie>` (feesten, strand, wintersport, goedkoop, …) en `/bestemming/<plaats>` met vliegtijd, beste maanden, temperatuur per maand, kosten voor een groep, partnerlinks voor vlucht/verblijf/tours en vergelijkbare plekken. Alles uit `public/data/bestemmingen.json`. Met `sitemap.xml`, `robots.txt` en schema.org-gegevens voor zoekmachines. *Gratis beginnen* gaat naar `/?nieuw=1` (opent meteen 'Nieuw account').
-- **Partnerlinks:** links naar Booking, Aviasales, DiscoverCars, GetYourGuide, Skyscanner, Airbnb, Kayak e.d. lopen bij het klikken via `/go` (`src/affiliate.js`). Die zet de partnercode uit `.env` in de link (`BOOKING_AID`, `TRAVELPAYOUTS_MARKER`, `DISCOVERCARS_AID`, `GETYOURGUIDE_PARTNER_ID`; leeg = link ongewijzigd) en telt per dag hoeveel kliks er per site zijn, zonder te bewaren wie. Alleen sites uit de lijst worden doorgestuurd. Overzicht: `docker exec vakantieplanner node scripts/kliks.js 30`. Bij Activiteiten staat ook een link naar tours en tickets op GetYourGuide.
+- **Partnerlinks:** links naar Booking, Aviasales, DiscoverCars, GetYourGuide, Skyscanner, Airbnb, Kayak e.d. lopen bij het klikken via `/go` (`src/affiliate.js`). Die zet de partnercode uit `.env` in de link (`BOOKING_AID`, `TRAVELPAYOUTS_MARKER`, `DISCOVERCARS_AID`, `GETYOURGUIDE_PARTNER_ID`; leeg = link ongewijzigd) en telt per dag hoeveel kliks er per site zijn, zonder te bewaren wie. Alleen sites uit de lijst worden doorgestuurd. Overzicht: `docker exec reismannetje node scripts/kliks.js 30`. Bij Activiteiten staat ook een link naar tours en tickets op GetYourGuide.
 - **Echte prijzen:** verblijf via de zoekpagina van Airbnb (hele woningen voor jullie datums en groep, totaalprijs incl. kosten; 12 uur bewaard, max. 2 verzoeken tegelijk). Vluchten via de Aviasales Data API van Travelpayouts: maak gratis een account op travelpayouts.com, kopieer het API-token en zet `TRAVELPAYOUTS_TOKEN=…` in `.env`. Zonder token blijft de vluchtprijs een (gemarkeerde) schatting.
 - **Wachtwoord vergeten via e-mail:** zet in `.env` `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS` en eventueel `MAIL_FROM`. Bijvoorbeeld Gmail: `SMTP_HOST=smtp.gmail.com`, je Gmail-adres en een app-wachtwoord (Google-account → Beveiliging → App-wachtwoorden; vereist tweestapsverificatie). Daarna `sudo docker compose up -d`. Leden zetten hun e-mailadres onder Groep → Account. Zonder SMTP blijft het tijdelijke wachtwoord via de beheerder de route.
 - **DNS:** de container gebruikt 1.1.1.1/9.9.9.9, omdat de DNS van de server (NetBird) 2,5 s per opzoeking kost.
@@ -93,7 +94,7 @@ Start de app met een lege tijdelijke database en test o.a. inloggen (en de rem o
 `scripts/reis-turkije.js` zet een complete all-inclusive reis naar Side (Turkije) in de database: een locatie met pin op de kaart, een vlucht (Corendon AMS → AYT), een hotel (Side Crown Palace) en een reis die ze bundelt. Prijzen zijn opgezocht op 3 oktober 2026.
 
 ```bash
-docker compose exec vakantieplanner node scripts/reis-turkije.js
+docker compose exec reismannetje node scripts/reis-turkije.js
 ```
 
 Je kunt het script veilig vaker draaien; bestaat de reis al, dan wordt er niets toegevoegd.

@@ -1,10 +1,10 @@
 services:
-  vakantieplanner:
+  reismannetje:
     build: .
-    container_name: vakantieplanner
+    container_name: reismannetje
     restart: unless-stopped
     volumes:
-      - vakantie_data:/app/data
+      - data:/app/data
     networks:
       - web
     # De DNS van de server (NetBird) doet 2,5 s per opzoeking; voor deze app publieke resolvers.
@@ -23,7 +23,7 @@ services:
       - path: .env
         required: false
     environment:
-      PUBLIC_URL: https://vakantieplanner.benjaminhashi.nl
+      PUBLIC_URL: https://reismannetje.nl
     stop_grace_period: 10s
     logging:
       driver: json-file
@@ -36,4 +36,4 @@ networks:
     external: true
 
 volumes:
-  vakantie_data:
+  data:
