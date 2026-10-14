@@ -1819,3 +1819,61 @@ body.fiesta #panel { animation: fiesta-disco 1.2s linear infinite, fiesta-wobble
 .bundle-actions { display: grid; gap: 10px; justify-items: stretch; }
 .bundle-actions .btn.wa { display: inline-flex; justify-content: center; gap: 8px; }
 .bundle-actions .text-btn { justify-self: center; margin-top: 4px; }
+
+/* ---------- zwevende navigatie en kaartjes (2026-10-14) ----------
+   Telefoon: de tabbalk zweeft als afgeronde balk boven de inhoud (zoals iOS en de Airbnb-app); de kaart
+   loopt eronder door. Breed scherm: tabs als pillen, het actieve tab gevuld. */
+@media (max-width: 600px) {
+  /* 56px balk + 10px marge onder + 8px lucht erboven */
+  :root { --tabbar: calc(74px + var(--safe-b)); }
+  .tabs {
+    left: 12px; right: 12px; bottom: calc(10px + var(--safe-b));
+    gap: 2px; padding: 4px;
+    border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 22px;
+    background: color-mix(in srgb, var(--paper) 86%, transparent);
+    -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 1px 3px rgba(0, 0, 0, .08);
+  }
+  .tab { flex: 1 1 0; min-height: 50px; border-radius: 18px; border-top: none !important; transition: background .15s, color .15s; }
+  .tab.active { background: var(--red-soft); color: var(--brand); }
+  .tab-badge { transform: translate(12px, -14px); }
+  .panel, .planner { padding-bottom: calc(var(--tabbar) + 24px); }
+  .toast { bottom: calc(var(--tabbar) + 8px); }
+  .select-bar { bottom: calc(8px + var(--tabbar)); }
+  /* kaart: loopt door tot de onderrand, het bestemmingenpaneel steekt erboven uit */
+  .route-map .panel { padding-bottom: 0; }
+  .map-stage { inset: 0 0 calc(var(--peek) + var(--tabbar) - 16px) 0; }
+  .dest-sheet { height: calc(var(--peek) + var(--tabbar)); }
+  .dest-sheet .planner { padding-bottom: calc(20px + var(--tabbar)); }
+  .route-chat .panel { padding-bottom: var(--tabbar); }
+}
+
+@media (min-width: 601px) {
+  .tabs { gap: 4px; align-items: center; min-height: 60px; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 14px; margin: 0; border-bottom: none; border-radius: 999px;
+    transition: background .15s, color .15s;
+  }
+  .tab:hover { background: var(--surface-2); }
+  .tab.active { background: var(--ink); color: var(--paper); border-bottom-color: transparent; }
+  .tab.active .ic { color: var(--paper); }
+  .tab.add { padding: 8px 10px; }
+  /* ruimte onder de sticky kop: iets meer nu hij hoger is */
+  html { scroll-padding-top: 76px; }
+}
+@media (min-width: 1100px) {
+  #brand.sr-only { height: 60px; }
+  .me-link:not([hidden]) { top: 10px; }
+}
+
+/* kaartjes komen iets omhoog als je eroverheen gaat */
+@media (hover: hover) {
+  .dest, .pkg, .card { transition: box-shadow .2s, transform .2s, border-color .2s; }
+  .dest:hover, .pkg:hover, .card:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dest:hover, .pkg:hover, .card:hover { transform: none; }
+}
+/* knoppen op de kaart als zwevende, ronde knoppen */
+.map.leaflet-container .leaflet-bar { border-radius: 14px; box-shadow: 0 6px 18px rgba(0, 0, 0, .14); }
