@@ -42,7 +42,8 @@
       ${n ? `<small>${esc(invite.members.slice(0, 4).join(', '))}${n > 4 ? ` en ${n - 4} anderen` : ''} ${n === 1 ? 'zit' : 'zitten'} er al in</small>` : ''}</span></div>`;
   }
 
-  let authMode = 'login';
+  // Vanaf de bestemmingspagina's (/?nieuw=1) meteen 'Nieuw account'.
+  let authMode = new URLSearchParams(location.search).has('nieuw') ? 'register' : 'login';
   function showAuth(mode) {
     session.user = null;
     session.teamId = null;
@@ -66,7 +67,7 @@
       <p class="hint">${reg ? 'Je naam staat bij je pinnen, reizen, stemmen en berichten.' : session.mail
         ? '<button type="button" class="text-btn" data-forgot>Wachtwoord vergeten?</button>'
         : 'Wachtwoord vergeten? Vraag de beheerder van je groep om een tijdelijk wachtwoord.'}</p>
-      <p class="fineprint"><a href="/privacy" target="_blank" rel="noopener">Privacy: wat we bewaren</a></p>`);
+      <p class="fineprint"><a href="/bestemmingen">Bestemmingen ontdekken</a> · <a href="/privacy" target="_blank" rel="noopener">Privacy: wat we bewaren</a></p>`);
     const first = $('#authForm input[name="name"]');
     if (first && !isPhone()) first.focus();
   }
