@@ -231,8 +231,11 @@
       + `<span class="sr-only">${esc(label)}: </span>${text}</span>`;
   }
 
-  // Foto bij een pin zonder eigen foto: de gecontroleerde foto uit de bestemmingenlijst (Ideeën) als de
-  // plaatsnaam overeenkomt. De lijst wordt één keer opgehaald; daarna tekenen we de lijst opnieuw.
+  // Foto bij een pin zonder eigen foto: de gecontroleerde foto uit de bestemmingenlijst (Ideeën) met
+  // dezelfde plaatsnaam, anders die van de dichtstbijzijnde bestemming binnen 75 km (Catania → Sicilië).
+  // Nooit zelf een foto zoeken bij Wikipedia: dat gaf verkeerde foto's (doorverwijspagina's, naamgenoten).
+  // De lijst wordt één keer opgehaald; daarna tekenen we de lijst opnieuw.
+  const PHOTO_NEAR_KM = 75;
   let photoList = null;
   function destPhoto(loc) {
     const own = safeUrl(loc.image);
@@ -240,12 +243,21 @@
     if (!photoList) {
       photoList = 'loading';
       loadDestinations().then((list) => {
-        photoList = new Map(list.filter((d) => d.img).map((d) => [fold(d.n.replace(/\s*\(.*\)$/, '')), d.img]));
+        const withImg = list.filter((d) => d.img);
+        photoList = { byName: new Map(withImg.map((d) => [fold(d.n.replace(/\s*\(.*\)$/, '')), d.img])), all: withImg };
         if (currentRoute() === 'kaart') render();
-      }).catch(() => { photoList = new Map(); });
+      }).catch(() => { photoList = { byName: new Map(), all: [] }; });
       return '';
     }
-    return photoList === 'loading' ? '' : photoList.get(fold(shortName(loc.title))) || '';
+    if (photoList === 'loading') return '';
+    const named = photoList.byName.get(fold(shortName(loc.title)));
+    if (named || !hasPos(loc)) return named || '';
+    let best = null;
+    for (const d of photoList.all) {
+      const km = distanceKm([loc.lat, loc.lng], [d.lat, d.lng]);
+      if (km <= PHOTO_NEAR_KM && (!best || km < best.km)) best = { km, img: d.img };
+    }
+    return best ? best.img : '';
   }
 
   function destRowHtml(loc) {
