@@ -489,3 +489,104 @@
       todoChange(() => api(`/trips/${id}/todos`, 'POST', { texts: TODO_DEFAULTS }));
     }
   });
+
+  /* --- kosten delen per reis (zoals Tricount) --- */
+
+  const costOpen = new Set();
+  const centsEuro = (c) => (c / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+
+  // Saldo per persoon in centen (+ = krijgt geld, - = moet betalen). De rest-centen gaan naar de eersten in de lijst.
+  function costBalances(expenses) {
+    const bal = new Map();
+    const add = (n, c) => bal.set(n, (bal.get(n) || 0) + c);
+    for (const e of expenses) {
+      add(e.paid_by, e.cents);
+      const share = Math.floor(e.cents / e.split.length);
+      let rest = e.cents - share * e.split.length;
+      for (const n of e.split) { add(n, -(share + (rest > 0 ? 1 : 0))); rest--; }
+    }
+    return bal;
+  }
+
+  // Zo min mogelijk overboekingen: steeds de grootste schuldenaar naar de grootste ontvanger.
+  function costTransfers(bal) {
+    const debt = [...bal].filter(([, c]) => c < 0).map(([n, c]) => ({ n, c: -c })).sort((a, b) => b.c - a.c);
+    const cred = [...bal].filter(([, c]) => c > 0).map(([n, c]) => ({ n, c })).sort((a, b) => b.c - a.c);
+    const out = [];
+    while (debt.length && cred.length) {
+      const d = debt[0], k = cred[0], c = Math.min(d.c, k.c);
+      if (c > 0) out.push({ from: d.n, to: k.n, c });
+      d.c -= c; k.c -= c;
+      if (!d.c) debt.shift();
+      if (!k.c) cred.shift();
+    }
+    return out;
+  }
+
+  function costsHtml(t) {
+    const ex = t.expenses || [];
+    const total = ex.reduce((s, e) => s + e.cents, 0);
+    const me = myName();
+    const names = state.members.map((m) => m.name);
+    const transfers = costTransfers(costBalances(ex));
+    const mine = costBalances(ex).get(me) || 0;
+    return `
+      <details class="todos costs" data-costs="${t.id}"${costOpen.has(t.id) ? ' open' : ''}>
+        <summary><span class="cost-ico" aria-hidden="true">€</span><span>Kosten delen</span>
+          <span class="todo-count">${ex.length ? centsEuro(total) : 'leeg'}</span></summary>
+        ${ex.length ? `
+          <div class="cost-settle">
+            ${transfers.length ? `<div class="cost-head">Zo staat iedereen quitte</div>
+              <ul>${transfers.map((x) => `<li class="${x.from === me || x.to === me ? 'me' : ''}">${avatar(x.from)}<strong>${esc(x.from === me ? 'Jij' : x.from)}</strong>
+                <span class="cost-arrow" aria-label="betaalt aan">→</span>${avatar(x.to)}<strong>${esc(x.to === me ? 'jou' : x.to)}</strong><span class="cost-amt">${centsEuro(x.c)}</span></li>`).join('')}</ul>
+              ${mine ? `<p class="cost-mine ${mine > 0 ? 'plus' : 'min'}">${mine > 0 ? `Jij krijgt nog ${centsEuro(mine)}` : `Jij moet nog ${centsEuro(-mine)} betalen`}</p>` : ''}`
+              : '<p class="cost-mine plus">✓ Iedereen staat quitte</p>'}
+          </div>
+          <ul class="cost-list">${[...ex].reverse().map((e) => `
+            <li><span class="cost-text"><strong>${esc(e.title)}</strong>
+              <small>${esc(e.paid_by === me ? 'Jij' : e.paid_by)} betaalde · voor ${e.split.length === names.length && names.every((n) => e.split.includes(n)) ? 'iedereen' : esc(e.split.join(', '))}</small></span>
+              <span class="cost-amt">${centsEuro(e.cents)}</span>
+              <button type="button" class="todo-del" data-cost-del="${e.id}" aria-label="${esc(e.title)} verwijderen">×</button></li>`).join('')}</ul>`
+          : '<p class="todo-empty">Hou bij wie wat betaalt (huis, auto, boodschappen). Reismannetje rekent uit wie wie nog hoeveel moet.</p>'}
+        <form class="cost-add" data-cost-add="${t.id}">
+          <div class="cost-row">
+            <input name="title" maxlength="80" placeholder="Waarvoor? bijv. boodschappen" aria-label="Waarvoor" autocomplete="off" required>
+            <span class="euro-in"><input name="amount" inputmode="decimal" placeholder="0,00" aria-label="Bedrag in euro" autocomplete="off" required></span>
+          </div>
+          <label class="cost-paid">Betaald door
+            <select name="paid_by">${names.map((n) => `<option${n === me ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          <fieldset class="cost-split"><legend>Voor wie</legend>
+            ${names.map((n) => `<label><input type="checkbox" name="split" value="${esc(n)}" checked><span>${esc(n === me ? `${n} (jij)` : n)}</span></label>`).join('')}
+          </fieldset>
+          <button type="submit" class="btn sm primary">${ic('plus')} Uitgave toevoegen</button>
+        </form>
+      </details>`;
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const d = e.target.closest && e.target.closest('[data-costs]');
+    if (!d || e.target !== d) return;
+    if (d.open) costOpen.add(+d.dataset.costs); else costOpen.delete(+d.dataset.costs);
+  }, true);
+
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest && e.target.closest('[data-cost-add]');
+    if (!form) return;
+    e.preventDefault();
+    const f = form.elements;
+    const split = [...form.querySelectorAll('input[name=split]:checked')].map((i) => i.value);
+    if (!split.length) { toast('Kies voor wie het was', true); return; }
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      await api(`/trips/${form.dataset.costAdd}/expenses`, 'POST', { title: f.title.value, amount: f.amount.value, paid_by: f.paid_by.value, split });
+      toast('Uitgave toegevoegd ✓');
+      await reload();
+    } catch (err) { toast(err.message, true); btn.disabled = false; }
+  });
+
+  document.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-cost-del]');
+    if (!del || !confirm('Deze uitgave verwijderen?')) return;
+    try { await api(`/expenses/${del.dataset.costDel}`, 'DELETE'); await reload(); } catch (err) { toast(err.message, true); }
+  });

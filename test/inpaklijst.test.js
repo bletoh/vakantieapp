@@ -50,3 +50,22 @@ test('inpaklijst: een andere groep kan er niet bij', async () => {
   assert.equal(na.done, 0);
   assert.equal(na.text, 'Geheim');
 });
+
+test('kosten delen: bedrag, wie betaalde en voor wie worden gecontroleerd; andere groep kan niet verwijderen', async () => {
+  const { c, trip } = await groepMetReis('Betaler');
+  const add = (body) => c.req('POST', `/api/trips/${trip}/expenses`, { title: 'Huis', amount: '600', paid_by: 'Betaler', split: ['Betaler'], ...body });
+  assert.equal((await add({ amount: 'veel' })).status, 400);
+  assert.equal((await add({ amount: '0' })).status, 400);
+  assert.equal((await add({ paid_by: 'Vreemde' })).status, 400);
+  assert.equal((await add({ split: ['Vreemde'] })).status, 400);
+  assert.equal((await add({ title: '' })).status, 400);
+  assert.equal((await add({ amount: '1.250,50', split: ['Betaler', 'Vreemde'] })).status, 200);
+  const [e] = (await c.req('GET', '/api/content')).data.trips[0].expenses;
+  assert.equal(e.cents, 125050);
+  assert.deepEqual(e.split, ['Betaler']); // onbekende namen vallen eruit
+  const other = await groepMetReis('Ander');
+  await other.c.req('DELETE', `/api/expenses/${e.id}`);
+  assert.equal((await c.req('GET', '/api/content')).data.trips[0].expenses.length, 1);
+  await c.req('DELETE', `/api/expenses/${e.id}`);
+  assert.equal((await c.req('GET', '/api/content')).data.trips[0].expenses.length, 0);
+});

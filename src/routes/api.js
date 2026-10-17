@@ -92,6 +92,9 @@ function getContent(team, user) {
   const todos = db.prepare(`SELECT d.id, d.trip_id, d.text, d.who, d.done, d.done_by, d.added_by FROM trip_todos d
     JOIN trips t ON t.id = d.trip_id WHERE t.team_id = ? ORDER BY d.done, d.position, d.id`).all(team.id);
   for (const t of trips) t.todos = todos.filter((d) => d.trip_id === t.id);
+  const expenses = db.prepare(`SELECT e.id, e.trip_id, e.title, e.cents, e.paid_by, e.split, e.added_by, e.created_at FROM trip_expenses e
+    JOIN trips t ON t.id = e.trip_id WHERE t.team_id = ? ORDER BY e.id`).all(team.id);
+  for (const t of trips) t.expenses = expenses.filter((e) => e.trip_id === t.id).map((e) => ({ ...e, split: JSON.parse(e.split) }));
   const availability = db.prepare('SELECT name, date FROM available_days WHERE team_id = ? ORDER BY name, date').all(team.id);
   const members = db.prepare(`
     SELECT u.id, u.name, m.role, m.likes, m.dislikes, m.note, m.joined_at FROM team_members m JOIN users u ON u.id = m.user_id
@@ -327,6 +330,42 @@ router.put('/todos/:id', (req, res) => {
 router.delete('/todos/:id', (req, res) => {
   const todo = todoOfTeam(req.team.id, req.params.id);
   if (todo) db.prepare('DELETE FROM trip_todos WHERE id = ?').run(todo.id);
+  res.json({ ok: true });
+});
+
+/* ---------- kosten delen per reis ---------- */
+// "12,50", "1.250,00", "12.5", "€ 12" of 12.5 -> 12.5
+function parseAmount(v) {
+  if (typeof v === 'number') return v;
+  let s = String(v ?? '').replace(/[€\s]/g, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  return /^\d+(\.\d{1,2})?$/.test(s) ? Number(s) : NaN;
+}
+const memberNamesOf = (teamId) => db.prepare('SELECT u.name FROM team_members m JOIN users u ON u.id = m.user_id WHERE m.team_id = ?').all(teamId).map((r) => r.name);
+
+// { title, amount: "12,50" of 12.5, paid_by, split: [namen] } — namen moeten leden van de groep zijn.
+router.post('/trips/:id/expenses', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  const title = String(req.body.title || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!title) throw fail(400, 'Waarvoor was het? Geef een omschrijving');
+  const amount = parseAmount(req.body.amount);
+  const cents = Math.round(amount * 100);
+  if (!Number.isFinite(amount) || cents <= 0 || cents > 10_000_000) throw fail(400, 'Vul een bedrag in, bijv. 12,50');
+  const names = memberNamesOf(req.team.id);
+  const paidBy = String(req.body.paid_by || req.user.name);
+  if (!names.includes(paidBy)) throw fail(400, 'Kies wie er betaald heeft');
+  const split = [...new Set((Array.isArray(req.body.split) ? req.body.split : []).map(String))].filter((n) => names.includes(n));
+  if (!split.length) throw fail(400, 'Kies voor wie het was');
+  if (db.prepare('SELECT COUNT(*) AS n FROM trip_expenses WHERE trip_id = ?').get(trip.id).n >= 300) throw fail(400, 'Maximaal 300 uitgaven per reis');
+  const id = db.prepare('INSERT INTO trip_expenses (trip_id, title, cents, paid_by, split, added_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(trip.id, title, cents, paidBy, JSON.stringify(split), req.user.name).lastInsertRowid;
+  res.json({ id });
+});
+
+router.delete('/expenses/:id', (req, res) => {
+  const row = db.prepare('SELECT e.id FROM trip_expenses e JOIN trips t ON t.id = e.trip_id WHERE e.id = ? AND t.team_id = ?').get(req.params.id, req.team.id);
+  if (row) db.prepare('DELETE FROM trip_expenses WHERE id = ?').run(row.id);
   res.json({ ok: true });
 });
 

@@ -360,6 +360,21 @@ CREATE TABLE IF NOT EXISTS trip_todos (
 CREATE INDEX IF NOT EXISTS trip_todos_trip ON trip_todos (trip_id, position);
 `);
 
+// Kosten delen per reis (zoals Tricount): wie betaalde wat, voor wie. Bedragen in centen; split = JSON-lijst met namen.
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  cents INTEGER NOT NULL,
+  paid_by TEXT NOT NULL,
+  split TEXT NOT NULL,
+  added_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS trip_expenses_trip ON trip_expenses (trip_id, id);
+`);
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;

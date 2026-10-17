@@ -352,6 +352,7 @@
             <button type="button" class="btn sm" data-trip-add="car" data-trip-id="${t.id}">${ic('car')} Huurauto</button>
           </div>
           ${todosHtml(t)}
+          ${costsHtml(t)}
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
           ${tripShareHtml(t)}
           <div class="card-foot">
