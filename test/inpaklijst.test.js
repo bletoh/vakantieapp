@@ -62,6 +62,8 @@ test('kosten delen: bedrag, wie betaalde en voor wie worden gecontroleerd; ander
   assert.equal((await add({ amount: '1.250,50', split: ['Betaler', 'Vreemde'] })).status, 200);
   const [e] = (await c.req('GET', '/api/content')).data.trips[0].expenses;
   assert.equal(e.cents, 125050);
+  const msgs = (await c.req('GET', '/api/messages')).data;
+  assert.ok((Array.isArray(msgs) ? msgs : msgs.messages).some((m) => /betaalde €\s1\.250,50 voor Huis \(Barcelona\)/.test(m.body)));
   assert.deepEqual(e.split, ['Betaler']); // onbekende namen vallen eruit
   const other = await groepMetReis('Ander');
   await other.c.req('DELETE', `/api/expenses/${e.id}`);

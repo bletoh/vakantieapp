@@ -407,6 +407,10 @@ router.post('/trips/:id/expenses', (req, res) => {
   if (db.prepare('SELECT COUNT(*) AS n FROM trip_expenses WHERE trip_id = ?').get(trip.id).n >= 300) throw fail(400, 'Maximaal 300 uitgaven per reis');
   const id = db.prepare('INSERT INTO trip_expenses (trip_id, title, cents, paid_by, split, added_by) VALUES (?, ?, ?, ?, ?, ?)')
     .run(trip.id, title, cents, paidBy, JSON.stringify(split), req.user.name).lastInsertRowid;
+  // Korte melding in de chat (geeft ook een pushmelding), zonder kaartje om de chat rustig te houden.
+  const bedrag = (cents / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+  const wie = paidBy === req.user.name ? 'betaalde' : `zette erbij: ${paidBy} betaalde`;
+  db.postEvent(req.team.id, req.user.id, `${wie} ${bedrag} voor ${title} (${trip.title})`);
   res.json({ id });
 });
 
