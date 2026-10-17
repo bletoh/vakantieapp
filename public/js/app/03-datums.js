@@ -78,12 +78,31 @@
     return list.map((c) => `${esc(c.name)} (${c.ok} van ${c.total} dagen)`).join(', ');
   }
 
+  // Aftellen naar de reis: "Nog 23 dagen", "Morgen!", tijdens de reis "Dag 2 van 5", daarna "Geweest".
+  function countdown(t) {
+    if (!t.start_date) return null;
+    const today = todayIso();
+    const end = t.end_date || t.start_date;
+    if (today > end) return { cls: 'past', text: 'Geweest' };
+    if (today >= t.start_date) return { cls: 'now', text: `Nu op reis · dag ${dayCount(t.start_date, today)} van ${dayCount(t.start_date, end)}` };
+    const n = dayCount(today, t.start_date) - 1;
+    if (n === 1) return { cls: 'soon', text: 'Morgen!' };
+    if (n <= 14) return { cls: 'soon', text: `Nog ${n} dagen` };
+    if (n < 70) return { cls: '', text: `Nog ${n} dagen` };
+    const weeks = Math.round(n / 7);
+    return { cls: '', text: n < 365 ? `Nog ${weeks} weken` : `Over ruim ${Math.floor(n / 365)} jaar` };
+  }
+  const countdownHtml = (t) => {
+    const c = countdown(t);
+    return c ? `<span class="countdown${c.cls ? ' ' + c.cls : ''}">${esc(c.text)}</span>` : '';
+  };
+
   function tripDatesHtml(t) {
     if (!t.start_date) return '';
     const conflicts = conflictsOf(t);
     const n = dayCount(t.start_date, t.end_date);
     return `
-      <div class="trip-dates">${rangeText(t.start_date, t.end_date)} · ${n} ${n === 1 ? 'dag' : 'dagen'}</div>
+      <div class="trip-dates">${rangeText(t.start_date, t.end_date)} · ${n} ${n === 1 ? 'dag' : 'dagen'} ${countdownHtml(t)}</div>
       ${!conflicts ? (availabilityMap().size ? '<div class="hint">Valt buiten de periode van de datumprikker</div>' : '')
         : conflicts.length ? `<div class="conflict-note"><strong>Kan niet:</strong> ${conflictText(conflicts)}</div>`
         : availabilityMap().size ? '<div class="ok-note">✓ Iedereen kan</div>' : ''}`;
@@ -96,7 +115,7 @@
     const mine = byName.get(me) || new Set();
     const people = [...byName.keys()].sort((a, b) => a.localeCompare(b, 'nl'));
     const best = bestWindows(byName, cfg);
-    const dated = state.trips.filter((t) => t.start_date);
+    const dated = state.trips.filter((t) => t.start_date).sort((a, b) => a.start_date.localeCompare(b.start_date));
 
     // Kalender: maanden met weken die op maandag beginnen.
     const tripDays = new Map();
@@ -156,6 +175,7 @@
       </div>
 
       ${whoHtml(me, people)}
+      ${missingHtml(people, cfg)}
 
       <div class="label">Beste periodes</div>
       ${best.length ? `<ol class="best-list">${best.map((w, i) => `
@@ -179,7 +199,7 @@
           const known = conflictsOf(t) !== null;
           return `<li class="planned-row${c.length ? ' conflict' : ''}" data-trip="${t.id}" tabindex="0">
             <strong>${esc(t.title)}</strong>
-            <span>${rangeText(t.start_date, t.end_date)}</span>
+            <span>${rangeText(t.start_date, t.end_date)} ${countdownHtml(t)}</span>
             ${c.length ? `<small>Kan niet: ${conflictText(c)}</small>` : !known ? '<span>Buiten de periode van de datumprikker</span>' : people.length ? '<small>✓ Iedereen kan</small>' : ''}
           </li>`;
         }).join('')}</ul>` : ''}
@@ -198,6 +218,22 @@
           <li><span>${esc(n)}</span><small>${byName.get(n).size} dagen</small>
             ${canRemovePerson(n) ? `<button type="button" class="text-btn" data-action="remove-person" data-name="${esc(n)}">Wissen</button>` : ''}</li>`).join('')}
         </ul>` : ''}`;
+  }
+
+  // Wie van de groep heeft de datumprikker nog niet ingevuld? Met een herinnering voor de groepsapp.
+  function missingHtml(people, cfg) {
+    const filled = new Set(people.map((n) => n.toLowerCase()));
+    const missing = state.members.map((m) => m.name).filter((n) => !filled.has(n.toLowerCase()));
+    if (!missing.length || state.members.length < 2) return '';
+    const me = myName();
+    const others = missing.filter((n) => n !== me);
+    const url = `${location.origin}/?team=${session.teamId}#datum`;
+    const text = `Hé ${others.join(', ')}! Vul je even in wanneer je kunt? We zoeken ${cfg.days} dagen tussen ${fmtShort(cfg.start)} en ${fmtShort(cfg.end)}. ${url}`;
+    return `
+      <div class="missing">
+        <div><strong>Nog niet ingevuld</strong><small>${missing.map((n) => (n === me ? 'jij' : esc(n))).join(', ')}</small></div>
+        ${others.length ? `<a class="btn sm wa" href="${waLink(text)}" target="_blank" rel="noopener">${WA_ICON} Herinner ${others.length === 1 ? esc(others[0]) : 'ze'}</a>` : ''}
+      </div>`;
   }
 
   // Je vult altijd in als jezelf (je account).

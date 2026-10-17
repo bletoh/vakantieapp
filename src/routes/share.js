@@ -110,7 +110,7 @@ router.get('/join/:code', (req, res) => {
 /* ---------- plaatjes voor het voorbeeld (1200 × 630) ---------- */
 
 // Zelfde kleuren als de app: wit, grijstinten en één accentkleur.
-const C = { paper: '#ffffff', ink: '#222222', muted: '#6a6a6a', red: '#e0245e', navy: '#222222', line: '#ebebeb', good: '#008a05' };
+const C = { paper: '#f8f7f3', ink: '#1d2a30', muted: '#5f6c72', red: '#2b6a80', navy: '#1d2a30', line: '#e2e1da', good: '#2f7a45' };
 
 function wrap(text, max) {
   const words = String(text).split(/\s+/);
@@ -204,7 +204,7 @@ router.get('/og/site.jpg', async (req, res, next) => {
 
 const KIND_LABEL = { flight: 'Vlucht', stay: 'Overnachting', car: 'Huurauto', do: 'Activiteiten', eat: 'Eten & drinken' };
 const KIND_ICON = { map: 'pin', flight: 'plane', stay: 'bed', car: 'car', do: 'sparkles', eat: 'utensils' };
-const DOT = { stay: '#e0245e', do: '#008a05', eat: '#d97706' };
+const DOT = { stay: '#2b6a80', do: '#2f7a45', eat: '#c0782a' };
 const HOME = [52.3105, 4.7683]; // Schiphol
 
 const ICONS = {
@@ -218,6 +218,7 @@ const ICONS = {
   heart: '<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
   note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  compass: '<circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
 };
 const icon = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.list}</svg>`;
@@ -236,6 +237,16 @@ function dateText(t) {
   const b = fmtDay(t.end_date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   const n = rangeDays(t.start_date, t.end_date).length;
   return t.start_date === t.end_date ? `${b}` : `${a} – ${b} · ${n} dagen`;
+}
+// Aftellen zoals in de app: "nog 23 dagen", "morgen", "nu op reis", "geweest" (datum in Nederlandse tijd).
+function countdownText(t) {
+  if (!t.start_date) return '';
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+  const end = t.end_date || t.start_date;
+  if (today > end) return 'geweest';
+  if (today >= t.start_date) return 'nu op reis';
+  const n = rangeDays(today, t.start_date).length - 1;
+  return n === 1 ? 'morgen!' : n < 70 ? `nog ${n} dagen` : `nog ${Math.round(n / 7)} weken`;
 }
 const shortDates = (t) => (t.start_date ? `${fmtDay(t.start_date, { day: 'numeric', month: 'short' })} – ${fmtDay(t.end_date, { day: 'numeric', month: 'short' })}` : '');
 const clip = (str, n) => (String(str).length > n ? `${String(str).slice(0, n - 1).trim()}…` : String(str));
@@ -287,7 +298,9 @@ function tripView(trip) {
       who = { can, cannot };
     }
   }
-  return { trip, loc, groups, who };
+  const plan = db.prepare('SELECT day, time, text FROM trip_plan WHERE trip_id = ? ORDER BY day, COALESCE(time, \'\'), id').all(trip.id);
+  const going = db.prepare("SELECT COUNT(*) AS n FROM trip_rsvp WHERE trip_id = ? AND value = 'ja'").get(trip.id).n;
+  return { trip, loc, groups, who, plan, going };
 }
 
 function flightUrl(item, trip) {
@@ -371,11 +384,17 @@ function itemCard(x, v) {
 
 // Opmaak van de deelpagina's (losse reis en overzicht van meerdere reizen).
 const PAGE_CSS = `
-    :root { --bg: #fff; --surface: #fff; --surface-2: #f4f4f4; --ink: #222; --muted: #6a6a6a; --line: #e2e2e2;
-      --brand: #e0245e; --good: #008a05; --bad: #c13515; color-scheme: light; }
+.program { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.program > li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.program > li > strong { font-size: .85rem; color: var(--muted); }
+.program ul { margin: 4px 0 0; padding-left: 18px; }
+.program ul li { margin: 2px 0; }
+.program b { font-variant-numeric: tabular-nums; }
+    :root { --bg: #f8f7f3; --surface: #fff; --surface-2: #efeee8; --ink: #1d2a30; --muted: #5f6c72; --line: #e2e1da;
+      --brand: #2b6a80; --on-brand: #fff; --good: #2f7a45; --bad: #b4472c; color-scheme: light; }
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #121212; --surface: #1c1c1c; --surface-2: #262626; --ink: #f2f2f2; --muted: #a3a3a3; --line: #333;
-        --brand: #ff5c8a; --good: #4cc26a; --bad: #ff7a66; color-scheme: dark; }
+      :root { --bg: #12171a; --surface: #1a2125; --surface-2: #232b30; --ink: #eef2f2; --muted: #9eabb0; --line: #2f383d;
+        --brand: #7cbcd1; --on-brand: #0e1a1f; --good: #6cc28a; --bad: #f08a6c; color-scheme: dark; }
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -420,13 +439,14 @@ const PAGE_CSS = `
     .item-img-link { display: flex; flex: none; }
     .item h3 a { color: inherit; text-decoration: none; }
     .go-btn { justify-self: start; display: inline-flex; align-items: center; margin-top: 8px; min-height: 44px; padding: 10px 18px;
-      border-radius: 10px; background: #e0245e; color: #fff; font-weight: 600; text-decoration: none; }
+      border-radius: 10px; background: var(--brand); color: var(--on-brand); font-weight: 600; text-decoration: none; }
     .go-btn:hover { filter: brightness(.92); }
     .empty { color: var(--muted); }
     footer { max-width: 680px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .8125rem; display: flex; align-items: center; gap: 8px; }
+    .made-with { display: inline-flex; align-items: center; gap: 5px; color: inherit; font-weight: 600; text-decoration: none; }
     .lock { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); }
     .pin { width: 30px; height: 40px; position: relative; filter: drop-shadow(0 2px 2px rgba(0,0,0,.3)); }
-    .pin::before { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; background: #e0245e; border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+    .pin::before { content: ''; position: absolute; left: 2px; top: 2px; width: 24px; height: 24px; background: #2b6a80; border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
     .pin-icon { background: none; border: none; }
     .leaflet-container { font-family: inherit; }
     .leaflet-tooltip.lbl { border: none; border-radius: 999px; padding: 3px 10px; box-shadow: 0 2px 8px rgba(0,0,0,.2); font-weight: 600; font-size: .75rem; }
@@ -437,7 +457,7 @@ const PAGE_CSS = `
 `;
 
 function tripPageHtml(req, v) {
-  const { trip, loc, groups, who } = v;
+  const { trip, loc, groups, who, plan = [], going = 0 } = v;
   const site = teamName(trip.team_id) || 'Reismannetje';
   const meta = tripMeta(v);
   const url = `${origin(req)}/reis/${trip.share_slug}`;
@@ -466,8 +486,8 @@ function tripPageHtml(req, v) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12171a" media="(prefers-color-scheme: dark)">
   <title>${esc(trip.title)} · ${esc(site)}</title>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="${esc(site)}">
@@ -479,6 +499,8 @@ function tripPageHtml(req, v) {
   <meta property="og:image:height" content="630">` : ''}
   <meta name="twitter:card" content="summary_large_image">
   <meta name="description" content="${esc(meta.description)}">
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="stylesheet" href="/vendor/inter/index.css">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <style>${PAGE_CSS}</style>
@@ -490,7 +512,8 @@ function tripPageHtml(req, v) {
     <h1>${esc(trip.title)}</h1>
     <ul class="facts">
       ${loc ? `<li>${icon('pin')}${esc(loc.title)}</li>` : ''}
-      ${trip.start_date ? `<li>${icon('calendar')}${esc(dateText(trip))}</li>` : '<li class="muted">Datum nog niet gekozen</li>'}
+      ${trip.start_date ? `<li>${icon('calendar')}<span>${esc(dateText(trip))} · <strong>${esc(countdownText(trip))}</strong></span></li>` : '<li class="muted">Datum nog niet gekozen</li>'}
+      ${going ? `<li>${icon('users')}${going} ${going === 1 ? 'gaat' : 'gaan'} mee</li>` : ''}
       ${trip.likes ? `<li class="muted">${icon('heart')}${trip.likes} ${trip.likes === 1 ? 'hartje' : 'hartjes'}</li>` : ''}
     </ul>
     ${points.length > 1 ? `<div class="legend">${groups.filter((g) => DOT[g.kind] && g.items.some((x) => x.lat != null)).map((g) => `<span><i style="background:${DOT[g.kind]}"></i>${esc(g.title)}</span>`).join('')}</div>` : ''}
@@ -500,8 +523,14 @@ function tripPageHtml(req, v) {
       <h2>${KIND_ICON[g.kind] ? icon(KIND_ICON[g.kind]) : `<span aria-hidden="true">${esc(g.icon || '')}</span>`}${esc(g.title)}${g.items.length > 1 ? ` <span class="count">${g.items.length}</span>` : ''}</h2>
       <div class="items">${g.items.map((x) => itemCard(x, v)).join('')}</div>`).join('')
       : '<p class="empty">Er zijn nog geen vlucht, hotel of activiteiten gekozen.</p>'}
+    ${plan.length && trip.start_date ? `<h2>${icon('calendar')}Dagprogramma</h2>
+      <ol class="program">${rangeDays(trip.start_date, trip.end_date).map((d, i) => {
+        const items = plan.filter((p) => p.day === d);
+        return items.length ? `<li><strong>Dag ${i + 1} · ${esc(fmtDay(d, { weekday: 'short', day: 'numeric', month: 'short' }))}</strong>
+          <ul>${items.map((p) => `<li>${p.time ? `<b>${esc(p.time)}</b> ` : ''}${esc(p.text)}</li>`).join('')}</ul></li>` : '';
+      }).join('')}</ol>` : ''}
   </main>
-  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)}</footer>
+  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)} · <a class="made-with" href="/bestemmingen"><img src="/img/logo.svg" alt="" width="18" height="18">Reismannetje</a></footer>
   ${points.length ? `<script src="/vendor/leaflet/leaflet.js"></script>
   <script>
   (function () {
@@ -511,7 +540,7 @@ function tripPageHtml(req, v) {
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
     var dest = d.points.filter(function (p) { return p.kind === 'map'; })[0];
     if (dest && d.flight) {
-      L.polyline([d.home, [dest.lat, dest.lng]], { color: '#e0245e', weight: 2, dashArray: '2 7', lineCap: 'round', opacity: .8 }).addTo(map);
+      L.polyline([d.home, [dest.lat, dest.lng]], { color: '#2b6a80', weight: 2, dashArray: '2 7', lineCap: 'round', opacity: .8 }).addTo(map);
       L.circleMarker(d.home, { radius: 5, color: '#fff', weight: 2, fillColor: '#f97316', fillOpacity: 1 }).addTo(map);
     }
     d.points.forEach(function (p) {
@@ -576,7 +605,7 @@ function bundleBySlug(slug) {
 }
 
 const placeOf = (v) => (v.loc ? shortName(v.loc.title) : '');
-const BUNDLE_COLORS = ['#e0245e', '#2563eb', '#008a05', '#d97706', '#7c3aed', '#0891b2', '#be123c', '#4d7c0f'];
+const BUNDLE_COLORS = ['#2b6a80', '#c0612f', '#2f7a45', '#9a7a1c', '#6d5a9e', '#3f8f9a', '#a8466a', '#5a6f2e'];
 
 function bundleMeta(views) {
   const names = views.map((v) => placeOf(v) || v.trip.title);
@@ -629,7 +658,7 @@ function bundlePageHtml(req, bundle, views) {
         <p class="trip-kicker"><span class="num" style="background:${BUNDLE_COLORS[i % BUNDLE_COLORS.length]}">${i + 1}</span>${loc ? esc(loc.title) : 'Reis'}</p>
         <h2 class="trip-title">${esc(trip.title)}</h2>
         <ul class="facts">
-          ${trip.start_date ? `<li>${icon('calendar')}${esc(dateText(trip))}</li>` : '<li class="muted">Datum nog niet gekozen</li>'}
+          ${trip.start_date ? `<li>${icon('calendar')}<span>${esc(dateText(trip))} · <strong>${esc(countdownText(trip))}</strong></span></li>` : '<li class="muted">Datum nog niet gekozen</li>'}
           ${trip.likes ? `<li class="muted">${icon('heart')}${trip.likes}</li>` : ''}
         </ul>
         ${facts.length ? `<ul class="sum">${facts.join('')}</ul>` : ''}
@@ -651,8 +680,8 @@ function bundlePageHtml(req, bundle, views) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f8f7f3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12171a" media="(prefers-color-scheme: dark)">
   <title>${views.length} reizen · ${esc(site)}</title>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="${esc(site)}">
@@ -664,6 +693,8 @@ function bundlePageHtml(req, bundle, views) {
   <meta property="og:image:height" content="630">` : ''}
   <meta name="twitter:card" content="summary_large_image">
   <meta name="description" content="${esc(meta.description)}">
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="stylesheet" href="/vendor/inter/index.css">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <style>${PAGE_CSS}
@@ -707,7 +738,7 @@ function bundlePageHtml(req, bundle, views) {
     <ul class="jump">${views.map((v, i) => `<li><a href="#reis-${i + 1}"><span class="num" style="background:${BUNDLE_COLORS[i % BUNDLE_COLORS.length]}">${i + 1}</span>${esc(placeOf(v) || v.trip.title)}</a></li>`).join('')}</ul>
     ${cards}
   </main>
-  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)}</footer>
+  <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)} · <a class="made-with" href="/bestemmingen"><img src="/img/logo.svg" alt="" width="18" height="18">Reismannetje</a></footer>
   ${points.length ? `<script src="/vendor/leaflet/leaflet.js"></script>
   <script>
   (function () {

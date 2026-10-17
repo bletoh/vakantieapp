@@ -50,7 +50,7 @@
       return;
     }
     // Tik op een kaart om hem aan te passen.
-    if (e.target.closest('a, button, dialog, input, label')) return;
+    if (e.target.closest('a, button, dialog, input, label, summary, .todos')) return;
     openCard(e.target.closest('[data-item], [data-trip]'));
   });
 

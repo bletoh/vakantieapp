@@ -1,7 +1,7 @@
   /* ---------- accounts, groepen en chat ---------- */
 
   // Vaste kleur per persoon, zodat je op de kaart en in de chat snel ziet wie wat deed.
-  const PERSON_COLORS = ['#e0245e', '#0a7cff', '#008a05', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#4d7c0f', '#b45309', '#4f46e5'];
+  const PERSON_COLORS = ['#2b6a80', '#c0612f', '#2f7a45', '#9a7a1c', '#6d5a9e', '#3f8f9a', '#a8466a', '#5a6f2e', '#b0562a', '#4a5f9e'];
   function colorOf(name) {
     let h = 0;
     for (const ch of String(name || '').toLowerCase()) h = (h * 31 + ch.codePointAt(0)) >>> 0;
@@ -29,8 +29,22 @@
     unmountMap();
     $$('dialog[open]').forEach((d) => d.close());
     $('#tabs').innerHTML = '';
+    if ($('#me')) $('#me').hidden = true;
     $('#panel').innerHTML = `<div class="gate-wrap"><div class="gate-card">
-      <div class="gate-brand">${ic('compass')} Reismannetje</div>${html}</div></div>`;
+      <div class="gate-brand"><img class="logo-img" src="/img/logo.svg" alt="" width="44" height="44"> Reismannetje</div>
+      <p class="gate-tag">Plan samen met je vrienden de vakantie van het jaar.</p>${html}</div>
+      <aside class="gate-hero" aria-hidden="true">
+        <img src="https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Evening_light_over_Barcelona.jpg/960px-Evening_light_over_Barcelona.jpg" alt="" onerror="this.remove()">
+        <div class="gate-hero-text">
+          <img class="gate-mascot" src="/img/reismannetje.svg" alt="" width="74" height="105">
+          <strong>Van groepsapp naar geboekte reis</strong>
+          <ul>
+            <li>${ic('map')} Prik bestemmingen samen op de kaart</li>
+            <li>${ic('calendar')} Vind de week waarin iedereen kan</li>
+            <li>${ic('vote')} Stem en deel de uitslag in WhatsApp</li>
+          </ul>
+        </div>
+      </aside></div>`;
     document.title = 'Reismannetje';
   }
 
@@ -350,13 +364,17 @@
       const t = state.trips.find((x) => x.id === m.ref_id);
       if (!t) return '<div class="ref-card gone">Deze reis is verwijderd</div>';
       const loc = t.item_ids.map(findItem).find((it) => it && sectionOf(it) && sectionOf(it).kind === 'map');
-      const img = loc && safeUrl(loc.image);
+      const img = loc && destPhoto(loc);
       const n = t.item_ids.length;
+      const going = goingNames(t);
+      const meGoing = going.includes(myName());
+      const c = countdown(t);
       return `<div class="ref-card trip-ref">
         <span class="ref-thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ic('suitcase')}</span>
         <span><small>Reis${t.added_by ? ` · voorgesteld door ${esc(t.added_by)}` : ''}</small><strong>${esc(t.title)}</strong>
-          <small>${t.start_date ? esc(shortRange(t.start_date, t.end_date)) : 'Nog geen datum'} · ${n} ${n === 1 ? 'onderdeel' : 'onderdelen'} · ♥ ${t.likes}</small></span>
+          <small>${t.start_date ? esc(shortRange(t.start_date, t.end_date)) + (c ? ` · ${esc(c.text.toLowerCase())}` : '') : 'Nog geen datum'} · ${going.length ? `${going.length} ${going.length === 1 ? 'gaat' : 'gaan'} mee` : `${n} ${n === 1 ? 'onderdeel' : 'onderdelen'}`} · ♥ ${t.likes}</small></span>
         <span class="ref-actions">
+          ${c && c.cls === 'past' ? '' : meGoing ? '<span class="ref-going">✓ Jij gaat mee</span>' : `<button type="button" class="btn sm primary" data-rsvp="ja" data-trip-id="${t.id}">Ik ga mee</button>`}
           ${loc ? `<a class="btn sm" href="#pin-${loc.id}">Op de kaart</a>` : ''}
           <button type="button" class="btn sm ghost" data-trip-open="${t.id}">Bekijk</button>
         </span></div>`;
@@ -427,7 +445,7 @@
     const top = log.scrollTop;
     log.innerHTML = !chat.loaded ? '<p class="hint center">Laden…</p>'
       : chat.messages.length ? chat.messages.map((m, i) => msgHtml(m, chat.messages[i - 1])).join('')
-      : `<div class="empty"><p>Nog geen berichten. Zeg hoi, of deel een reis, pin of stemronde met de ${ic('plus')}-knop.</p></div>`;
+      : `<div class="empty"><img class="empty-mascot" src="/img/reismannetje.svg" alt="" width="64" height="91"><strong>Nog geen berichten</strong><p>Zeg hoi, of deel een reis, pin of stemronde met de ${ic('plus')}-knop.</p></div>`;
     log.scrollTop = atBottom || !log.dataset.ready ? log.scrollHeight : top;
     log.dataset.ready = '1';
   }
@@ -535,6 +553,15 @@
 
   /* --- groepspagina: leden, uitnodigen, voorkeuren --- */
 
+  // Kleine status per lid: datumprikker ingevuld? Voor hoeveel reizen 'ik ga mee'?
+  function memberStatusHtml(m) {
+    const filled = availabilityMap().has(m.name);
+    const going = state.trips.filter((t) => goingNames(t).includes(m.name)).map((t) => t.title);
+    return `<span class="member-status">
+      <span class="${filled ? 'ok' : 'todo'}">${filled ? '✓ Datumprikker ingevuld' : 'Datumprikker nog niet ingevuld'}</span>
+      ${going.length ? `<span class="ok" title="${esc(going.join(', '))}">✓ Gaat mee: ${esc(going.slice(0, 2).join(', '))}${going.length > 2 ? ` +${going.length - 2}` : ''}</span>` : ''}</span>`;
+  }
+
   const inviteUrl = () => `${location.origin}/join/${state.team.invite_code}`;
 
   function prefChipsHtml(me) {
@@ -587,12 +614,15 @@
         <li>${avatar(m.name)}
           <div class="member-main"><strong>${esc(m.name)}${m.id === session.user.id ? ' <small>(jij)</small>' : ''}</strong>
             ${m.role === 'admin' ? '<span class="chip">Beheerder</span>' : ''}
-            ${memberPrefsText(m) ? `<small class="member-prefs">${memberPrefsText(m)}</small>` : '<small class="member-prefs">Nog geen voorkeuren</small>'}</div>
+            ${memberPrefsText(m) ? `<small class="member-prefs">${memberPrefsText(m)}</small>` : '<small class="member-prefs">Nog geen voorkeuren</small>'}
+            ${memberStatusHtml(m)}</div>
           ${admin && m.id !== session.user.id ? `<details class="member-menu"><summary aria-label="Opties voor ${esc(m.name)}">⋯</summary><div>
             <button type="button" data-member-role="${m.id}" data-role="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? 'Geen beheerder meer' : 'Maak beheerder'}</button>
             <button type="button" data-member-reset="${m.id}">Tijdelijk wachtwoord maken</button>
             <button type="button" class="danger" data-member-remove="${m.id}">Uit de groep halen</button></div></details>` : ''}
         </li>`).join('')}</ul>
+
+      ${appBlockHtml()}
 
       <div class="label">Mijn groepen</div>
       ${others.length ? `<div class="team-list">${teamsListHtml().replace(/<button type="button" class="team-row on"[\s\S]*?<\/button>/, '')}</div>` : '<p class="hint">Je zit alleen in deze groep.</p>'}

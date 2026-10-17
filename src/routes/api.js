@@ -66,6 +66,12 @@ function notFound(what) {
   return err;
 }
 
+function fail(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
 function updateRow(table, id, data) {
   const keys = Object.keys(data);
   if (!keys.length) return;
@@ -83,6 +89,18 @@ function getContent(team, user) {
   const trips = db.prepare('SELECT * FROM trips WHERE team_id = ? ORDER BY id').all(team.id);
   const picks = db.prepare('SELECT p.trip_id, p.item_id FROM trip_picks p JOIN trips t ON t.id = p.trip_id WHERE t.team_id = ?').all(team.id);
   for (const t of trips) t.item_ids = picks.filter((p) => p.trip_id === t.id).map((p) => p.item_id);
+  const todos = db.prepare(`SELECT d.id, d.trip_id, d.text, d.who, d.done, d.done_by, d.added_by FROM trip_todos d
+    JOIN trips t ON t.id = d.trip_id WHERE t.team_id = ? ORDER BY d.done, d.position, d.id`).all(team.id);
+  for (const t of trips) t.todos = todos.filter((d) => d.trip_id === t.id);
+  const expenses = db.prepare(`SELECT e.id, e.trip_id, e.title, e.cents, e.paid_by, e.split, e.added_by, e.created_at FROM trip_expenses e
+    JOIN trips t ON t.id = e.trip_id WHERE t.team_id = ? ORDER BY e.id`).all(team.id);
+  const rsvp = db.prepare(`SELECT r.trip_id, u.name, r.value FROM trip_rsvp r JOIN trips t ON t.id = r.trip_id JOIN users u ON u.id = r.user_id
+    JOIN team_members m ON m.user_id = r.user_id AND m.team_id = t.team_id WHERE t.team_id = ? ORDER BY r.updated_at`).all(team.id);
+  for (const t of trips) t.rsvp = rsvp.filter((r) => r.trip_id === t.id).map(({ name, value }) => ({ name, value }));
+  const plan = db.prepare(`SELECT p.id, p.trip_id, p.day, p.time, p.text, p.added_by FROM trip_plan p JOIN trips t ON t.id = p.trip_id
+    WHERE t.team_id = ? ORDER BY p.day, COALESCE(p.time, ''), p.id`).all(team.id);
+  for (const t of trips) t.plan = plan.filter((p) => p.trip_id === t.id);
+  for (const t of trips) t.expenses = expenses.filter((e) => e.trip_id === t.id).map((e) => ({ ...e, split: JSON.parse(e.split) }));
   const availability = db.prepare('SELECT name, date FROM available_days WHERE team_id = ? ORDER BY name, date').all(team.id);
   const members = db.prepare(`
     SELECT u.id, u.name, m.role, m.likes, m.dislikes, m.note, m.joined_at FROM team_members m JOIN users u ON u.id = m.user_id
@@ -274,6 +292,131 @@ router.post('/trips/:id/like', (req, res) => {
 
 router.delete('/trips/:id', (req, res) => {
   db.prepare('DELETE FROM trips WHERE id = ? AND team_id = ?').run(req.params.id, req.team.id);
+  res.json({ ok: true });
+});
+
+/* ---------- inpak- en takenlijst per reis ---------- */
+const TODO_MAX = 100;
+const todoOfTeam = (teamId, id) => db.prepare('SELECT d.* FROM trip_todos d JOIN trips t ON t.id = d.trip_id WHERE d.id = ? AND t.team_id = ?').get(id, teamId);
+const todoText = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+
+// { text } voor één regel, of { texts: [...] } voor de standaardlijst. Dubbele regels slaan we over.
+router.post('/trips/:id/todos', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  const texts = (Array.isArray(req.body.texts) ? req.body.texts : [req.body.text]).map(todoText).filter(Boolean).slice(0, TODO_MAX);
+  if (!texts.length) throw fail(400, 'Typ wat er op de lijst moet');
+  const have = new Set(db.prepare('SELECT lower(text) AS t FROM trip_todos WHERE trip_id = ?').all(trip.id).map((r) => r.t));
+  const count = db.prepare('SELECT COUNT(*) AS n FROM trip_todos WHERE trip_id = ?').get(trip.id).n;
+  const fresh = [...new Set(texts)].filter((x) => !have.has(x.toLowerCase()));
+  if (count + fresh.length > TODO_MAX) throw fail(400, `Maximaal ${TODO_MAX} dingen per reis`);
+  const insert = db.prepare('INSERT INTO trip_todos (trip_id, text, added_by, position) VALUES (?, ?, ?, ?)');
+  let pos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM trip_todos WHERE trip_id = ?').get(trip.id).p;
+  db.transaction(() => { for (const x of fresh) insert.run(trip.id, x, req.user.name, pos++); })();
+  res.json({ ok: true, added: fresh.length });
+});
+
+// { done }, { who } ('' = niemand) en/of { text }
+router.put('/todos/:id', (req, res) => {
+  const todo = todoOfTeam(req.team.id, req.params.id);
+  if (!todo) throw notFound('Regel');
+  if ('done' in req.body) {
+    const done = req.body.done ? 1 : 0;
+    db.prepare('UPDATE trip_todos SET done = ?, done_by = ? WHERE id = ?').run(done, done ? req.user.name : null, todo.id);
+  }
+  if ('who' in req.body) db.prepare('UPDATE trip_todos SET who = ? WHERE id = ?').run(todoText(req.body.who).slice(0, 30) || null, todo.id);
+  if ('text' in req.body) {
+    const text = todoText(req.body.text);
+    if (!text) throw fail(400, 'Typ wat er op de lijst moet');
+    db.prepare('UPDATE trip_todos SET text = ? WHERE id = ?').run(text, todo.id);
+  }
+  res.json({ ok: true });
+});
+
+router.delete('/todos/:id', (req, res) => {
+  const todo = todoOfTeam(req.team.id, req.params.id);
+  if (todo) db.prepare('DELETE FROM trip_todos WHERE id = ?').run(todo.id);
+  res.json({ ok: true });
+});
+
+/* ---------- dagprogramma ---------- */
+// { day: 'YYYY-MM-DD' (binnen de reis), time: 'HH:MM' of '', text }
+router.post('/trips/:id/plan', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  if (!trip.start_date) throw fail(400, 'Kies eerst een datum voor de reis');
+  const day = String(req.body.day || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < trip.start_date || day > (trip.end_date || trip.start_date)) throw fail(400, 'Kies een dag van de reis');
+  const time = String(req.body.time || '');
+  if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw fail(400, 'Die tijd klopt niet');
+  const text = String(req.body.text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  if (!text) throw fail(400, 'Wat gaan jullie doen?');
+  if (db.prepare('SELECT COUNT(*) AS n FROM trip_plan WHERE trip_id = ?').get(trip.id).n >= 200) throw fail(400, 'Maximaal 200 regels per reis');
+  const id = db.prepare('INSERT INTO trip_plan (trip_id, day, time, text, added_by) VALUES (?, ?, ?, ?, ?)')
+    .run(trip.id, day, time || null, text, req.user.name).lastInsertRowid;
+  res.json({ id });
+});
+
+router.delete('/plan/:id', (req, res) => {
+  const row = db.prepare('SELECT p.id FROM trip_plan p JOIN trips t ON t.id = p.trip_id WHERE p.id = ? AND t.team_id = ?').get(req.params.id, req.team.id);
+  if (row) db.prepare('DELETE FROM trip_plan WHERE id = ?').run(row.id);
+  res.json({ ok: true });
+});
+
+/* ---------- wie gaat er mee ---------- */
+router.put('/trips/:id/rsvp', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  const value = String(req.body.value || '');
+  if (!value) {
+    db.prepare('DELETE FROM trip_rsvp WHERE trip_id = ? AND user_id = ?').run(trip.id, req.user.id);
+    return res.json({ ok: true });
+  }
+  if (!['ja', 'misschien', 'nee'].includes(value)) throw fail(400, 'Kies ja, misschien of nee');
+  const before = db.prepare('SELECT value FROM trip_rsvp WHERE trip_id = ? AND user_id = ?').get(trip.id, req.user.id);
+  db.prepare(`INSERT INTO trip_rsvp (trip_id, user_id, value) VALUES (?, ?, ?)
+    ON CONFLICT (trip_id, user_id) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run(trip.id, req.user.id, value);
+  if (value === 'ja' && (!before || before.value !== 'ja')) db.postEvent(req.team.id, req.user.id, `gaat mee naar ${trip.title}`, 'trip', trip.id);
+  res.json({ ok: true });
+});
+
+/* ---------- kosten delen per reis ---------- */
+// "12,50", "1.250,00", "12.5", "€ 12" of 12.5 -> 12.5
+function parseAmount(v) {
+  if (typeof v === 'number') return v;
+  let s = String(v ?? '').replace(/[€\s]/g, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  return /^\d+(\.\d{1,2})?$/.test(s) ? Number(s) : NaN;
+}
+const memberNamesOf = (teamId) => db.prepare('SELECT u.name FROM team_members m JOIN users u ON u.id = m.user_id WHERE m.team_id = ?').all(teamId).map((r) => r.name);
+
+// { title, amount: "12,50" of 12.5, paid_by, split: [namen] } — namen moeten leden van de groep zijn.
+router.post('/trips/:id/expenses', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  const title = String(req.body.title || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!title) throw fail(400, 'Waarvoor was het? Geef een omschrijving');
+  const amount = parseAmount(req.body.amount);
+  const cents = Math.round(amount * 100);
+  if (!Number.isFinite(amount) || cents <= 0 || cents > 10_000_000) throw fail(400, 'Vul een bedrag in, bijv. 12,50');
+  const names = memberNamesOf(req.team.id);
+  const paidBy = String(req.body.paid_by || req.user.name);
+  if (!names.includes(paidBy)) throw fail(400, 'Kies wie er betaald heeft');
+  const split = [...new Set((Array.isArray(req.body.split) ? req.body.split : []).map(String))].filter((n) => names.includes(n));
+  if (!split.length) throw fail(400, 'Kies voor wie het was');
+  if (db.prepare('SELECT COUNT(*) AS n FROM trip_expenses WHERE trip_id = ?').get(trip.id).n >= 300) throw fail(400, 'Maximaal 300 uitgaven per reis');
+  const id = db.prepare('INSERT INTO trip_expenses (trip_id, title, cents, paid_by, split, added_by) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(trip.id, title, cents, paidBy, JSON.stringify(split), req.user.name).lastInsertRowid;
+  // Korte melding in de chat (geeft ook een pushmelding), zonder kaartje om de chat rustig te houden.
+  const bedrag = (cents / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+  const wie = paidBy === req.user.name ? 'betaalde' : `zette erbij: ${paidBy} betaalde`;
+  db.postEvent(req.team.id, req.user.id, `${wie} ${bedrag} voor ${title} (${trip.title})`);
+  res.json({ id });
+});
+
+router.delete('/expenses/:id', (req, res) => {
+  const row = db.prepare('SELECT e.id FROM trip_expenses e JOIN trips t ON t.id = e.trip_id WHERE e.id = ? AND t.team_id = ?').get(req.params.id, req.team.id);
+  if (row) db.prepare('DELETE FROM trip_expenses WHERE id = ?').run(row.id);
   res.json({ ok: true });
 });
 

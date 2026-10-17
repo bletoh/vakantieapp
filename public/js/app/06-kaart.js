@@ -2,7 +2,7 @@
 
   const HOME = [52.3105, 4.7683]; // Schiphol
   const HOME_CODE = 'AMS';
-  const DOT_COLORS = { stay: '#e0245e', do: '#008a05', eat: '#d97706' };
+  const DOT_COLORS = { stay: '#2b6a80', do: '#2f7a45', eat: '#c0782a' };
   let map = null;
   let markers = {};
   let dataLayer = null;
@@ -180,8 +180,9 @@
       if (y0 === null || !target) return;
       const dy = e.clientY - y0;
       if (Math.abs(dy) < 4) return;
+      // Een zwevend paneel (bestemmingen) mag tot net onder het zoekveld; vanaf zijn eigen onderkant gerekend.
       const max = target.parentElement === document.body || target.tagName === 'DIALOG'
-        ? window.innerHeight - 20 : target.parentElement.getBoundingClientRect().height - 8;
+        ? window.innerHeight - 20 : target.getBoundingClientRect().bottom - target.parentElement.getBoundingClientRect().top - 76;
       target.style.transition = 'none';
       target.style.height = `${Math.max(60, Math.min(max, h0 - dy))}px`;
     });
@@ -226,17 +227,98 @@
       <span class="when-go" aria-hidden="true">→</span></a>`;
   }
 
+  // Startlijst voor een nieuwe groep: wat is er al gedaan en wat is de volgende stap?
+  // Verdwijnt vanzelf als alles klaar is, of als iemand hem verbergt (onthouden per groep).
+  const startHiddenKey = () => `startHidden-${session.teamId}`;
+  function startSteps(locs) {
+    return [
+      { ok: true, title: 'Groep gemaakt', text: state.team ? esc(state.team.name) : '' },
+      { ok: state.members.length > 1, title: 'Vrienden uitnodigen',
+        text: 'Stuur de link in jullie groepsapp.',
+        btn: '<button type="button" class="btn sm primary" data-invite-share>Link delen</button>' },
+      { ok: availabilityMap().size > 0, title: 'Wanneer kan iedereen?',
+        text: 'Iedereen tikt in de datumprikker aan wanneer hij kan.',
+        btn: '<a class="btn sm" href="#datum">Datumprikker</a>' },
+      { ok: locs.length > 0 || state.trips.length > 0, title: 'Kies een bestemming',
+        text: 'Zoek een plek, tik op de kaart of kijk bij Ideeën.',
+        btn: `<button type="button" class="btn sm" data-action="focus-search">${ic('search')} Zoeken</button><a class="btn sm ghost" href="#ideeen">Ideeën</a>` },
+      { ok: state.polls.length > 0, title: 'Laat de groep kiezen',
+        text: locs.length >= 2 ? 'Start een stemronde tussen jullie bestemmingen.' : 'Kan zodra er twee bestemmingen zijn.',
+        btn: locs.length >= 2 ? `<button type="button" class="btn sm" data-action="new-poll">${ic('vote')} Stemronde</button>` : '' },
+    ];
+  }
+  function startListVisible(locs) {
+    return store.get(startHiddenKey()) !== '1' && startSteps(locs).some((s) => !s.ok);
+  }
+  function startListHtml(locs) {
+    if (!startListVisible(locs)) return '';
+    const steps = startSteps(locs);
+    const done = steps.filter((s) => s.ok).length;
+    const next = steps.findIndex((s) => !s.ok);
+    return `
+      <section class="startlist" aria-label="Aan de slag">
+        <div class="startlist-head">
+          <strong>Aan de slag</strong>
+          <span class="startlist-count">${done} van ${steps.length}</span>
+          <button type="button" class="text-btn" data-start-hide>Verbergen</button>
+        </div>
+        <div class="startlist-bar" aria-hidden="true"><span style="width:${Math.round(done / steps.length * 100)}%"></span></div>
+        <ol>${steps.map((s, i) => `
+          <li class="${s.ok ? 'ok' : ''}${i === next ? ' next' : ''}">
+            <span class="startlist-dot" aria-hidden="true">${s.ok ? '✓' : i + 1}</span>
+            <span class="startlist-text"><strong>${s.title}</strong>${s.ok ? '<span class="sr-only"> (klaar)</span>' : ''}
+              ${i === next ? `<small>${s.text}</small>${s.btn ? `<span class="startlist-btns">${s.btn}</span>` : ''}` : ''}</span>
+          </li>`).join('')}</ol>
+      </section>`;
+  }
+  document.addEventListener('click', (e) => {
+    if (e.target.closest && e.target.closest('[data-start-show]')) { store.remove(startHiddenKey()); render(); return; }
+    if (!e.target.closest || !e.target.closest('[data-start-hide]')) return;
+    store.set(startHiddenKey(), '1');
+    render();
+    toast('Verborgen. Terughalen kan onderaan met \'Startlijst tonen\'.');
+  });
+
   function stepChip(icon, ok, label, text) {
     return `<span class="step-chip${ok ? ' ok' : ''}" title="${esc(label)}"><span aria-hidden="true">${icon}</span>`
       + `<span class="sr-only">${esc(label)}: </span>${text}</span>`;
   }
 
+  // Foto bij een pin zonder eigen foto: de gecontroleerde foto uit de bestemmingenlijst (Ideeën) met
+  // dezelfde plaatsnaam, anders die van de dichtstbijzijnde bestemming binnen 75 km (Catania → Sicilië).
+  // Nooit zelf een foto zoeken bij Wikipedia: dat gaf verkeerde foto's (doorverwijspagina's, naamgenoten).
+  // De lijst wordt één keer opgehaald; daarna tekenen we de lijst opnieuw.
+  const PHOTO_NEAR_KM = 75;
+  let photoList = null;
+  function destPhoto(loc) {
+    const own = safeUrl(loc.image);
+    if (own) return own;
+    if (!photoList) {
+      photoList = 'loading';
+      loadDestinations().then((list) => {
+        const withImg = list.filter((d) => d.img);
+        photoList = { byName: new Map(withImg.map((d) => [fold(d.n.replace(/\s*\(.*\)$/, '')), d.img])), all: withImg };
+        if (['kaart', 'reizen'].includes(currentRoute())) render();
+      }).catch(() => { photoList = { byName: new Map(), all: [] }; });
+      return '';
+    }
+    if (photoList === 'loading') return '';
+    const named = photoList.byName.get(fold(shortName(loc.title)));
+    if (named || !hasPos(loc)) return named || '';
+    let best = null;
+    for (const d of photoList.all) {
+      const km = distanceKm([loc.lat, loc.lng], [d.lat, d.lng]);
+      if (km <= PHOTO_NEAR_KM && (!best || km < best.km)) best = { km, img: d.img };
+    }
+    return best ? best.img : '';
+  }
+
   function destRowHtml(loc) {
     const n = pinNumber(loc.id);
     const p = planOf(loc);
-    const img = safeUrl(loc.image);
+    const img = destPhoto(loc);
     const t = p.trip;
-    const dateText = t && t.start_date ? shortRange(t.start_date, t.end_date) : 'datum?';
+    const dateText = t && t.start_date ? shortRange(t.start_date, t.end_date) : 'Datum';
     const conflict = p.conflicts && p.conflicts.length;
     const active = pinCtx && pinCtx.locId === loc.id && pinDialog.open;
     return `
@@ -247,15 +329,16 @@
             <strong>${esc(loc.title)}</strong>
             <span class="dest-steps">
               ${stepChip(ic('calendar'), t && t.start_date && !conflict, 'Datum', conflict ? `<span class="warn">${dateText}</span>` : dateText)}
-              ${stepChip(ic('plane'), p.per.flight.length, 'Vlucht', p.per.flight.length ? '✓' : '–')}
-              ${stepChip(ic('bed'), p.per.stay.length, 'Overnachting', p.per.stay.length ? '✓' : '–')}
+              ${stepChip(ic('plane'), p.per.flight.length, 'Vlucht', 'Vlucht')}
+              ${stepChip(ic('bed'), p.per.stay.length, 'Overnachting', 'Verblijf')}
               ${p.per.do.length + p.per.eat.length ? stepChip(ic('sparkles'), true, 'Activiteiten en eten', p.per.do.length + p.per.eat.length) : ''}
+              ${t && goingNames(t).length ? stepChip(ic('users'), true, 'Gaan mee', goingNames(t).length) : ''}
             </span>
           </span>
           <span class="dest-go" aria-hidden="true">›</span>
         </button>
         <div class="dest-side">
-          <span class="progress" role="img" aria-label="${p.done} van ${p.total} geregeld"><span style="width:${Math.round(p.done / p.total * 100)}%"></span></span>
+          ${p.done ? `<span class="dest-done" title="${p.done} van ${p.total} geregeld">${p.done}/${p.total}</span>` : ''}
           ${t ? likeBtn('trip', t.id, t.likes) : likeBtn('item', loc.id, loc.likes)}
         </div>
       </li>`;
@@ -269,23 +352,26 @@
       .flatMap((x) => sortedItems(x).filter((it) => !it.location_id || !findItem(it.location_id)).map((it) => ({ s: x, it })));
     return `
       ${pollBannerHtml()}
-      ${whenStripHtml()}
+      ${nextTripHtml()}
+      ${startListHtml(locs)}
+      ${startListVisible(locs) && !availabilityMap().size ? '' : whenStripHtml()}
       <div class="planner-head">
         <h2>Bestemmingen${locs.length ? ` <span class="count-pill">${locs.length}</span>` : ''}</h2>
         <button type="button" class="text-btn" data-action="edit-section" data-id="${s.id}">Tab bewerken</button>
       </div>
       ${whoFilterHtml()}
       ${locs.length ? `<ol class="dest-list">${locs.filter(visibleOnMap).map(destRowHtml).join('')}</ol>` : `
-        <ol class="onboarding">
+        ${startListVisible(locs) ? '' : `<ol class="onboarding">
           <li><strong>Kies een plek.</strong> Zoek bovenaan de kaart, of tik ergens op de kaart.</li>
           <li><strong>Plan de reis.</strong> Kies een datum uit de datumprikker, een vlucht en een hotel in de buurt.</li>
           <li><strong>Stem samen.</strong> Iedereen kan bestemmingen toevoegen en hartjes geven.</li>
-        </ol>
+        </ol>`}
         <button type="button" class="btn primary block" data-action="focus-search">${ic('search')} Zoek een bestemming</button>`}
       ${locs.length >= 2 ? `<button type="button" class="btn block vote-cta" data-action="new-poll">${ic('vote')} Laat de groep kiezen tussen ${locs.length} bestemmingen</button>` : ''}
       <div class="planner-foot">
         <button type="button" class="text-btn" data-action="add-place">＋ Bestemming toevoegen zonder kaart</button>
         ${locs.some(hasPos) ? '<button type="button" class="text-btn" data-action="map-fit">Toon alle pinnen</button>' : ''}
+        ${store.get(startHiddenKey()) === '1' && startSteps(locs).some((s) => !s.ok) ? '<button type="button" class="text-btn" data-start-show>Startlijst tonen</button>' : ''}
       </div>
       ${loose.length ? `
         <div class="label">Nog niet aan een bestemming gekoppeld</div>
@@ -437,8 +523,11 @@
     const pins = locations().filter(hasPos);
     if (pins.length) {
       const b = L.latLngBounds([HOME, ...pins.map((p) => [p.lat, p.lng])]);
-      // Bovenaan extra ruimte, zodat geen pin achter het zoekveld valt.
-      map.fitBounds(b, { paddingTopLeft: [50, 150], paddingBottomRight: [70, 40], maxZoom: 7, animate });
+      // Bovenaan extra ruimte, zodat geen pin achter het zoekveld valt; op de telefoon onderaan ook
+      // ruimte voor het zwevende bestemmingenpaneel en de tabbalk.
+      const sheet = isPhone() && $('#destSheet');
+      const below = sheet ? Math.max(0, Math.round(map.getContainer().getBoundingClientRect().bottom - sheet.getBoundingClientRect().top)) : 0;
+      map.fitBounds(b, { paddingTopLeft: [50, 150], paddingBottomRight: [70, 40 + below], maxZoom: 7, animate });
     } else {
       map.setView([44, 12], 3.5, { animate });
     }

@@ -287,6 +287,7 @@ function createTeam(name, userId) {
 function postEvent(teamId, userId, body, refType = null, refId = null) {
   db.prepare("INSERT INTO messages (team_id, user_id, kind, body, ref_type, ref_id) VALUES (?, ?, 'event', ?, ?, ?)")
     .run(teamId, userId, body, refType, refId);
+  if (module.exports.onMessage) module.exports.onMessage(teamId, userId, 'event', body, refType);
 }
 
 // Stemrondes met opties, stemmen en of ze (ook door de sluitdatum) gesloten zijn.
@@ -341,6 +342,62 @@ CREATE TABLE IF NOT EXISTS trip_bundle_trips (
   position INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (bundle_id, trip_id)
 );
+`);
+
+// Inpak- en takenlijst per reis: iedereen in de groep kan iets toevoegen, afvinken of zeggen "ik neem het mee".
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_todos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  who TEXT,
+  done INTEGER NOT NULL DEFAULT 0,
+  done_by TEXT,
+  added_by TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS trip_todos_trip ON trip_todos (trip_id, position);
+`);
+
+// Kosten delen per reis (zoals Tricount): wie betaalde wat, voor wie. Bedragen in centen; split = JSON-lijst met namen.
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  cents INTEGER NOT NULL,
+  paid_by TEXT NOT NULL,
+  split TEXT NOT NULL,
+  added_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS trip_expenses_trip ON trip_expenses (trip_id, id);
+`);
+
+// Wie gaat er mee op een reis: ja / misschien / nee per lid.
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_rsvp (
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  value TEXT NOT NULL CHECK (value IN ('ja', 'misschien', 'nee')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (trip_id, user_id)
+);
+`);
+
+// Dagprogramma per reis: per dag (datum binnen de reis) een paar regels, eventueel met een tijd.
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_plan (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  time TEXT,
+  text TEXT NOT NULL,
+  added_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS trip_plan_trip ON trip_plan (trip_id, day, time);
 `);
 
 module.exports = db;

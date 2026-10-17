@@ -12,8 +12,11 @@
 
   function render() {
     const title = (state.team && state.team.name) || 'Vakantie';
-    document.title = title;
-    $('#brand').textContent = title;
+    document.title = `${title} · Reismannetje`;
+    // Breed scherm: logo links met de groepsnaam ernaast, je eigen profiel rechts (zoals Airbnb).
+    $('#brand').innerHTML = `<img class="logo-img" src="/img/logo.svg" alt="" width="34" height="34"><span class="logo-word">Reismannetje</span><span class="team-pill">${esc(title)}</span>`;
+    const me = $('#me');
+    if (me && session.user) { me.innerHTML = `${ic('bars')}${avatar(session.user.name)}`; me.setAttribute('aria-label', `Groep en account (${session.user.name})`); me.hidden = false; }
     document.documentElement.style.setProperty('--brand-w', `${$('#brand').offsetWidth + 48}px`);
     renderTabs();
     renderPanel();
@@ -203,7 +206,20 @@
   }
 
   function tripsHtml() {
-    const trips = [...state.trips].sort((a, b) => b.likes - a.likes || a.id - b.id);
+    // Favorieten eerst; reizen die al geweest zijn achteraan.
+    const past = (t) => (countdown(t)?.cls === 'past' ? 1 : 0);
+    const all = [...state.trips].sort((a, b) => past(a) - past(b) || b.likes - a.likes || a.id - b.id);
+    // Filter (onthouden per apparaat); alleen tonen als er genoeg reizen zijn om te filteren.
+    const TRIP_FILTERS = [['alle', 'Alle'], ['mee', 'Ik ga mee'], ['datum', 'Met datum'], ['geweest', 'Geweest']];
+    const match = {
+      alle: () => true,
+      mee: (t) => goingNames(t).includes(myName()),
+      datum: (t) => t.start_date && !past(t),
+      geweest: (t) => past(t),
+    };
+    let filter = store.get('tripFilter', 'alle');
+    if (!match[filter] || all.length < 3) filter = 'alle';
+    const trips = all.filter(match[filter]);
     return `
       <div class="section-head">
         <h2>Reizen</h2>
@@ -214,9 +230,16 @@
         <button type="button" class="btn ghost" data-action="add-trip">＋ Reis zonder kaart</button>
         ${trips.length >= 2 && !tripSelect ? `<button type="button" class="btn ghost" data-action="select-trips">${ic('check')} Meerdere reizen delen</button>` : ''}
       </div>
+      ${all.length >= 3 && !tripSelect ? `<div class="trip-filters" role="group" aria-label="Reizen filteren">${TRIP_FILTERS.map(([k, label]) => {
+        const n = all.filter(match[k]).length;
+        return `<button type="button" class="trip-filter${k === filter ? ' on' : ''}" data-trip-filter="${k}" aria-pressed="${k === filter}">${label} <span>${n}</span></button>`;
+      }).join('')}</div>` : ''}
       ${tripSelect ? '<p class="select-hint">Tik op de reizen die je in één overzicht wilt delen.</p>' : ''}
+      ${!trips.length && all.length ? `<p class="hint">Geen reizen bij dit filter. <button type="button" class="text-btn" data-trip-filter="alle">Toon alle reizen</button></p>` : ''}
       ${trips.length ? `<div class="grid${tripSelect ? ' selecting' : ''}">${trips.map(tripCardHtml).join('')}</div>`
-        : '<div class="empty"><p>Nog geen reizen voorgesteld. Wees de eerste!</p></div>'}
+        : all.length ? '' : `<div class="empty"><img class="empty-mascot" src="/img/reismannetje.svg" alt="" width="64" height="91"><strong>Nog geen reizen</strong>
+            <p>Kies een bestemming op de kaart of in Ideeën. Zodra iemand een datum, vlucht of verblijf kiest, staat de reis hier.</p>
+            <a class="btn" href="#ideeen">${ic('compass')} Bekijk ideeën</a></div>`}
       ${tripSelect ? selectBarHtml() : ''}`;
   }
 
@@ -320,7 +343,7 @@
     }
     picks.sort((a, b) => (a.s.kind === 'map' ? -1 : 0) - (b.s.kind === 'map' ? -1 : 0));
     const loc = tripLocation(t);
-    const img = loc && safeUrl(loc.image);
+    const img = loc && destPhoto(loc);
     const sel = !!tripSelect && tripSelect.includes(t.id);
     return `
       <article class="card trip${conflictsOf(t)?.length ? ' conflict' : ''}${sel ? ' selected' : ''}" data-trip="${t.id}" tabindex="0"
@@ -332,6 +355,7 @@
           <h3 class="card-title">${esc(t.title)}</h3>
           ${t.added_by ? `<div class="added-by">${avatar(t.added_by)}Voorgesteld door ${esc(t.added_by)}</div>` : ''}
           ${tripDatesHtml(t)}
+          ${tripSelect ? '' : rsvpHtml(t)}
           ${picks.length ? `<ul class="trip-picks">${picks.map(({ s, it }) => `
             <li><a class="trip-pick" href="${tripPickHref(s, it)}">
               <span class="trip-pick-icon" aria-hidden="true">${kindIcon(s.kind, s.icon)}</span>
@@ -344,8 +368,12 @@
             <button type="button" class="btn sm" data-trip-add="eat" data-trip-id="${t.id}">${ic('utensils')} Eten & drinken</button>
             <button type="button" class="btn sm" data-trip-add="car" data-trip-id="${t.id}">${ic('car')} Huurauto</button>
           </div>
+          ${programHtml(t)}
+          ${todosHtml(t)}
+          ${costsHtml(t)}
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
           ${tripShareHtml(t)}
+          ${t.start_date ? `<button type="button" class="text-btn trip-ics" data-trip-ics="${t.id}">${ic('calendar')} Zet in je agenda</button>` : ''}
           <div class="card-foot">
             ${likeBtn('trip', t.id, t.likes)}
             ${loc ? `<a class="link-btn" href="#pin-${loc.id}">Verder plannen op de kaart →</a>` : ''}

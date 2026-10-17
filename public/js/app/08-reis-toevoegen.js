@@ -413,3 +413,401 @@
   function refreshTripAdd() {
     try { if (tripAddDialog.open) renderTripAdd(); } catch { /* paneel nog niet klaar */ }
   }
+
+  /* --- inpak- en takenlijst per reis --- */
+
+  const TODO_DEFAULTS = ['Paspoort of ID-kaart', 'Reisverzekering geregeld', 'Online ingecheckt', 'Boarding pass op de telefoon',
+    'Oplader en powerbank', 'Wereldstekker', 'Zonnebrand', 'Zwembroek', 'Zonnebril', 'Medicijnen', 'Pinpas en creditcard',
+    'Speaker (één iemand)', 'Kaartspel of drankspel (één iemand)', 'Slippers'];
+  const todoOpen = new Set(); // reizen waarvan de lijst openstaat, zodat hij na het verversen open blijft
+
+  function todosHtml(t) {
+    const list = t.todos || [];
+    const done = list.filter((d) => d.done).length;
+    const me = myName();
+    return `
+      <details class="todos" data-todos="${t.id}"${todoOpen.has(t.id) ? ' open' : ''}>
+        <summary>${ic('list')}<span>Inpaklijst en taken</span>
+          ${list.length ? `<span class="todo-count${done === list.length ? ' all' : ''}">${done}/${list.length}</span>` : '<span class="todo-count">leeg</span>'}</summary>
+        ${list.length ? `<ul class="todo-list">${list.map((d) => `
+          <li class="${d.done ? 'done' : ''}">
+            <label class="todo-check"><input type="checkbox" data-todo-done="${d.id}"${d.done ? ' checked' : ''}><span>${esc(d.text)}</span></label>
+            <button type="button" class="todo-who${d.who ? ' set' : ''}${d.who === me ? ' me' : ''}" data-todo-who="${d.id}" data-who="${esc(d.who || '')}"
+              title="${d.who ? `${esc(d.who)} regelt dit` : 'Zeg dat jij dit regelt'}">${d.who ? `${avatar(d.who)}<span>${d.who === me ? 'Ik' : esc(d.who)}</span>` : 'Ik regel dit'}</button>
+            <button type="button" class="todo-del" data-todo-del="${d.id}" aria-label="${esc(d.text)} verwijderen">×</button>
+          </li>`).join('')}</ul>` : '<p class="todo-empty">Zet hier wat iedereen moet regelen of meenemen. Vink af wat klaar is.</p>'}
+        <form class="todo-add" data-todo-add="${t.id}">
+          <input name="text" maxlength="120" placeholder="Iets toevoegen, bijv. zonnebrand" aria-label="Iets toevoegen aan de lijst" autocomplete="off">
+          <button type="submit" class="btn sm">${ic('plus')}<span class="sr-only">Toevoegen</span></button>
+        </form>
+        ${list.length < 3 ? `<button type="button" class="text-btn todo-default" data-todo-default="${t.id}">＋ Standaard inpaklijst gebruiken</button>` : ''}
+        ${!list.length ? state.trips.filter((x) => x.id !== t.id && (x.todos || []).length).slice(0, 3).map((x) =>
+          `<button type="button" class="text-btn todo-default" data-todo-copy="${x.id}" data-trip-id="${t.id}">＋ Lijst overnemen van ${esc(x.title)} (${x.todos.length})</button>`).join('') : ''}
+      </details>`;
+  }
+
+  async function todoChange(fn, tripId) {
+    try { await fn(); } catch (err) { toast(err.message, true); }
+    await reload();
+    const input = tripId && $(`[data-todo-add="${tripId}"] input`);
+    if (input) input.focus();
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const d = e.target.closest && e.target.closest('[data-todos]');
+    if (!d || e.target !== d) return;
+    if (d.open) todoOpen.add(+d.dataset.todos); else todoOpen.delete(+d.dataset.todos);
+  }, true);
+
+  document.addEventListener('change', (e) => {
+    const box = e.target.closest && e.target.closest('[data-todo-done]');
+    if (box) todoChange(() => api(`/todos/${box.dataset.todoDone}`, 'PUT', { done: box.checked }));
+  });
+
+  document.addEventListener('submit', (e) => {
+    const form = e.target.closest && e.target.closest('[data-todo-add]');
+    if (!form) return;
+    e.preventDefault();
+    const text = form.elements.text.value.trim();
+    if (!text) return;
+    const id = +form.dataset.todoAdd;
+    todoChange(() => api(`/trips/${id}/todos`, 'POST', { text }), id);
+  });
+
+  document.addEventListener('click', (e) => {
+    const who = e.target.closest('[data-todo-who]');
+    if (who) {
+      const cur = who.dataset.who, me = myName();
+      if (cur && cur !== me && !confirm(`${cur} regelt dit al. Wil jij het overnemen?`)) return;
+      todoChange(() => api(`/todos/${who.dataset.todoWho}`, 'PUT', { who: cur === me ? '' : me }));
+      return;
+    }
+    const del = e.target.closest('[data-todo-del]');
+    if (del) { todoChange(() => api(`/todos/${del.dataset.todoDel}`, 'DELETE')); return; }
+    const copy = e.target.closest('[data-todo-copy]');
+    if (copy) {
+      const from = state.trips.find((x) => x.id === +copy.dataset.todoCopy);
+      const id = +copy.dataset.tripId;
+      todoOpen.add(id);
+      todoChange(() => api(`/trips/${id}/todos`, 'POST', { texts: (from ? from.todos : []).map((d) => d.text) }));
+      return;
+    }
+    const def = e.target.closest('[data-todo-default]');
+    if (def) {
+      const id = +def.dataset.todoDefault;
+      todoOpen.add(id);
+      todoChange(() => api(`/trips/${id}/todos`, 'POST', { texts: TODO_DEFAULTS }));
+    }
+  });
+
+  /* --- kosten delen per reis (zoals Tricount) --- */
+
+  const costOpen = new Set();
+  const centsEuro = (c) => (c / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+
+  // Saldo per persoon in centen (+ = krijgt geld, - = moet betalen). De rest-centen gaan naar de eersten in de lijst.
+  function costBalances(expenses) {
+    const bal = new Map();
+    const add = (n, c) => bal.set(n, (bal.get(n) || 0) + c);
+    for (const e of expenses) {
+      add(e.paid_by, e.cents);
+      const share = Math.floor(e.cents / e.split.length);
+      let rest = e.cents - share * e.split.length;
+      for (const n of e.split) { add(n, -(share + (rest > 0 ? 1 : 0))); rest--; }
+    }
+    return bal;
+  }
+
+  // Zo min mogelijk overboekingen: steeds de grootste schuldenaar naar de grootste ontvanger.
+  function costTransfers(bal) {
+    const debt = [...bal].filter(([, c]) => c < 0).map(([n, c]) => ({ n, c: -c })).sort((a, b) => b.c - a.c);
+    const cred = [...bal].filter(([, c]) => c > 0).map(([n, c]) => ({ n, c })).sort((a, b) => b.c - a.c);
+    const out = [];
+    while (debt.length && cred.length) {
+      const d = debt[0], k = cred[0], c = Math.min(d.c, k.c);
+      if (c > 0) out.push({ from: d.n, to: k.n, c });
+      d.c -= c; k.c -= c;
+      if (!d.c) debt.shift();
+      if (!k.c) cred.shift();
+    }
+    return out;
+  }
+
+  // Tekst voor de groepsapp: totaal, en wie wie hoeveel moet overmaken.
+  function costSummary(t, ex, transfers) {
+    const total = ex.reduce((s, e) => s + e.cents, 0);
+    return [`💶 Kosten ${t.title}: ${centsEuro(total)} (${ex.length} ${ex.length === 1 ? 'uitgave' : 'uitgaven'})`, '',
+      'Zo staat iedereen quitte:', ...transfers.map((x) => `• ${x.from} → ${x.to}: ${centsEuro(x.c)}`), '',
+      `Alle uitgaven staan in Reismannetje: ${location.origin}/?team=${session.teamId}#reizen`].join('\n');
+  }
+
+  // Per persoon: wat betaalde iemand, wat is zijn deel, en het verschil.
+  function costPerPersonHtml(ex) {
+    const paid = new Map(), share = new Map();
+    const add = (m, n, c) => m.set(n, (m.get(n) || 0) + c);
+    for (const e of ex) {
+      add(paid, e.paid_by, e.cents);
+      const s = Math.floor(e.cents / e.split.length);
+      let rest = e.cents - s * e.split.length;
+      for (const n of e.split) { add(share, n, s + (rest > 0 ? 1 : 0)); rest--; }
+    }
+    const names = [...new Set([...paid.keys(), ...share.keys()])].sort((a, b) => a.localeCompare(b, 'nl'));
+    return `<details class="cost-pp"><summary>Per persoon</summary>
+      <table><thead><tr><th>Wie</th><th>Betaald</th><th>Deel</th><th>Saldo</th></tr></thead><tbody>${names.map((n) => {
+        const bal = (paid.get(n) || 0) - (share.get(n) || 0);
+        return `<tr><td>${esc(n)}</td><td>${centsEuro(paid.get(n) || 0)}</td><td>${centsEuro(share.get(n) || 0)}</td>
+          <td class="${bal > 0 ? 'plus' : bal < 0 ? 'min' : ''}">${bal > 0 ? '+' : bal < 0 ? '−' : ''}${centsEuro(Math.abs(bal))}</td></tr>`;
+      }).join('')}</tbody></table></details>`;
+  }
+
+  function costsHtml(t) {
+    const ex = t.expenses || [];
+    const total = ex.reduce((s, e) => s + e.cents, 0);
+    const me = myName();
+    const names = state.members.map((m) => m.name);
+    const transfers = costTransfers(costBalances(ex));
+    const mine = costBalances(ex).get(me) || 0;
+    const going = goingNames(t); // standaard alleen wie meegaat; heeft nog niemand gereageerd, dan iedereen
+    return `
+      <details class="todos costs" data-costs="${t.id}"${costOpen.has(t.id) ? ' open' : ''}>
+        <summary><span class="cost-ico" aria-hidden="true">€</span><span>Kosten delen</span>
+          <span class="todo-count">${ex.length ? centsEuro(total) : 'leeg'}</span></summary>
+        ${ex.length ? `
+          <div class="cost-settle">
+            ${transfers.length ? `<div class="cost-head">Zo staat iedereen quitte</div>
+              <ul>${transfers.map((x) => `<li class="${x.from === me || x.to === me ? 'me' : ''}">${avatar(x.from)}<strong>${esc(x.from === me ? 'Jij' : x.from)}</strong>
+                <span class="cost-arrow" aria-label="betaalt aan">→</span>${avatar(x.to)}<strong>${esc(x.to === me ? 'jou' : x.to)}</strong><span class="cost-amt">${centsEuro(x.c)}</span></li>`).join('')}</ul>
+              ${mine ? `<p class="cost-mine ${mine > 0 ? 'plus' : 'min'}">${mine > 0 ? `Jij krijgt nog ${centsEuro(mine)}` : `Jij moet nog ${centsEuro(-mine)} betalen`}</p>` : ''}
+              <a class="btn sm wa cost-wa" href="${waLink(costSummary(t, ex, transfers))}" target="_blank" rel="noopener">${WA_ICON} Stuur overzicht</a>
+              ${costPerPersonHtml(ex)}`
+              : '<p class="cost-mine plus">✓ Iedereen staat quitte</p>'}
+          </div>
+          <ul class="cost-list">${[...ex].reverse().map((e) => `
+            <li><span class="cost-text"><strong>${esc(e.title)}</strong>
+              <small>${esc(e.paid_by === me ? 'Jij' : e.paid_by)} betaalde · voor ${e.split.length === names.length && names.every((n) => e.split.includes(n)) ? 'iedereen' : esc(e.split.join(', '))}</small></span>
+              <span class="cost-amt">${centsEuro(e.cents)}</span>
+              <button type="button" class="todo-del" data-cost-del="${e.id}" aria-label="${esc(e.title)} verwijderen">×</button></li>`).join('')}</ul>`
+          : '<p class="todo-empty">Hou bij wie wat betaalt (huis, auto, boodschappen). Reismannetje rekent uit wie wie nog hoeveel moet.</p>'}
+        <form class="cost-add" data-cost-add="${t.id}">
+          <div class="cost-row">
+            <input name="title" maxlength="80" placeholder="Waarvoor? bijv. boodschappen" aria-label="Waarvoor" autocomplete="off" required>
+            <span class="euro-in"><input name="amount" inputmode="decimal" placeholder="0,00" aria-label="Bedrag in euro" autocomplete="off" required></span>
+          </div>
+          <label class="cost-paid">Betaald door
+            <select name="paid_by">${names.map((n) => `<option${n === me ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+          <fieldset class="cost-split"><legend>Voor wie</legend>
+            ${names.map((n) => `<label><input type="checkbox" name="split" value="${esc(n)}"${!going.length || going.includes(n) ? ' checked' : ''}><span>${esc(n === me ? `${n} (jij)` : n)}</span></label>`).join('')}
+          </fieldset>
+          <button type="submit" class="btn sm primary">${ic('plus')} Uitgave toevoegen</button>
+        </form>
+      </details>`;
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const d = e.target.closest && e.target.closest('[data-costs]');
+    if (!d || e.target !== d) return;
+    if (d.open) costOpen.add(+d.dataset.costs); else costOpen.delete(+d.dataset.costs);
+  }, true);
+
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest && e.target.closest('[data-cost-add]');
+    if (!form) return;
+    e.preventDefault();
+    const f = form.elements;
+    const split = [...form.querySelectorAll('input[name=split]:checked')].map((i) => i.value);
+    if (!split.length) { toast('Kies voor wie het was', true); return; }
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      await api(`/trips/${form.dataset.costAdd}/expenses`, 'POST', { title: f.title.value, amount: f.amount.value, paid_by: f.paid_by.value, split });
+      toast('Uitgave toegevoegd ✓');
+      await reload();
+    } catch (err) { toast(err.message, true); btn.disabled = false; }
+  });
+
+  document.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-cost-del]');
+    if (!del || !confirm('Deze uitgave verwijderen?')) return;
+    try { await api(`/expenses/${del.dataset.costDel}`, 'DELETE'); await reload(); } catch (err) { toast(err.message, true); }
+  });
+
+  /* --- wie gaat er mee --- */
+
+  const RSVP = [['ja', 'Ik ga mee'], ['misschien', 'Misschien'], ['nee', 'Ik kan niet']];
+  const goingNames = (t) => (t.rsvp || []).filter((r) => r.value === 'ja').map((r) => r.name);
+
+  function rsvpHtml(t) {
+    const list = t.rsvp || [];
+    const mine = (list.find((r) => r.name === myName()) || {}).value || '';
+    const by = (v) => list.filter((r) => r.value === v).map((r) => r.name);
+    const yes = by('ja'), maybe = by('misschien'), no = by('nee');
+    const open = state.members.filter((m) => !list.some((r) => r.name === m.name)).length;
+    return `
+      <div class="rsvp" role="group" aria-label="Ga jij mee?">
+        <div class="rsvp-btns">${RSVP.map(([v, label]) => `<button type="button" class="rsvp-btn ${v}${mine === v ? ' on' : ''}" data-rsvp="${v}" data-trip-id="${t.id}" aria-pressed="${mine === v}">${label}</button>`).join('')}</div>
+        ${list.length ? `<div class="rsvp-who">
+          ${yes.length ? `<span class="rsvp-faces" title="${esc(yes.join(', '))}">${yes.slice(0, 6).map((n) => avatar(n)).join('')}</span><strong>${yes.length} ${yes.length === 1 ? 'gaat' : 'gaan'} mee</strong>` : '<strong>Nog niemand zeker</strong>'}
+          ${maybe.length ? `<span>· ${maybe.length} misschien</span>` : ''}${no.length ? `<span>· ${no.length} niet</span>` : ''}${open ? `<span>· ${open} nog niet gereageerd</span>` : ''}
+        </div>` : ''}
+      </div>`;
+  }
+
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-rsvp]');
+    if (!b) return;
+    const value = b.classList.contains('on') ? '' : b.dataset.rsvp;
+    b.disabled = true;
+    try { await api(`/trips/${b.dataset.tripId}/rsvp`, 'PUT', { value }); await reload(); } catch (err) { toast(err.message, true); b.disabled = false; }
+  });
+
+  /* --- volgende reis: één kaartje bovenaan het kaartpaneel met alles bij elkaar --- */
+
+  function nextTrip() {
+    const today = todayIso(), me = myName();
+    const up = state.trips.filter((t) => t.start_date && (t.end_date || t.start_date) >= today)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    return up.find((t) => goingNames(t).includes(me)) || up[0] || null;
+  }
+
+  function nextTripHtml() {
+    const t = nextTrip();
+    if (!t) return '';
+    const c = countdown(t);
+    const loc = tripLocation(t);
+    const img = loc && destPhoto(loc);
+    const going = goingNames(t).length;
+    const todos = t.todos || [];
+    const bal = costBalances(t.expenses || []).get(myName()) || 0;
+    const bits = [
+      going ? `${going} ${going === 1 ? 'gaat' : 'gaan'} mee` : 'Wie gaat er mee?',
+      todos.length ? `inpaklijst ${todos.filter((d) => d.done).length}/${todos.length}` : '',
+      bal > 0 ? `jij krijgt ${centsEuro(bal)}` : bal < 0 ? `jij moet ${centsEuro(-bal)}` : '',
+    ].filter(Boolean);
+    return `
+      <a class="next-trip" href="#reizen" data-focus-trip="${t.id}">
+        <span class="next-thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ic('suitcase')}</span>
+        <span class="next-text"><small>Volgende reis</small><strong>${esc(t.title)}</strong>
+          <span class="next-bits">${bits.map(esc).join(' · ')}</span></span>
+        ${c ? `<span class="countdown${c.cls ? ' ' + c.cls : ''}">${esc(c.text)}</span>` : ''}
+      </a>`;
+  }
+
+  // Vanaf het kaartje naar de reis op de Reizen-pagina scrollen en hem even laten oplichten.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-focus-trip]');
+    if (!a) return;
+    const id = a.dataset.focusTrip;
+    setTimeout(() => {
+      const card = $(`[data-trip="${id}"]`);
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 1600);
+    }, 250);
+  });
+
+  /* --- reis in je agenda zetten (.ics, hele dagen) --- */
+
+  function icsText(t) {
+    const d = (iso) => iso.replace(/-/g, '');
+    const esc2 = (s) => String(s).replace(/[\;,]/g, (c) => '\\' + c).replace(/\n/g, '\\n');
+    const loc = tripLocation(t);
+    const going = goingNames(t);
+    const program = (t.plan || []).map((p) => `${fmtShort(p.day)}${p.time ? ' ' + p.time : ''}: ${p.text}`);
+    const desc = [t.share_slug ? `Reisplan: ${tripShareUrl(t)}` : '', going.length ? `Mee: ${going.join(', ')}` : '', t.note || '',
+      program.length ? `Programma:\n${program.join('\n')}` : ''].filter(Boolean).join('\n');
+    return [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Reismannetje//NL', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      `UID:reis-${t.id}-${state.team ? state.team.id : 0}@reismannetje.nl`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}`,
+      `DTSTART;VALUE=DATE:${d(t.start_date)}`,
+      `DTEND;VALUE=DATE:${d(addDays(t.end_date || t.start_date, 1))}`,
+      `SUMMARY:${esc2('✈️ ' + t.title)}`,
+      loc ? `LOCATION:${esc2(loc.title)}` : '',
+      desc ? `DESCRIPTION:${esc2(desc)}` : '',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc2('Morgen: ' + t.title)}`, 'TRIGGER:-P1D', 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR', '',
+    ].filter((l) => l !== '').join('\r\n') + '\r\n';
+  }
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-trip-ics]');
+    if (!b) return;
+    const t = state.trips.find((x) => x.id === +b.dataset.tripIcs);
+    if (!t || !t.start_date) return;
+    const url = URL.createObjectURL(new Blob([icsText(t)], { type: 'text/calendar;charset=utf-8' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${t.title.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'reis'}.ics` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('Agenda-bestand gemaakt. Open het om de reis toe te voegen.');
+  });
+
+  /* --- dagprogramma per reis --- */
+
+  const programOpen = new Set();
+
+  function programHtml(t) {
+    if (!t.start_date) return '';
+    const days = rangeDays(t.start_date, t.end_date || t.start_date).slice(0, 31);
+    const plan = t.plan || [];
+    const today = todayIso();
+    const dayLabel = (d, i) => `Dag ${i + 1} · ${fmtShort(d)}`;
+    return `
+      <details class="todos program" data-program="${t.id}"${programOpen.has(t.id) ? ' open' : ''}>
+        <summary>${ic('calendar')}<span>Dagprogramma</span>
+          <span class="todo-count">${plan.length ? `${plan.length} ${plan.length === 1 ? 'plan' : 'plannen'}` : 'leeg'}</span></summary>
+        <ol class="pdays">${days.map((d, i) => {
+          const items = plan.filter((p) => p.day === d);
+          return `<li class="pday${d === today ? ' today' : ''}">
+            <div class="day-head">${esc(dayLabel(d, i))}${d === today ? ' <span class="countdown now">Vandaag</span>' : ''}</div>
+            ${items.length ? `<ul>${items.map((p) => `<li><span class="day-time">${p.time ? esc(p.time) : ''}</span>
+              <span class="day-text">${esc(p.text)}${p.added_by ? `<small>${esc(p.added_by)}</small>` : ''}</span>
+              <button type="button" class="todo-del" data-plan-del="${p.id}" aria-label="${esc(p.text)} verwijderen">×</button></li>`).join('')}</ul>`
+              : '<p class="day-empty">Nog niks gepland</p>'}
+          </li>`;
+        }).join('')}</ol>
+        <form class="cost-add program-add" data-plan-add="${t.id}">
+          <div class="cost-row">
+            <select name="day" aria-label="Dag">${days.map((d, i) => `<option value="${d}"${d === today ? ' selected' : ''}>${esc(dayLabel(d, i))}</option>`).join('')}</select>
+            <input name="time" type="time" aria-label="Tijd (mag leeg)">
+          </div>
+          <div class="cost-row">
+            <input name="text" maxlength="140" placeholder="Wat gaan jullie doen? bijv. tapas in El Born" aria-label="Wat gaan jullie doen" autocomplete="off" required>
+            <button type="submit" class="btn sm primary">${ic('plus')}<span class="sr-only">Toevoegen</span></button>
+          </div>
+        </form>
+      </details>`;
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const d = e.target.closest && e.target.closest('[data-program]');
+    if (!d || e.target !== d) return;
+    if (d.open) programOpen.add(+d.dataset.program); else programOpen.delete(+d.dataset.program);
+  }, true);
+
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest && e.target.closest('[data-plan-add]');
+    if (!form) return;
+    e.preventDefault();
+    const f = form.elements, id = form.dataset.planAdd, day = f.day.value;
+    try {
+      await api(`/trips/${id}/plan`, 'POST', { day, time: f.time.value, text: f.text.value });
+      await reload();
+      const again = $(`[data-plan-add="${id}"]`);
+      if (again) { again.elements.day.value = day; again.elements.text.focus(); }
+    } catch (err) { toast(err.message, true); }
+  });
+
+  document.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-plan-del]');
+    if (!del) return;
+    try { await api(`/plan/${del.dataset.planDel}`, 'DELETE'); await reload(); } catch (err) { toast(err.message, true); }
+  });
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-trip-filter]');
+    if (!b) return;
+    store.set('tripFilter', b.dataset.tripFilter);
+    render();
+  });

@@ -10,6 +10,8 @@ const auth = require('./auth');
 const shareRouter = require('./routes/share');
 const affiliate = require('./affiliate');
 const gids = require('./routes/gids');
+const push = require('./push');
+const { serviceWorker } = require('./sw');
 const { appRoute } = require('./bundle');
 
 const app = express();
@@ -49,6 +51,7 @@ app.get('/healthz', (req, res) => {
 app.use(express.json({ limit: '15mb' }));
 
 // Inloggen en groepen kiezen; daarna alles binnen de actieve groep (header X-Team).
+app.use('/api/push', auth.requireUser, push.router);
 app.use('/api', social.router);
 app.use('/api', auth.requireUser, social.team);
 app.use('/api', auth.requireUser, auth.requireTeam, apiRouter);
@@ -62,6 +65,7 @@ app.use('/vendor/inter', express.static(path.dirname(require.resolve('@fontsourc
 app.use('/vendor/leaflet', express.static(path.dirname(require.resolve('leaflet')), { maxAge: '7d' }));
 app.use('/uploads', express.static(db.UPLOAD_DIR, { maxAge: '30d', immutable: true }));
 app.get('/js/app.js', appRoute());
+app.get('/sw.js', serviceWorker());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use((err, req, res, next) => {

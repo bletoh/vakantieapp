@@ -215,7 +215,7 @@
 
   function confetti(box) {
     const css = getComputedStyle(document.documentElement);
-    const colors = [css.getPropertyValue('--red').trim() || '#e0245e', '#222222', '#ffb400', '#00a699', '#9aa0a6'];
+    const colors = [css.getPropertyValue('--red').trim() || '#2b6a80', '#222222', '#ffb400', '#00a699', '#9aa0a6'];
     for (let i = 0; i < 26; i++) {
       const s = document.createElement('span');
       s.className = 'confetti';
