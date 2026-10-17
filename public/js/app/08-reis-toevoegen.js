@@ -441,6 +441,8 @@
           <button type="submit" class="btn sm">${ic('plus')}<span class="sr-only">Toevoegen</span></button>
         </form>
         ${list.length < 3 ? `<button type="button" class="text-btn todo-default" data-todo-default="${t.id}">＋ Standaard inpaklijst gebruiken</button>` : ''}
+        ${!list.length ? state.trips.filter((x) => x.id !== t.id && (x.todos || []).length).slice(0, 3).map((x) =>
+          `<button type="button" class="text-btn todo-default" data-todo-copy="${x.id}" data-trip-id="${t.id}">＋ Lijst overnemen van ${esc(x.title)} (${x.todos.length})</button>`).join('') : ''}
       </details>`;
   }
 
@@ -482,6 +484,14 @@
     }
     const del = e.target.closest('[data-todo-del]');
     if (del) { todoChange(() => api(`/todos/${del.dataset.todoDel}`, 'DELETE')); return; }
+    const copy = e.target.closest('[data-todo-copy]');
+    if (copy) {
+      const from = state.trips.find((x) => x.id === +copy.dataset.todoCopy);
+      const id = +copy.dataset.tripId;
+      todoOpen.add(id);
+      todoChange(() => api(`/trips/${id}/todos`, 'POST', { texts: (from ? from.todos : []).map((d) => d.text) }));
+      return;
+    }
     const def = e.target.closest('[data-todo-default]');
     if (def) {
       const id = +def.dataset.todoDefault;

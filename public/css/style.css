@@ -697,7 +697,7 @@ button.chip:hover { background: var(--navy-soft); }
 .todo-add input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
 .todo-add input:focus { outline: 2px solid var(--navy); outline-offset: -1px; border-color: transparent; }
 .todo-add .btn svg { width: 16px; height: 16px; }
-.todo-default { margin: 0 12px 12px; font-size: .85rem; }
+.todo-default { display: block; margin: 0 12px 10px; font-size: .85rem; text-align: left; }
 .todos + .todos { margin-top: 8px; }
 .missing { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin: 14px 0; border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 12px; background: var(--surface); }
 .missing > div { display: grid; gap: 2px; min-width: 0; }

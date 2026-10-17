@@ -304,7 +304,7 @@ const todoText = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 120
 router.post('/trips/:id/todos', (req, res) => {
   const trip = tripOfTeam(req.team.id, req.params.id);
   if (!trip) throw notFound('Reis');
-  const texts = (Array.isArray(req.body.texts) ? req.body.texts : [req.body.text]).map(todoText).filter(Boolean).slice(0, 40);
+  const texts = (Array.isArray(req.body.texts) ? req.body.texts : [req.body.text]).map(todoText).filter(Boolean).slice(0, TODO_MAX);
   if (!texts.length) throw fail(400, 'Typ wat er op de lijst moet');
   const have = new Set(db.prepare('SELECT lower(text) AS t FROM trip_todos WHERE trip_id = ?').all(trip.id).map((r) => r.t));
   const count = db.prepare('SELECT COUNT(*) AS n FROM trip_todos WHERE trip_id = ?').get(trip.id).n;
