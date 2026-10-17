@@ -386,6 +386,20 @@ CREATE TABLE IF NOT EXISTS trip_rsvp (
 );
 `);
 
+// Dagprogramma per reis: per dag (datum binnen de reis) een paar regels, eventueel met een tijd.
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_plan (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  time TEXT,
+  text TEXT NOT NULL,
+  added_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS trip_plan_trip ON trip_plan (trip_id, day, time);
+`);
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;

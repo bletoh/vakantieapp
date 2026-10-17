@@ -97,6 +97,9 @@ function getContent(team, user) {
   const rsvp = db.prepare(`SELECT r.trip_id, u.name, r.value FROM trip_rsvp r JOIN trips t ON t.id = r.trip_id JOIN users u ON u.id = r.user_id
     JOIN team_members m ON m.user_id = r.user_id AND m.team_id = t.team_id WHERE t.team_id = ? ORDER BY r.updated_at`).all(team.id);
   for (const t of trips) t.rsvp = rsvp.filter((r) => r.trip_id === t.id).map(({ name, value }) => ({ name, value }));
+  const plan = db.prepare(`SELECT p.id, p.trip_id, p.day, p.time, p.text, p.added_by FROM trip_plan p JOIN trips t ON t.id = p.trip_id
+    WHERE t.team_id = ? ORDER BY p.day, COALESCE(p.time, ''), p.id`).all(team.id);
+  for (const t of trips) t.plan = plan.filter((p) => p.trip_id === t.id);
   for (const t of trips) t.expenses = expenses.filter((e) => e.trip_id === t.id).map((e) => ({ ...e, split: JSON.parse(e.split) }));
   const availability = db.prepare('SELECT name, date FROM available_days WHERE team_id = ? ORDER BY name, date').all(team.id);
   const members = db.prepare(`
@@ -333,6 +336,30 @@ router.put('/todos/:id', (req, res) => {
 router.delete('/todos/:id', (req, res) => {
   const todo = todoOfTeam(req.team.id, req.params.id);
   if (todo) db.prepare('DELETE FROM trip_todos WHERE id = ?').run(todo.id);
+  res.json({ ok: true });
+});
+
+/* ---------- dagprogramma ---------- */
+// { day: 'YYYY-MM-DD' (binnen de reis), time: 'HH:MM' of '', text }
+router.post('/trips/:id/plan', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  if (!trip.start_date) throw fail(400, 'Kies eerst een datum voor de reis');
+  const day = String(req.body.day || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < trip.start_date || day > (trip.end_date || trip.start_date)) throw fail(400, 'Kies een dag van de reis');
+  const time = String(req.body.time || '');
+  if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw fail(400, 'Die tijd klopt niet');
+  const text = String(req.body.text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  if (!text) throw fail(400, 'Wat gaan jullie doen?');
+  if (db.prepare('SELECT COUNT(*) AS n FROM trip_plan WHERE trip_id = ?').get(trip.id).n >= 200) throw fail(400, 'Maximaal 200 regels per reis');
+  const id = db.prepare('INSERT INTO trip_plan (trip_id, day, time, text, added_by) VALUES (?, ?, ?, ?, ?)')
+    .run(trip.id, day, time || null, text, req.user.name).lastInsertRowid;
+  res.json({ id });
+});
+
+router.delete('/plan/:id', (req, res) => {
+  const row = db.prepare('SELECT p.id FROM trip_plan p JOIN trips t ON t.id = p.trip_id WHERE p.id = ? AND t.team_id = ?').get(req.params.id, req.team.id);
+  if (row) db.prepare('DELETE FROM trip_plan WHERE id = ?').run(row.id);
   res.json({ ok: true });
 });
 

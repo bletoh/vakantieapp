@@ -86,3 +86,22 @@ test('wie gaat er mee: ja/misschien/nee, wissen, en een chatbericht bij ja', asy
   const other = await groepMetReis('Buitenstaander');
   assert.equal((await other.c.req('PUT', `/api/trips/${trip}/rsvp`, { value: 'ja' })).status, 404);
 });
+
+test('dagprogramma: alleen dagen van de reis, geldige tijd, gesorteerd, andere groep kan niet verwijderen', async () => {
+  const { c } = await groepMetReis('Planner');
+  const trip = (await c.req('POST', '/api/trips', { title: 'Lissabon', start_date: '2027-05-01', end_date: '2027-05-03' })).data.id;
+  const add = (body) => c.req('POST', `/api/trips/${trip}/plan`, { day: '2027-05-02', time: '', text: 'Tram 28', ...body });
+  assert.equal((await add({ day: '2027-05-04' })).status, 400);
+  assert.equal((await add({ time: '25:00' })).status, 400);
+  assert.equal((await add({ text: ' ' })).status, 400);
+  await add({ time: '20:00', text: 'Fado' });
+  await add({});
+  await add({ day: '2027-05-01', time: '09:30', text: 'Landen' });
+  const t = (await c.req('GET', '/api/content')).data.trips.find((x) => x.id === trip);
+  assert.deepEqual(t.plan.map((p) => [p.day, p.time, p.text]), [['2027-05-01', '09:30', 'Landen'], ['2027-05-02', null, 'Tram 28'], ['2027-05-02', '20:00', 'Fado']]);
+  const other = await groepMetReis('Ander2');
+  await other.c.req('DELETE', `/api/plan/${t.plan[0].id}`);
+  assert.equal((await c.req('GET', '/api/content')).data.trips.find((x) => x.id === trip).plan.length, 3);
+  const undated = (await c.req('POST', '/api/trips', { title: 'Ooit' })).data.id;
+  assert.equal((await c.req('POST', `/api/trips/${undated}/plan`, { day: '2027-05-02', text: 'x' })).status, 400);
+});

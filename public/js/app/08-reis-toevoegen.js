@@ -710,3 +710,65 @@
     setTimeout(() => URL.revokeObjectURL(url), 5000);
     toast('Agenda-bestand gemaakt. Open het om de reis toe te voegen.');
   });
+
+  /* --- dagprogramma per reis --- */
+
+  const programOpen = new Set();
+
+  function programHtml(t) {
+    if (!t.start_date) return '';
+    const days = rangeDays(t.start_date, t.end_date || t.start_date).slice(0, 31);
+    const plan = t.plan || [];
+    const today = todayIso();
+    const dayLabel = (d, i) => `Dag ${i + 1} · ${fmtShort(d)}`;
+    return `
+      <details class="todos program" data-program="${t.id}"${programOpen.has(t.id) ? ' open' : ''}>
+        <summary>${ic('calendar')}<span>Dagprogramma</span>
+          <span class="todo-count">${plan.length ? `${plan.length} ${plan.length === 1 ? 'plan' : 'plannen'}` : 'leeg'}</span></summary>
+        <ol class="pdays">${days.map((d, i) => {
+          const items = plan.filter((p) => p.day === d);
+          return `<li class="pday${d === today ? ' today' : ''}">
+            <div class="day-head">${esc(dayLabel(d, i))}${d === today ? ' <span class="countdown now">Vandaag</span>' : ''}</div>
+            ${items.length ? `<ul>${items.map((p) => `<li><span class="day-time">${p.time ? esc(p.time) : ''}</span>
+              <span class="day-text">${esc(p.text)}${p.added_by ? `<small>${esc(p.added_by)}</small>` : ''}</span>
+              <button type="button" class="todo-del" data-plan-del="${p.id}" aria-label="${esc(p.text)} verwijderen">×</button></li>`).join('')}</ul>`
+              : '<p class="day-empty">Nog niks gepland</p>'}
+          </li>`;
+        }).join('')}</ol>
+        <form class="cost-add program-add" data-plan-add="${t.id}">
+          <div class="cost-row">
+            <select name="day" aria-label="Dag">${days.map((d, i) => `<option value="${d}"${d === today ? ' selected' : ''}>${esc(dayLabel(d, i))}</option>`).join('')}</select>
+            <input name="time" type="time" aria-label="Tijd (mag leeg)">
+          </div>
+          <div class="cost-row">
+            <input name="text" maxlength="140" placeholder="Wat gaan jullie doen? bijv. tapas in El Born" aria-label="Wat gaan jullie doen" autocomplete="off" required>
+            <button type="submit" class="btn sm primary">${ic('plus')}<span class="sr-only">Toevoegen</span></button>
+          </div>
+        </form>
+      </details>`;
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const d = e.target.closest && e.target.closest('[data-program]');
+    if (!d || e.target !== d) return;
+    if (d.open) programOpen.add(+d.dataset.program); else programOpen.delete(+d.dataset.program);
+  }, true);
+
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest && e.target.closest('[data-plan-add]');
+    if (!form) return;
+    e.preventDefault();
+    const f = form.elements, id = form.dataset.planAdd, day = f.day.value;
+    try {
+      await api(`/trips/${id}/plan`, 'POST', { day, time: f.time.value, text: f.text.value });
+      await reload();
+      const again = $(`[data-plan-add="${id}"]`);
+      if (again) { again.elements.day.value = day; again.elements.text.focus(); }
+    } catch (err) { toast(err.message, true); }
+  });
+
+  document.addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-plan-del]');
+    if (!del) return;
+    try { await api(`/plan/${del.dataset.planDel}`, 'DELETE'); await reload(); } catch (err) { toast(err.message, true); }
+  });
