@@ -239,7 +239,7 @@
       { ok: availabilityMap().size > 0, title: 'Wanneer kan iedereen?',
         text: 'Iedereen tikt in de datumprikker aan wanneer hij kan.',
         btn: '<a class="btn sm" href="#datum">Datumprikker</a>' },
-      { ok: locs.length > 0, title: 'Kies een bestemming',
+      { ok: locs.length > 0 || state.trips.length > 0, title: 'Kies een bestemming',
         text: 'Zoek een plek, tik op de kaart of kijk bij Ideeën.',
         btn: `<button type="button" class="btn sm" data-action="focus-search">${ic('search')} Zoeken</button><a class="btn sm ghost" href="#ideeen">Ideeën</a>` },
       { ok: state.polls.length > 0, title: 'Laat de groep kiezen',
