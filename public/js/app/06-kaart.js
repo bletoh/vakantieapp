@@ -297,7 +297,7 @@
       loadDestinations().then((list) => {
         const withImg = list.filter((d) => d.img);
         photoList = { byName: new Map(withImg.map((d) => [fold(d.n.replace(/\s*\(.*\)$/, '')), d.img])), all: withImg };
-        if (currentRoute() === 'kaart') render();
+        if (['kaart', 'reizen'].includes(currentRoute())) render();
       }).catch(() => { photoList = { byName: new Map(), all: [] }; });
       return '';
     }

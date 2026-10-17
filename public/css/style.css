@@ -672,6 +672,10 @@ button.chip:hover { background: var(--navy-soft); }
 
 /* reis valt op dagen dat iemand niet kan */
 .trip-dates { font-family: var(--mono); font-size: .8125rem; color: var(--ink); }
+.countdown { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 99px; font-size: .75rem; font-weight: 600; background: var(--red-soft); color: var(--brand-dark); vertical-align: 1px; white-space: nowrap; }
+.countdown.soon { background: var(--brand); color: var(--on-brand); }
+.countdown.now { background: var(--good); color: #fff; }
+.countdown.past { background: var(--surface-2); color: var(--muted); font-weight: 500; }
 .conflict-note, .date-warn.conflict {
   font-size: .875rem; color: var(--red); background: var(--red-soft);
   padding: 8px 10px; border-radius: var(--radius); border-left: 3px solid var(--red);

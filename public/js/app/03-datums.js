@@ -78,12 +78,31 @@
     return list.map((c) => `${esc(c.name)} (${c.ok} van ${c.total} dagen)`).join(', ');
   }
 
+  // Aftellen naar de reis: "Nog 23 dagen", "Morgen!", tijdens de reis "Dag 2 van 5", daarna "Geweest".
+  function countdown(t) {
+    if (!t.start_date) return null;
+    const today = todayIso();
+    const end = t.end_date || t.start_date;
+    if (today > end) return { cls: 'past', text: 'Geweest' };
+    if (today >= t.start_date) return { cls: 'now', text: `Nu op reis · dag ${dayCount(t.start_date, today)} van ${dayCount(t.start_date, end)}` };
+    const n = dayCount(today, t.start_date) - 1;
+    if (n === 1) return { cls: 'soon', text: 'Morgen!' };
+    if (n <= 14) return { cls: 'soon', text: `Nog ${n} dagen` };
+    if (n < 70) return { cls: '', text: `Nog ${n} dagen` };
+    const weeks = Math.round(n / 7);
+    return { cls: '', text: n < 365 ? `Nog ${weeks} weken` : `Over ruim ${Math.floor(n / 365)} jaar` };
+  }
+  const countdownHtml = (t) => {
+    const c = countdown(t);
+    return c ? `<span class="countdown${c.cls ? ' ' + c.cls : ''}">${esc(c.text)}</span>` : '';
+  };
+
   function tripDatesHtml(t) {
     if (!t.start_date) return '';
     const conflicts = conflictsOf(t);
     const n = dayCount(t.start_date, t.end_date);
     return `
-      <div class="trip-dates">${rangeText(t.start_date, t.end_date)} · ${n} ${n === 1 ? 'dag' : 'dagen'}</div>
+      <div class="trip-dates">${rangeText(t.start_date, t.end_date)} · ${n} ${n === 1 ? 'dag' : 'dagen'} ${countdownHtml(t)}</div>
       ${!conflicts ? (availabilityMap().size ? '<div class="hint">Valt buiten de periode van de datumprikker</div>' : '')
         : conflicts.length ? `<div class="conflict-note"><strong>Kan niet:</strong> ${conflictText(conflicts)}</div>`
         : availabilityMap().size ? '<div class="ok-note">✓ Iedereen kan</div>' : ''}`;

@@ -206,7 +206,9 @@
   }
 
   function tripsHtml() {
-    const trips = [...state.trips].sort((a, b) => b.likes - a.likes || a.id - b.id);
+    // Favorieten eerst; reizen die al geweest zijn achteraan.
+    const past = (t) => (countdown(t)?.cls === 'past' ? 1 : 0);
+    const trips = [...state.trips].sort((a, b) => past(a) - past(b) || b.likes - a.likes || a.id - b.id);
     return `
       <div class="section-head">
         <h2>Reizen</h2>
@@ -325,7 +327,7 @@
     }
     picks.sort((a, b) => (a.s.kind === 'map' ? -1 : 0) - (b.s.kind === 'map' ? -1 : 0));
     const loc = tripLocation(t);
-    const img = loc && safeUrl(loc.image);
+    const img = loc && destPhoto(loc);
     const sel = !!tripSelect && tripSelect.includes(t.id);
     return `
       <article class="card trip${conflictsOf(t)?.length ? ' conflict' : ''}${sel ? ' selected' : ''}" data-trip="${t.id}" tabindex="0"
