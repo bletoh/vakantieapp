@@ -699,6 +699,10 @@ button.chip:hover { background: var(--navy-soft); }
 .todo-add .btn svg { width: 16px; height: 16px; }
 .todo-default { margin: 0 12px 12px; font-size: .85rem; }
 .todos + .todos { margin-top: 8px; }
+.missing { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin: 14px 0; border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 12px; background: var(--surface); }
+.missing > div { display: grid; gap: 2px; min-width: 0; }
+.missing small { color: var(--muted); }
+.missing .btn { flex: none; }
 /* wie gaat er mee */
 .rsvp { display: grid; gap: 8px; }
 .rsvp-btns { display: flex; gap: 6px; flex-wrap: wrap; }

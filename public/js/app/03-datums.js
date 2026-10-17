@@ -175,6 +175,7 @@
       </div>
 
       ${whoHtml(me, people)}
+      ${missingHtml(people, cfg)}
 
       <div class="label">Beste periodes</div>
       ${best.length ? `<ol class="best-list">${best.map((w, i) => `
@@ -217,6 +218,22 @@
           <li><span>${esc(n)}</span><small>${byName.get(n).size} dagen</small>
             ${canRemovePerson(n) ? `<button type="button" class="text-btn" data-action="remove-person" data-name="${esc(n)}">Wissen</button>` : ''}</li>`).join('')}
         </ul>` : ''}`;
+  }
+
+  // Wie van de groep heeft de datumprikker nog niet ingevuld? Met een herinnering voor de groepsapp.
+  function missingHtml(people, cfg) {
+    const filled = new Set(people.map((n) => n.toLowerCase()));
+    const missing = state.members.map((m) => m.name).filter((n) => !filled.has(n.toLowerCase()));
+    if (!missing.length || state.members.length < 2) return '';
+    const me = myName();
+    const others = missing.filter((n) => n !== me);
+    const url = `${location.origin}/?team=${session.teamId}#datum`;
+    const text = `Hé ${others.join(', ')}! Vul je even in wanneer je kunt? We zoeken ${cfg.days} dagen tussen ${fmtShort(cfg.start)} en ${fmtShort(cfg.end)}. ${url}`;
+    return `
+      <div class="missing">
+        <div><strong>Nog niet ingevuld</strong><small>${missing.map((n) => (n === me ? 'jij' : esc(n))).join(', ')}</small></div>
+        ${others.length ? `<a class="btn sm wa" href="${waLink(text)}" target="_blank" rel="noopener">${WA_ICON} Herinner ${others.length === 1 ? esc(others[0]) : 'ze'}</a>` : ''}
+      </div>`;
   }
 
   // Je vult altijd in als jezelf (je account).
