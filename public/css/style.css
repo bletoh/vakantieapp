@@ -766,6 +766,14 @@ button.chip:hover { background: var(--navy-soft); }
 .cost-mine { margin: 8px 0 0; font-size: .85rem; font-weight: 600; }
 .cost-mine.plus { color: var(--good); }
 .cost-wa { margin-top: 8px; }
+.cost-pp { margin-top: 8px; font-size: .82rem; }
+.cost-pp summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.cost-pp table { width: 100%; border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.cost-pp th { text-align: right; font-weight: 600; color: var(--muted); padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.cost-pp td { text-align: right; padding: 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.cost-pp th:first-child, .cost-pp td:first-child { text-align: left; white-space: normal; }
+.cost-pp td.plus { color: var(--good); font-weight: 600; }
+.cost-pp td.min { color: var(--bad); font-weight: 600; }
 .cost-mine.min { color: var(--bad); }
 .cost-list { list-style: none; margin: 0; padding: 0 12px; }
 .cost-list li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); }

@@ -541,6 +541,25 @@
       `Alle uitgaven staan in Reismannetje: ${location.origin}/?team=${session.teamId}#reizen`].join('\n');
   }
 
+  // Per persoon: wat betaalde iemand, wat is zijn deel, en het verschil.
+  function costPerPersonHtml(ex) {
+    const paid = new Map(), share = new Map();
+    const add = (m, n, c) => m.set(n, (m.get(n) || 0) + c);
+    for (const e of ex) {
+      add(paid, e.paid_by, e.cents);
+      const s = Math.floor(e.cents / e.split.length);
+      let rest = e.cents - s * e.split.length;
+      for (const n of e.split) { add(share, n, s + (rest > 0 ? 1 : 0)); rest--; }
+    }
+    const names = [...new Set([...paid.keys(), ...share.keys()])].sort((a, b) => a.localeCompare(b, 'nl'));
+    return `<details class="cost-pp"><summary>Per persoon</summary>
+      <table><thead><tr><th>Wie</th><th>Betaald</th><th>Deel</th><th>Saldo</th></tr></thead><tbody>${names.map((n) => {
+        const bal = (paid.get(n) || 0) - (share.get(n) || 0);
+        return `<tr><td>${esc(n)}</td><td>${centsEuro(paid.get(n) || 0)}</td><td>${centsEuro(share.get(n) || 0)}</td>
+          <td class="${bal > 0 ? 'plus' : bal < 0 ? 'min' : ''}">${bal > 0 ? '+' : bal < 0 ? '−' : ''}${centsEuro(Math.abs(bal))}</td></tr>`;
+      }).join('')}</tbody></table></details>`;
+  }
+
   function costsHtml(t) {
     const ex = t.expenses || [];
     const total = ex.reduce((s, e) => s + e.cents, 0);
@@ -559,7 +578,8 @@
               <ul>${transfers.map((x) => `<li class="${x.from === me || x.to === me ? 'me' : ''}">${avatar(x.from)}<strong>${esc(x.from === me ? 'Jij' : x.from)}</strong>
                 <span class="cost-arrow" aria-label="betaalt aan">→</span>${avatar(x.to)}<strong>${esc(x.to === me ? 'jou' : x.to)}</strong><span class="cost-amt">${centsEuro(x.c)}</span></li>`).join('')}</ul>
               ${mine ? `<p class="cost-mine ${mine > 0 ? 'plus' : 'min'}">${mine > 0 ? `Jij krijgt nog ${centsEuro(mine)}` : `Jij moet nog ${centsEuro(-mine)} betalen`}</p>` : ''}
-              <a class="btn sm wa cost-wa" href="${waLink(costSummary(t, ex, transfers))}" target="_blank" rel="noopener">${WA_ICON} Stuur overzicht</a>`
+              <a class="btn sm wa cost-wa" href="${waLink(costSummary(t, ex, transfers))}" target="_blank" rel="noopener">${WA_ICON} Stuur overzicht</a>
+              ${costPerPersonHtml(ex)}`
               : '<p class="cost-mine plus">✓ Iedereen staat quitte</p>'}
           </div>
           <ul class="cost-list">${[...ex].reverse().map((e) => `
