@@ -732,6 +732,11 @@ button.chip:hover { background: var(--navy-soft); }
 .program-add input[type=time] { flex: 0 0 110px; }
 .program-add input[name=text] { flex: 1; }
 .program-add .btn svg { width: 16px; height: 16px; }
+.trip-filters { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 14px; }
+.trip-filter { font: inherit; font-size: .85rem; font-weight: 600; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 99px; padding: 6px 12px; cursor: pointer; }
+.trip-filter span { color: var(--muted); font-weight: 500; margin-left: 2px; }
+.trip-filter.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.trip-filter.on span { color: inherit; opacity: .7; }
 /* wie gaat er mee */
 .ref-going { align-self: center; font-size: .82rem; font-weight: 600; color: var(--good); padding: 0 6px; }
 .rsvp { display: grid; gap: 8px; }

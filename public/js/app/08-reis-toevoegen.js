@@ -772,3 +772,10 @@
     if (!del) return;
     try { await api(`/plan/${del.dataset.planDel}`, 'DELETE'); await reload(); } catch (err) { toast(err.message, true); }
   });
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-trip-filter]');
+    if (!b) return;
+    store.set('tripFilter', b.dataset.tripFilter);
+    render();
+  });

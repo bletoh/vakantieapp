@@ -208,7 +208,18 @@
   function tripsHtml() {
     // Favorieten eerst; reizen die al geweest zijn achteraan.
     const past = (t) => (countdown(t)?.cls === 'past' ? 1 : 0);
-    const trips = [...state.trips].sort((a, b) => past(a) - past(b) || b.likes - a.likes || a.id - b.id);
+    const all = [...state.trips].sort((a, b) => past(a) - past(b) || b.likes - a.likes || a.id - b.id);
+    // Filter (onthouden per apparaat); alleen tonen als er genoeg reizen zijn om te filteren.
+    const TRIP_FILTERS = [['alle', 'Alle'], ['mee', 'Ik ga mee'], ['datum', 'Met datum'], ['geweest', 'Geweest']];
+    const match = {
+      alle: () => true,
+      mee: (t) => goingNames(t).includes(myName()),
+      datum: (t) => t.start_date && !past(t),
+      geweest: (t) => past(t),
+    };
+    let filter = store.get('tripFilter', 'alle');
+    if (!match[filter] || all.length < 3) filter = 'alle';
+    const trips = all.filter(match[filter]);
     return `
       <div class="section-head">
         <h2>Reizen</h2>
@@ -219,9 +230,14 @@
         <button type="button" class="btn ghost" data-action="add-trip">＋ Reis zonder kaart</button>
         ${trips.length >= 2 && !tripSelect ? `<button type="button" class="btn ghost" data-action="select-trips">${ic('check')} Meerdere reizen delen</button>` : ''}
       </div>
+      ${all.length >= 3 && !tripSelect ? `<div class="trip-filters" role="group" aria-label="Reizen filteren">${TRIP_FILTERS.map(([k, label]) => {
+        const n = all.filter(match[k]).length;
+        return `<button type="button" class="trip-filter${k === filter ? ' on' : ''}" data-trip-filter="${k}" aria-pressed="${k === filter}">${label} <span>${n}</span></button>`;
+      }).join('')}</div>` : ''}
       ${tripSelect ? '<p class="select-hint">Tik op de reizen die je in één overzicht wilt delen.</p>' : ''}
+      ${!trips.length && all.length ? `<p class="hint">Geen reizen bij dit filter. <button type="button" class="text-btn" data-trip-filter="alle">Toon alle reizen</button></p>` : ''}
       ${trips.length ? `<div class="grid${tripSelect ? ' selecting' : ''}">${trips.map(tripCardHtml).join('')}</div>`
-        : `<div class="empty"><img class="empty-mascot" src="/img/reismannetje.svg" alt="" width="64" height="91"><strong>Nog geen reizen</strong>
+        : all.length ? '' : `<div class="empty"><img class="empty-mascot" src="/img/reismannetje.svg" alt="" width="64" height="91"><strong>Nog geen reizen</strong>
             <p>Kies een bestemming op de kaart of in Ideeën. Zodra iemand een datum, vlucht of verblijf kiest, staat de reis hier.</p>
             <a class="btn" href="#ideeen">${ic('compass')} Bekijk ideeën</a></div>`}
       ${tripSelect ? selectBarHtml() : ''}`;
