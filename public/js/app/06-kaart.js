@@ -332,6 +332,7 @@
               ${stepChip(ic('plane'), p.per.flight.length, 'Vlucht', 'Vlucht')}
               ${stepChip(ic('bed'), p.per.stay.length, 'Overnachting', 'Verblijf')}
               ${p.per.do.length + p.per.eat.length ? stepChip(ic('sparkles'), true, 'Activiteiten en eten', p.per.do.length + p.per.eat.length) : ''}
+              ${t && goingNames(t).length ? stepChip(ic('users'), true, 'Gaan mee', goingNames(t).length) : ''}
             </span>
           </span>
           <span class="dest-go" aria-hidden="true">›</span>
