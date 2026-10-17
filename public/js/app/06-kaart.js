@@ -227,6 +227,57 @@
       <span class="when-go" aria-hidden="true">→</span></a>`;
   }
 
+  // Startlijst voor een nieuwe groep: wat is er al gedaan en wat is de volgende stap?
+  // Verdwijnt vanzelf als alles klaar is, of als iemand hem verbergt (onthouden per groep).
+  const startHiddenKey = () => `startHidden-${session.teamId}`;
+  function startSteps(locs) {
+    return [
+      { ok: true, title: 'Groep gemaakt', text: state.team ? esc(state.team.name) : '' },
+      { ok: state.members.length > 1, title: 'Vrienden uitnodigen',
+        text: 'Stuur de link in jullie groepsapp.',
+        btn: '<button type="button" class="btn sm primary" data-invite-share>Link delen</button>' },
+      { ok: availabilityMap().size > 0, title: 'Wanneer kan iedereen?',
+        text: 'Iedereen tikt in de datumprikker aan wanneer hij kan.',
+        btn: '<a class="btn sm" href="#datum">Datumprikker</a>' },
+      { ok: locs.length > 0, title: 'Kies een bestemming',
+        text: 'Zoek een plek, tik op de kaart of kijk bij Ideeën.',
+        btn: `<button type="button" class="btn sm" data-action="focus-search">${ic('search')} Zoeken</button><a class="btn sm ghost" href="#ideeen">Ideeën</a>` },
+      { ok: state.polls.length > 0, title: 'Laat de groep kiezen',
+        text: locs.length >= 2 ? 'Start een stemronde tussen jullie bestemmingen.' : 'Kan zodra er twee bestemmingen zijn.',
+        btn: locs.length >= 2 ? `<button type="button" class="btn sm" data-action="new-poll">${ic('vote')} Stemronde</button>` : '' },
+    ];
+  }
+  function startListVisible(locs) {
+    return store.get(startHiddenKey()) !== '1' && startSteps(locs).some((s) => !s.ok);
+  }
+  function startListHtml(locs) {
+    if (!startListVisible(locs)) return '';
+    const steps = startSteps(locs);
+    const done = steps.filter((s) => s.ok).length;
+    const next = steps.findIndex((s) => !s.ok);
+    return `
+      <section class="startlist" aria-label="Aan de slag">
+        <div class="startlist-head">
+          <strong>Aan de slag</strong>
+          <span class="startlist-count">${done} van ${steps.length}</span>
+          <button type="button" class="text-btn" data-start-hide>Verbergen</button>
+        </div>
+        <div class="startlist-bar" aria-hidden="true"><span style="width:${Math.round(done / steps.length * 100)}%"></span></div>
+        <ol>${steps.map((s, i) => `
+          <li class="${s.ok ? 'ok' : ''}${i === next ? ' next' : ''}">
+            <span class="startlist-dot" aria-hidden="true">${s.ok ? '✓' : i + 1}</span>
+            <span class="startlist-text"><strong>${s.title}</strong>${s.ok ? '<span class="sr-only"> (klaar)</span>' : ''}
+              ${i === next ? `<small>${s.text}</small>${s.btn ? `<span class="startlist-btns">${s.btn}</span>` : ''}` : ''}</span>
+          </li>`).join('')}</ol>
+      </section>`;
+  }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest || !e.target.closest('[data-start-hide]')) return;
+    store.set(startHiddenKey(), '1');
+    render();
+    toast('Verborgen. De stappen staan ook in de tabs bovenaan.');
+  });
+
   function stepChip(icon, ok, label, text) {
     return `<span class="step-chip${ok ? ' ok' : ''}" title="${esc(label)}"><span aria-hidden="true">${icon}</span>`
       + `<span class="sr-only">${esc(label)}: </span>${text}</span>`;
@@ -299,18 +350,19 @@
       .flatMap((x) => sortedItems(x).filter((it) => !it.location_id || !findItem(it.location_id)).map((it) => ({ s: x, it })));
     return `
       ${pollBannerHtml()}
-      ${whenStripHtml()}
+      ${startListHtml(locs)}
+      ${startListVisible(locs) && !availabilityMap().size ? '' : whenStripHtml()}
       <div class="planner-head">
         <h2>Bestemmingen${locs.length ? ` <span class="count-pill">${locs.length}</span>` : ''}</h2>
         <button type="button" class="text-btn" data-action="edit-section" data-id="${s.id}">Tab bewerken</button>
       </div>
       ${whoFilterHtml()}
       ${locs.length ? `<ol class="dest-list">${locs.filter(visibleOnMap).map(destRowHtml).join('')}</ol>` : `
-        <ol class="onboarding">
+        ${startListVisible(locs) ? '' : `<ol class="onboarding">
           <li><strong>Kies een plek.</strong> Zoek bovenaan de kaart, of tik ergens op de kaart.</li>
           <li><strong>Plan de reis.</strong> Kies een datum uit de datumprikker, een vlucht en een hotel in de buurt.</li>
           <li><strong>Stem samen.</strong> Iedereen kan bestemmingen toevoegen en hartjes geven.</li>
-        </ol>
+        </ol>`}
         <button type="button" class="btn primary block" data-action="focus-search">${ic('search')} Zoek een bestemming</button>`}
       ${locs.length >= 2 ? `<button type="button" class="btn block vote-cta" data-action="new-poll">${ic('vote')} Laat de groep kiezen tussen ${locs.length} bestemmingen</button>` : ''}
       <div class="planner-foot">

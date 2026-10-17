@@ -443,6 +443,25 @@ a.chip:hover { background: var(--navy-soft); }
 .progress.lg { width: 100%; height: 6px; }
 
 .onboarding { margin: 0; padding: 0 0 0 22px; display: grid; gap: 10px; color: var(--muted); }
+/* startlijst voor een nieuwe groep */
+.startlist { border: 1px solid var(--line); background: var(--surface); border-radius: 16px; padding: 14px 14px 6px; box-shadow: var(--shadow-sm); }
+.startlist-head { display: flex; align-items: center; gap: 8px; }
+.startlist-head strong { font-size: 1.02rem; }
+.startlist-count { color: var(--muted); font-size: .85rem; margin-right: auto; }
+.startlist-bar { height: 6px; border-radius: 99px; background: var(--surface-2); margin: 10px 0 6px; overflow: hidden; }
+.startlist-bar span { display: block; height: 100%; background: var(--good); border-radius: inherit; transition: width .4s ease; }
+.startlist ol { list-style: none; margin: 0; padding: 0; }
+.startlist li { display: flex; gap: 10px; padding: 8px 0; align-items: flex-start; }
+.startlist li + li { border-top: 1px solid var(--line); }
+.startlist-dot { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: .8rem; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+.startlist li.ok .startlist-dot { background: var(--good); color: #fff; }
+.startlist li.next .startlist-dot { background: var(--brand); color: var(--on-brand); }
+.startlist li.ok .startlist-text > strong { color: var(--muted); font-weight: 500; text-decoration: line-through; text-decoration-color: var(--line); }
+.startlist-text { display: grid; gap: 4px; min-width: 0; line-height: 1.35; padding-top: 2px; }
+.startlist-text small { color: var(--muted); }
+.startlist-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.startlist-btns .btn svg { width: 15px; height: 15px; }
+
 .onboarding strong { color: var(--ink); }
 
 /* ---------- planpaneel ---------- */
@@ -992,7 +1011,15 @@ button.chip:hover { background: var(--navy-soft); }
   /* op de telefoon eerst de bestemmingen, daarna datum en stemmen */
   .dest-sheet .planner-head { order: -2; margin-top: 0; }
   .dest-sheet .planner-head h2 { font-size: 1.25rem; cursor: pointer; }
-  .dest-sheet .dest-list, .dest-sheet .onboarding { order: -1; }
+  .dest-sheet .dest-list, .dest-sheet .onboarding, .dest-sheet .startlist { order: -1; }
+  /* op de telefoon alleen de voortgang en de volgende stap, zodat die in het ingeklapte paneel past */
+  .dest-sheet .startlist { padding: 10px 12px 4px; box-shadow: none; }
+  .dest-sheet .startlist li:not(.next) { display: none; }
+  .dest-sheet .startlist-bar { margin: 8px 0 2px; }
+  .dest-sheet .startlist li { padding: 6px 0; align-items: center; }
+  .dest-sheet .startlist-text { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0; }
+  .dest-sheet .startlist-text small, .dest-sheet .startlist-btns .ghost { display: none; }
+  .dest-sheet .startlist-btns { margin: 0; flex: none; }
   .dest-sheet .onboarding + .btn { order: -1; }
 
   /* compactere rijen zodat er meer bestemmingen in beeld passen */
