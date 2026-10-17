@@ -115,7 +115,7 @@
     const mine = byName.get(me) || new Set();
     const people = [...byName.keys()].sort((a, b) => a.localeCompare(b, 'nl'));
     const best = bestWindows(byName, cfg);
-    const dated = state.trips.filter((t) => t.start_date);
+    const dated = state.trips.filter((t) => t.start_date).sort((a, b) => a.start_date.localeCompare(b.start_date));
 
     // Kalender: maanden met weken die op maandag beginnen.
     const tripDays = new Map();
@@ -198,7 +198,7 @@
           const known = conflictsOf(t) !== null;
           return `<li class="planned-row${c.length ? ' conflict' : ''}" data-trip="${t.id}" tabindex="0">
             <strong>${esc(t.title)}</strong>
-            <span>${rangeText(t.start_date, t.end_date)}</span>
+            <span>${rangeText(t.start_date, t.end_date)} ${countdownHtml(t)}</span>
             ${c.length ? `<small>Kan niet: ${conflictText(c)}</small>` : !known ? '<span>Buiten de periode van de datumprikker</span>' : people.length ? '<small>✓ Iedereen kan</small>' : ''}
           </li>`;
         }).join('')}</ul>` : ''}

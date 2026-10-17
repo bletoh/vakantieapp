@@ -66,6 +66,12 @@ function notFound(what) {
   return err;
 }
 
+function fail(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
 function updateRow(table, id, data) {
   const keys = Object.keys(data);
   if (!keys.length) return;
@@ -83,6 +89,9 @@ function getContent(team, user) {
   const trips = db.prepare('SELECT * FROM trips WHERE team_id = ? ORDER BY id').all(team.id);
   const picks = db.prepare('SELECT p.trip_id, p.item_id FROM trip_picks p JOIN trips t ON t.id = p.trip_id WHERE t.team_id = ?').all(team.id);
   for (const t of trips) t.item_ids = picks.filter((p) => p.trip_id === t.id).map((p) => p.item_id);
+  const todos = db.prepare(`SELECT d.id, d.trip_id, d.text, d.who, d.done, d.done_by, d.added_by FROM trip_todos d
+    JOIN trips t ON t.id = d.trip_id WHERE t.team_id = ? ORDER BY d.done, d.position, d.id`).all(team.id);
+  for (const t of trips) t.todos = todos.filter((d) => d.trip_id === t.id);
   const availability = db.prepare('SELECT name, date FROM available_days WHERE team_id = ? ORDER BY name, date').all(team.id);
   const members = db.prepare(`
     SELECT u.id, u.name, m.role, m.likes, m.dislikes, m.note, m.joined_at FROM team_members m JOIN users u ON u.id = m.user_id
@@ -274,6 +283,50 @@ router.post('/trips/:id/like', (req, res) => {
 
 router.delete('/trips/:id', (req, res) => {
   db.prepare('DELETE FROM trips WHERE id = ? AND team_id = ?').run(req.params.id, req.team.id);
+  res.json({ ok: true });
+});
+
+/* ---------- inpak- en takenlijst per reis ---------- */
+const TODO_MAX = 100;
+const todoOfTeam = (teamId, id) => db.prepare('SELECT d.* FROM trip_todos d JOIN trips t ON t.id = d.trip_id WHERE d.id = ? AND t.team_id = ?').get(id, teamId);
+const todoText = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+
+// { text } voor één regel, of { texts: [...] } voor de standaardlijst. Dubbele regels slaan we over.
+router.post('/trips/:id/todos', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  const texts = (Array.isArray(req.body.texts) ? req.body.texts : [req.body.text]).map(todoText).filter(Boolean).slice(0, 40);
+  if (!texts.length) throw fail(400, 'Typ wat er op de lijst moet');
+  const have = new Set(db.prepare('SELECT lower(text) AS t FROM trip_todos WHERE trip_id = ?').all(trip.id).map((r) => r.t));
+  const count = db.prepare('SELECT COUNT(*) AS n FROM trip_todos WHERE trip_id = ?').get(trip.id).n;
+  const fresh = [...new Set(texts)].filter((x) => !have.has(x.toLowerCase()));
+  if (count + fresh.length > TODO_MAX) throw fail(400, `Maximaal ${TODO_MAX} dingen per reis`);
+  const insert = db.prepare('INSERT INTO trip_todos (trip_id, text, added_by, position) VALUES (?, ?, ?, ?)');
+  let pos = db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM trip_todos WHERE trip_id = ?').get(trip.id).p;
+  db.transaction(() => { for (const x of fresh) insert.run(trip.id, x, req.user.name, pos++); })();
+  res.json({ ok: true, added: fresh.length });
+});
+
+// { done }, { who } ('' = niemand) en/of { text }
+router.put('/todos/:id', (req, res) => {
+  const todo = todoOfTeam(req.team.id, req.params.id);
+  if (!todo) throw notFound('Regel');
+  if ('done' in req.body) {
+    const done = req.body.done ? 1 : 0;
+    db.prepare('UPDATE trip_todos SET done = ?, done_by = ? WHERE id = ?').run(done, done ? req.user.name : null, todo.id);
+  }
+  if ('who' in req.body) db.prepare('UPDATE trip_todos SET who = ? WHERE id = ?').run(todoText(req.body.who).slice(0, 30) || null, todo.id);
+  if ('text' in req.body) {
+    const text = todoText(req.body.text);
+    if (!text) throw fail(400, 'Typ wat er op de lijst moet');
+    db.prepare('UPDATE trip_todos SET text = ? WHERE id = ?').run(text, todo.id);
+  }
+  res.json({ ok: true });
+});
+
+router.delete('/todos/:id', (req, res) => {
+  const todo = todoOfTeam(req.team.id, req.params.id);
+  if (todo) db.prepare('DELETE FROM trip_todos WHERE id = ?').run(todo.id);
   res.json({ ok: true });
 });
 

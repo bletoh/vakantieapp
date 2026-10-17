@@ -413,3 +413,79 @@
   function refreshTripAdd() {
     try { if (tripAddDialog.open) renderTripAdd(); } catch { /* paneel nog niet klaar */ }
   }
+
+  /* --- inpak- en takenlijst per reis --- */
+
+  const TODO_DEFAULTS = ['Paspoort of ID-kaart', 'Reisverzekering geregeld', 'Online ingecheckt', 'Boarding pass op de telefoon',
+    'Oplader en powerbank', 'Wereldstekker', 'Zonnebrand', 'Zwembroek', 'Zonnebril', 'Medicijnen', 'Pinpas en creditcard',
+    'Speaker (één iemand)', 'Kaartspel of drankspel (één iemand)', 'Slippers'];
+  const todoOpen = new Set(); // reizen waarvan de lijst openstaat, zodat hij na het verversen open blijft
+
+  function todosHtml(t) {
+    const list = t.todos || [];
+    const done = list.filter((d) => d.done).length;
+    const me = myName();
+    return `
+      <details class="todos" data-todos="${t.id}"${todoOpen.has(t.id) ? ' open' : ''}>
+        <summary>${ic('list')}<span>Inpaklijst en taken</span>
+          ${list.length ? `<span class="todo-count${done === list.length ? ' all' : ''}">${done}/${list.length}</span>` : '<span class="todo-count">leeg</span>'}</summary>
+        ${list.length ? `<ul class="todo-list">${list.map((d) => `
+          <li class="${d.done ? 'done' : ''}">
+            <label class="todo-check"><input type="checkbox" data-todo-done="${d.id}"${d.done ? ' checked' : ''}><span>${esc(d.text)}</span></label>
+            <button type="button" class="todo-who${d.who ? ' set' : ''}${d.who === me ? ' me' : ''}" data-todo-who="${d.id}" data-who="${esc(d.who || '')}"
+              title="${d.who ? `${esc(d.who)} regelt dit` : 'Zeg dat jij dit regelt'}">${d.who ? `${avatar(d.who)}<span>${d.who === me ? 'Ik' : esc(d.who)}</span>` : 'Ik regel dit'}</button>
+            <button type="button" class="todo-del" data-todo-del="${d.id}" aria-label="${esc(d.text)} verwijderen">×</button>
+          </li>`).join('')}</ul>` : '<p class="todo-empty">Zet hier wat iedereen moet regelen of meenemen. Vink af wat klaar is.</p>'}
+        <form class="todo-add" data-todo-add="${t.id}">
+          <input name="text" maxlength="120" placeholder="Iets toevoegen, bijv. zonnebrand" aria-label="Iets toevoegen aan de lijst" autocomplete="off">
+          <button type="submit" class="btn sm">${ic('plus')}<span class="sr-only">Toevoegen</span></button>
+        </form>
+        ${list.length < 3 ? `<button type="button" class="text-btn todo-default" data-todo-default="${t.id}">＋ Standaard inpaklijst gebruiken</button>` : ''}
+      </details>`;
+  }
+
+  async function todoChange(fn, tripId) {
+    try { await fn(); } catch (err) { toast(err.message, true); }
+    await reload();
+    const input = tripId && $(`[data-todo-add="${tripId}"] input`);
+    if (input) input.focus();
+  }
+
+  document.addEventListener('toggle', (e) => {
+    const d = e.target.closest && e.target.closest('[data-todos]');
+    if (!d || e.target !== d) return;
+    if (d.open) todoOpen.add(+d.dataset.todos); else todoOpen.delete(+d.dataset.todos);
+  }, true);
+
+  document.addEventListener('change', (e) => {
+    const box = e.target.closest && e.target.closest('[data-todo-done]');
+    if (box) todoChange(() => api(`/todos/${box.dataset.todoDone}`, 'PUT', { done: box.checked }));
+  });
+
+  document.addEventListener('submit', (e) => {
+    const form = e.target.closest && e.target.closest('[data-todo-add]');
+    if (!form) return;
+    e.preventDefault();
+    const text = form.elements.text.value.trim();
+    if (!text) return;
+    const id = +form.dataset.todoAdd;
+    todoChange(() => api(`/trips/${id}/todos`, 'POST', { text }), id);
+  });
+
+  document.addEventListener('click', (e) => {
+    const who = e.target.closest('[data-todo-who]');
+    if (who) {
+      const cur = who.dataset.who, me = myName();
+      if (cur && cur !== me && !confirm(`${cur} regelt dit al. Wil jij het overnemen?`)) return;
+      todoChange(() => api(`/todos/${who.dataset.todoWho}`, 'PUT', { who: cur === me ? '' : me }));
+      return;
+    }
+    const del = e.target.closest('[data-todo-del]');
+    if (del) { todoChange(() => api(`/todos/${del.dataset.todoDel}`, 'DELETE')); return; }
+    const def = e.target.closest('[data-todo-default]');
+    if (def) {
+      const id = +def.dataset.todoDefault;
+      todoOpen.add(id);
+      todoChange(() => api(`/trips/${id}/todos`, 'POST', { texts: TODO_DEFAULTS }));
+    }
+  });

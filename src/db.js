@@ -344,6 +344,22 @@ CREATE TABLE IF NOT EXISTS trip_bundle_trips (
 );
 `);
 
+// Inpak- en takenlijst per reis: iedereen in de groep kan iets toevoegen, afvinken of zeggen "ik neem het mee".
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_todos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  who TEXT,
+  done INTEGER NOT NULL DEFAULT 0,
+  done_by TEXT,
+  added_by TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS trip_todos_trip ON trip_todos (trip_id, position);
+`);
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;
