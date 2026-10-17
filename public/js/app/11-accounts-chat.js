@@ -553,6 +553,15 @@
 
   /* --- groepspagina: leden, uitnodigen, voorkeuren --- */
 
+  // Kleine status per lid: datumprikker ingevuld? Voor hoeveel reizen 'ik ga mee'?
+  function memberStatusHtml(m) {
+    const filled = availabilityMap().has(m.name);
+    const going = state.trips.filter((t) => goingNames(t).includes(m.name)).map((t) => t.title);
+    return `<span class="member-status">
+      <span class="${filled ? 'ok' : 'todo'}">${filled ? '✓ Datumprikker ingevuld' : 'Datumprikker nog niet ingevuld'}</span>
+      ${going.length ? `<span class="ok" title="${esc(going.join(', '))}">✓ Gaat mee: ${esc(going.slice(0, 2).join(', '))}${going.length > 2 ? ` +${going.length - 2}` : ''}</span>` : ''}</span>`;
+  }
+
   const inviteUrl = () => `${location.origin}/join/${state.team.invite_code}`;
 
   function prefChipsHtml(me) {
@@ -605,7 +614,8 @@
         <li>${avatar(m.name)}
           <div class="member-main"><strong>${esc(m.name)}${m.id === session.user.id ? ' <small>(jij)</small>' : ''}</strong>
             ${m.role === 'admin' ? '<span class="chip">Beheerder</span>' : ''}
-            ${memberPrefsText(m) ? `<small class="member-prefs">${memberPrefsText(m)}</small>` : '<small class="member-prefs">Nog geen voorkeuren</small>'}</div>
+            ${memberPrefsText(m) ? `<small class="member-prefs">${memberPrefsText(m)}</small>` : '<small class="member-prefs">Nog geen voorkeuren</small>'}
+            ${memberStatusHtml(m)}</div>
           ${admin && m.id !== session.user.id ? `<details class="member-menu"><summary aria-label="Opties voor ${esc(m.name)}">⋯</summary><div>
             <button type="button" data-member-role="${m.id}" data-role="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? 'Geen beheerder meer' : 'Maak beheerder'}</button>
             <button type="button" data-member-reset="${m.id}">Tijdelijk wachtwoord maken</button>
