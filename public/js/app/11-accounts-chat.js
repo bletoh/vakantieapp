@@ -364,13 +364,17 @@
       const t = state.trips.find((x) => x.id === m.ref_id);
       if (!t) return '<div class="ref-card gone">Deze reis is verwijderd</div>';
       const loc = t.item_ids.map(findItem).find((it) => it && sectionOf(it) && sectionOf(it).kind === 'map');
-      const img = loc && safeUrl(loc.image);
+      const img = loc && destPhoto(loc);
       const n = t.item_ids.length;
+      const going = goingNames(t);
+      const meGoing = going.includes(myName());
+      const c = countdown(t);
       return `<div class="ref-card trip-ref">
         <span class="ref-thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ic('suitcase')}</span>
         <span><small>Reis${t.added_by ? ` · voorgesteld door ${esc(t.added_by)}` : ''}</small><strong>${esc(t.title)}</strong>
-          <small>${t.start_date ? esc(shortRange(t.start_date, t.end_date)) : 'Nog geen datum'} · ${n} ${n === 1 ? 'onderdeel' : 'onderdelen'} · ♥ ${t.likes}</small></span>
+          <small>${t.start_date ? esc(shortRange(t.start_date, t.end_date)) + (c ? ` · ${esc(c.text.toLowerCase())}` : '') : 'Nog geen datum'} · ${going.length ? `${going.length} ${going.length === 1 ? 'gaat' : 'gaan'} mee` : `${n} ${n === 1 ? 'onderdeel' : 'onderdelen'}`} · ♥ ${t.likes}</small></span>
         <span class="ref-actions">
+          ${c && c.cls === 'past' ? '' : meGoing ? '<span class="ref-going">✓ Jij gaat mee</span>' : `<button type="button" class="btn sm primary" data-rsvp="ja" data-trip-id="${t.id}">Ik ga mee</button>`}
           ${loc ? `<a class="btn sm" href="#pin-${loc.id}">Op de kaart</a>` : ''}
           <button type="button" class="btn sm ghost" data-trip-open="${t.id}">Bekijk</button>
         </span></div>`;
