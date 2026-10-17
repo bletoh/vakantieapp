@@ -523,6 +523,14 @@
     return out;
   }
 
+  // Tekst voor de groepsapp: totaal, en wie wie hoeveel moet overmaken.
+  function costSummary(t, ex, transfers) {
+    const total = ex.reduce((s, e) => s + e.cents, 0);
+    return [`💶 Kosten ${t.title}: ${centsEuro(total)} (${ex.length} ${ex.length === 1 ? 'uitgave' : 'uitgaven'})`, '',
+      'Zo staat iedereen quitte:', ...transfers.map((x) => `• ${x.from} → ${x.to}: ${centsEuro(x.c)}`), '',
+      `Alle uitgaven staan in Reismannetje: ${location.origin}/?team=${session.teamId}#reizen`].join('\n');
+  }
+
   function costsHtml(t) {
     const ex = t.expenses || [];
     const total = ex.reduce((s, e) => s + e.cents, 0);
@@ -540,7 +548,8 @@
             ${transfers.length ? `<div class="cost-head">Zo staat iedereen quitte</div>
               <ul>${transfers.map((x) => `<li class="${x.from === me || x.to === me ? 'me' : ''}">${avatar(x.from)}<strong>${esc(x.from === me ? 'Jij' : x.from)}</strong>
                 <span class="cost-arrow" aria-label="betaalt aan">→</span>${avatar(x.to)}<strong>${esc(x.to === me ? 'jou' : x.to)}</strong><span class="cost-amt">${centsEuro(x.c)}</span></li>`).join('')}</ul>
-              ${mine ? `<p class="cost-mine ${mine > 0 ? 'plus' : 'min'}">${mine > 0 ? `Jij krijgt nog ${centsEuro(mine)}` : `Jij moet nog ${centsEuro(-mine)} betalen`}</p>` : ''}`
+              ${mine ? `<p class="cost-mine ${mine > 0 ? 'plus' : 'min'}">${mine > 0 ? `Jij krijgt nog ${centsEuro(mine)}` : `Jij moet nog ${centsEuro(-mine)} betalen`}</p>` : ''}
+              <a class="btn sm wa cost-wa" href="${waLink(costSummary(t, ex, transfers))}" target="_blank" rel="noopener">${WA_ICON} Stuur overzicht</a>`
               : '<p class="cost-mine plus">✓ Iedereen staat quitte</p>'}
           </div>
           <ul class="cost-list">${[...ex].reverse().map((e) => `
