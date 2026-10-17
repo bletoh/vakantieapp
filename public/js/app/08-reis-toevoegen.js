@@ -713,7 +713,9 @@
     const esc2 = (s) => String(s).replace(/[\;,]/g, (c) => '\\' + c).replace(/\n/g, '\\n');
     const loc = tripLocation(t);
     const going = goingNames(t);
-    const desc = [t.share_slug ? `Reisplan: ${tripShareUrl(t)}` : '', going.length ? `Mee: ${going.join(', ')}` : '', t.note || ''].filter(Boolean).join('\n');
+    const program = (t.plan || []).map((p) => `${fmtShort(p.day)}${p.time ? ' ' + p.time : ''}: ${p.text}`);
+    const desc = [t.share_slug ? `Reisplan: ${tripShareUrl(t)}` : '', going.length ? `Mee: ${going.join(', ')}` : '', t.note || '',
+      program.length ? `Programma:\n${program.join('\n')}` : ''].filter(Boolean).join('\n');
     return [
       'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Reismannetje//NL', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
       'BEGIN:VEVENT',
