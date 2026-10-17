@@ -238,6 +238,16 @@ function dateText(t) {
   const n = rangeDays(t.start_date, t.end_date).length;
   return t.start_date === t.end_date ? `${b}` : `${a} – ${b} · ${n} dagen`;
 }
+// Aftellen zoals in de app: "nog 23 dagen", "morgen", "nu op reis", "geweest" (datum in Nederlandse tijd).
+function countdownText(t) {
+  if (!t.start_date) return '';
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+  const end = t.end_date || t.start_date;
+  if (today > end) return 'geweest';
+  if (today >= t.start_date) return 'nu op reis';
+  const n = rangeDays(today, t.start_date).length - 1;
+  return n === 1 ? 'morgen!' : n < 70 ? `nog ${n} dagen` : `nog ${Math.round(n / 7)} weken`;
+}
 const shortDates = (t) => (t.start_date ? `${fmtDay(t.start_date, { day: 'numeric', month: 'short' })} – ${fmtDay(t.end_date, { day: 'numeric', month: 'short' })}` : '');
 const clip = (str, n) => (String(str).length > n ? `${String(str).slice(0, n - 1).trim()}…` : String(str));
 
@@ -494,7 +504,7 @@ function tripPageHtml(req, v) {
     <h1>${esc(trip.title)}</h1>
     <ul class="facts">
       ${loc ? `<li>${icon('pin')}${esc(loc.title)}</li>` : ''}
-      ${trip.start_date ? `<li>${icon('calendar')}${esc(dateText(trip))}</li>` : '<li class="muted">Datum nog niet gekozen</li>'}
+      ${trip.start_date ? `<li>${icon('calendar')}<span>${esc(dateText(trip))} · <strong>${esc(countdownText(trip))}</strong></span></li>` : '<li class="muted">Datum nog niet gekozen</li>'}
       ${trip.likes ? `<li class="muted">${icon('heart')}${trip.likes} ${trip.likes === 1 ? 'hartje' : 'hartjes'}</li>` : ''}
     </ul>
     ${points.length > 1 ? `<div class="legend">${groups.filter((g) => DOT[g.kind] && g.items.some((x) => x.lat != null)).map((g) => `<span><i style="background:${DOT[g.kind]}"></i>${esc(g.title)}</span>`).join('')}</div>` : ''}
@@ -633,7 +643,7 @@ function bundlePageHtml(req, bundle, views) {
         <p class="trip-kicker"><span class="num" style="background:${BUNDLE_COLORS[i % BUNDLE_COLORS.length]}">${i + 1}</span>${loc ? esc(loc.title) : 'Reis'}</p>
         <h2 class="trip-title">${esc(trip.title)}</h2>
         <ul class="facts">
-          ${trip.start_date ? `<li>${icon('calendar')}${esc(dateText(trip))}</li>` : '<li class="muted">Datum nog niet gekozen</li>'}
+          ${trip.start_date ? `<li>${icon('calendar')}<span>${esc(dateText(trip))} · <strong>${esc(countdownText(trip))}</strong></span></li>` : '<li class="muted">Datum nog niet gekozen</li>'}
           ${trip.likes ? `<li class="muted">${icon('heart')}${trip.likes}</li>` : ''}
         </ul>
         ${facts.length ? `<ul class="sum">${facts.join('')}</ul>` : ''}
