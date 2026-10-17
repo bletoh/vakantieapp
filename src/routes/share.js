@@ -298,7 +298,9 @@ function tripView(trip) {
       who = { can, cannot };
     }
   }
-  return { trip, loc, groups, who };
+  const plan = db.prepare('SELECT day, time, text FROM trip_plan WHERE trip_id = ? ORDER BY day, COALESCE(time, \'\'), id').all(trip.id);
+  const going = db.prepare("SELECT COUNT(*) AS n FROM trip_rsvp WHERE trip_id = ? AND value = 'ja'").get(trip.id).n;
+  return { trip, loc, groups, who, plan, going };
 }
 
 function flightUrl(item, trip) {
@@ -382,6 +384,12 @@ function itemCard(x, v) {
 
 // Opmaak van de deelpagina's (losse reis en overzicht van meerdere reizen).
 const PAGE_CSS = `
+.program { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.program > li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.program > li > strong { font-size: .85rem; color: var(--muted); }
+.program ul { margin: 4px 0 0; padding-left: 18px; }
+.program ul li { margin: 2px 0; }
+.program b { font-variant-numeric: tabular-nums; }
     :root { --bg: #f8f7f3; --surface: #fff; --surface-2: #efeee8; --ink: #1d2a30; --muted: #5f6c72; --line: #e2e1da;
       --brand: #2b6a80; --on-brand: #fff; --good: #2f7a45; --bad: #b4472c; color-scheme: light; }
     @media (prefers-color-scheme: dark) {
@@ -449,7 +457,7 @@ const PAGE_CSS = `
 `;
 
 function tripPageHtml(req, v) {
-  const { trip, loc, groups, who } = v;
+  const { trip, loc, groups, who, plan = [], going = 0 } = v;
   const site = teamName(trip.team_id) || 'Reismannetje';
   const meta = tripMeta(v);
   const url = `${origin(req)}/reis/${trip.share_slug}`;
@@ -505,6 +513,7 @@ function tripPageHtml(req, v) {
     <ul class="facts">
       ${loc ? `<li>${icon('pin')}${esc(loc.title)}</li>` : ''}
       ${trip.start_date ? `<li>${icon('calendar')}<span>${esc(dateText(trip))} · <strong>${esc(countdownText(trip))}</strong></span></li>` : '<li class="muted">Datum nog niet gekozen</li>'}
+      ${going ? `<li>${icon('users')}${going} ${going === 1 ? 'gaat' : 'gaan'} mee</li>` : ''}
       ${trip.likes ? `<li class="muted">${icon('heart')}${trip.likes} ${trip.likes === 1 ? 'hartje' : 'hartjes'}</li>` : ''}
     </ul>
     ${points.length > 1 ? `<div class="legend">${groups.filter((g) => DOT[g.kind] && g.items.some((x) => x.lat != null)).map((g) => `<span><i style="background:${DOT[g.kind]}"></i>${esc(g.title)}</span>`).join('')}</div>` : ''}
@@ -514,6 +523,12 @@ function tripPageHtml(req, v) {
       <h2>${KIND_ICON[g.kind] ? icon(KIND_ICON[g.kind]) : `<span aria-hidden="true">${esc(g.icon || '')}</span>`}${esc(g.title)}${g.items.length > 1 ? ` <span class="count">${g.items.length}</span>` : ''}</h2>
       <div class="items">${g.items.map((x) => itemCard(x, v)).join('')}</div>`).join('')
       : '<p class="empty">Er zijn nog geen vlucht, hotel of activiteiten gekozen.</p>'}
+    ${plan.length && trip.start_date ? `<h2>${icon('calendar')}Dagprogramma</h2>
+      <ol class="program">${rangeDays(trip.start_date, trip.end_date).map((d, i) => {
+        const items = plan.filter((p) => p.day === d);
+        return items.length ? `<li><strong>Dag ${i + 1} · ${esc(fmtDay(d, { weekday: 'short', day: 'numeric', month: 'short' }))}</strong>
+          <ul>${items.map((p) => `<li>${p.time ? `<b>${esc(p.time)}</b> ` : ''}${esc(p.text)}</li>`).join('')}</ul></li>` : '';
+      }).join('')}</ol>` : ''}
   </main>
   <footer><span class="lock">Alleen bekijken</span> Gedeeld via ${esc(site)} · <a class="made-with" href="/bestemmingen"><img src="/img/logo.svg" alt="" width="18" height="18">Reismannetje</a></footer>
   ${points.length ? `<script src="/vendor/leaflet/leaflet.js"></script>
