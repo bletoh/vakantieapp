@@ -620,3 +620,49 @@
     b.disabled = true;
     try { await api(`/trips/${b.dataset.tripId}/rsvp`, 'PUT', { value }); await reload(); } catch (err) { toast(err.message, true); b.disabled = false; }
   });
+
+  /* --- volgende reis: één kaartje bovenaan het kaartpaneel met alles bij elkaar --- */
+
+  function nextTrip() {
+    const today = todayIso(), me = myName();
+    const up = state.trips.filter((t) => t.start_date && (t.end_date || t.start_date) >= today)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    return up.find((t) => goingNames(t).includes(me)) || up[0] || null;
+  }
+
+  function nextTripHtml() {
+    const t = nextTrip();
+    if (!t) return '';
+    const c = countdown(t);
+    const loc = tripLocation(t);
+    const img = loc && destPhoto(loc);
+    const going = goingNames(t).length;
+    const todos = t.todos || [];
+    const bal = costBalances(t.expenses || []).get(myName()) || 0;
+    const bits = [
+      going ? `${going} ${going === 1 ? 'gaat' : 'gaan'} mee` : 'Wie gaat er mee?',
+      todos.length ? `inpaklijst ${todos.filter((d) => d.done).length}/${todos.length}` : '',
+      bal > 0 ? `jij krijgt ${centsEuro(bal)}` : bal < 0 ? `jij moet ${centsEuro(-bal)}` : '',
+    ].filter(Boolean);
+    return `
+      <a class="next-trip" href="#reizen" data-focus-trip="${t.id}">
+        <span class="next-thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ic('suitcase')}</span>
+        <span class="next-text"><small>Volgende reis</small><strong>${esc(t.title)}</strong>
+          <span class="next-bits">${bits.map(esc).join(' · ')}</span></span>
+        ${c ? `<span class="countdown${c.cls ? ' ' + c.cls : ''}">${esc(c.text)}</span>` : ''}
+      </a>`;
+  }
+
+  // Vanaf het kaartje naar de reis op de Reizen-pagina scrollen en hem even laten oplichten.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-focus-trip]');
+    if (!a) return;
+    const id = a.dataset.focusTrip;
+    setTimeout(() => {
+      const card = $(`[data-trip="${id}"]`);
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 1600);
+    }, 250);
+  });

@@ -350,6 +350,7 @@
       .flatMap((x) => sortedItems(x).filter((it) => !it.location_id || !findItem(it.location_id)).map((it) => ({ s: x, it })));
     return `
       ${pollBannerHtml()}
+      ${nextTripHtml()}
       ${startListHtml(locs)}
       ${startListVisible(locs) && !availabilityMap().size ? '' : whenStripHtml()}
       <div class="planner-head">

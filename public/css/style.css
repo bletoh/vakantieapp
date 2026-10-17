@@ -703,6 +703,18 @@ button.chip:hover { background: var(--navy-soft); }
 .missing > div { display: grid; gap: 2px; min-width: 0; }
 .missing small { color: var(--muted); }
 .missing .btn { flex: none; }
+/* volgende reis (kaartpaneel) */
+.next-trip { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: inherit; text-decoration: none; box-shadow: var(--shadow-sm); }
+.next-trip:hover { border-color: var(--navy); }
+.next-thumb { width: 48px; height: 48px; border-radius: 10px; overflow: hidden; flex: none; display: grid; place-items: center; background: var(--surface-2); }
+.next-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.next-thumb svg { width: 22px; height: 22px; }
+.next-text { flex: 1; min-width: 0; display: grid; line-height: 1.3; }
+.next-text small { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.next-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next-bits { color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next-trip .countdown { margin: 0; flex: none; }
+.card.trip.flash { box-shadow: 0 0 0 3px var(--brand), var(--shadow); transition: box-shadow .3s; }
 /* wie gaat er mee */
 .rsvp { display: grid; gap: 8px; }
 .rsvp-btns { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1093,6 +1105,7 @@ button.chip:hover { background: var(--navy-soft); }
   .dest-sheet .planner-head { order: -2; margin-top: 0; }
   .dest-sheet .planner-head h2 { font-size: 1.25rem; cursor: pointer; }
   .dest-sheet .dest-list, .dest-sheet .onboarding, .dest-sheet .startlist { order: -1; }
+  .dest-sheet .next-trip { order: -1; box-shadow: none; }
   /* op de telefoon alleen de voortgang en de volgende stap, zodat die in het ingeklapte paneel past */
   .dest-sheet .startlist { padding: 10px 12px 4px; box-shadow: none; }
   .dest-sheet .startlist li:not(.next) { display: none; }
