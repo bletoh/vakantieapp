@@ -715,6 +715,8 @@ button.chip:hover { background: var(--navy-soft); }
 .next-bits { color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .next-trip .countdown { margin: 0; flex: none; }
 .card.trip.flash { box-shadow: 0 0 0 3px var(--brand), var(--shadow); transition: box-shadow .3s; }
+.trip-ics { display: inline-flex; align-items: center; gap: 6px; justify-self: start; font-size: .85rem; }
+.trip-ics svg { width: 15px; height: 15px; }
 /* wie gaat er mee */
 .ref-going { align-self: center; font-size: .82rem; font-weight: 600; color: var(--good); padding: 0 6px; }
 .rsvp { display: grid; gap: 8px; }

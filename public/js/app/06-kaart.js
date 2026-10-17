@@ -272,10 +272,11 @@
       </section>`;
   }
   document.addEventListener('click', (e) => {
+    if (e.target.closest && e.target.closest('[data-start-show]')) { store.remove(startHiddenKey()); render(); return; }
     if (!e.target.closest || !e.target.closest('[data-start-hide]')) return;
     store.set(startHiddenKey(), '1');
     render();
-    toast('Verborgen. De stappen staan ook in de tabs bovenaan.');
+    toast('Verborgen. Terughalen kan onderaan met \'Startlijst tonen\'.');
   });
 
   function stepChip(icon, ok, label, text) {
@@ -369,6 +370,7 @@
       <div class="planner-foot">
         <button type="button" class="text-btn" data-action="add-place">＋ Bestemming toevoegen zonder kaart</button>
         ${locs.some(hasPos) ? '<button type="button" class="text-btn" data-action="map-fit">Toon alle pinnen</button>' : ''}
+        ${store.get(startHiddenKey()) === '1' && startSteps(locs).some((s) => !s.ok) ? '<button type="button" class="text-btn" data-start-show>Startlijst tonen</button>' : ''}
       </div>
       ${loose.length ? `
         <div class="label">Nog niet aan een bestemming gekoppeld</div>

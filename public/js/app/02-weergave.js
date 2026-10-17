@@ -356,6 +356,7 @@
           ${costsHtml(t)}
           ${t.note ? `<p class="card-text">${esc(t.note)}</p>` : ''}
           ${tripShareHtml(t)}
+          ${t.start_date ? `<button type="button" class="text-btn trip-ics" data-trip-ics="${t.id}">${ic('calendar')} Zet in je agenda</button>` : ''}
           <div class="card-foot">
             ${likeBtn('trip', t.id, t.likes)}
             ${loc ? `<a class="link-btn" href="#pin-${loc.id}">Verder plannen op de kaart →</a>` : ''}

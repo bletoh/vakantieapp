@@ -666,3 +666,38 @@
       setTimeout(() => card.classList.remove('flash'), 1600);
     }, 250);
   });
+
+  /* --- reis in je agenda zetten (.ics, hele dagen) --- */
+
+  function icsText(t) {
+    const d = (iso) => iso.replace(/-/g, '');
+    const esc2 = (s) => String(s).replace(/[\;,]/g, (c) => '\\' + c).replace(/\n/g, '\\n');
+    const loc = tripLocation(t);
+    const going = goingNames(t);
+    const desc = [t.share_slug ? `Reisplan: ${tripShareUrl(t)}` : '', going.length ? `Mee: ${going.join(', ')}` : '', t.note || ''].filter(Boolean).join('\n');
+    return [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Reismannetje//NL', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      `UID:reis-${t.id}-${state.team ? state.team.id : 0}@reismannetje.nl`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}`,
+      `DTSTART;VALUE=DATE:${d(t.start_date)}`,
+      `DTEND;VALUE=DATE:${d(addDays(t.end_date || t.start_date, 1))}`,
+      `SUMMARY:${esc2('✈️ ' + t.title)}`,
+      loc ? `LOCATION:${esc2(loc.title)}` : '',
+      desc ? `DESCRIPTION:${esc2(desc)}` : '',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc2('Morgen: ' + t.title)}`, 'TRIGGER:-P1D', 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR', '',
+    ].filter((l) => l !== '').join('\r\n') + '\r\n';
+  }
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-trip-ics]');
+    if (!b) return;
+    const t = state.trips.find((x) => x.id === +b.dataset.tripIcs);
+    if (!t || !t.start_date) return;
+    const url = URL.createObjectURL(new Blob([icsText(t)], { type: 'text/calendar;charset=utf-8' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${t.title.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'reis'}.ics` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('Agenda-bestand gemaakt. Open het om de reis toe te voegen.');
+  });
