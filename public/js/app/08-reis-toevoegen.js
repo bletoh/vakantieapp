@@ -530,6 +530,7 @@
     const names = state.members.map((m) => m.name);
     const transfers = costTransfers(costBalances(ex));
     const mine = costBalances(ex).get(me) || 0;
+    const going = goingNames(t); // standaard alleen wie meegaat; heeft nog niemand gereageerd, dan iedereen
     return `
       <details class="todos costs" data-costs="${t.id}"${costOpen.has(t.id) ? ' open' : ''}>
         <summary><span class="cost-ico" aria-hidden="true">€</span><span>Kosten delen</span>
@@ -556,7 +557,7 @@
           <label class="cost-paid">Betaald door
             <select name="paid_by">${names.map((n) => `<option${n === me ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
           <fieldset class="cost-split"><legend>Voor wie</legend>
-            ${names.map((n) => `<label><input type="checkbox" name="split" value="${esc(n)}" checked><span>${esc(n === me ? `${n} (jij)` : n)}</span></label>`).join('')}
+            ${names.map((n) => `<label><input type="checkbox" name="split" value="${esc(n)}"${!going.length || going.includes(n) ? ' checked' : ''}><span>${esc(n === me ? `${n} (jij)` : n)}</span></label>`).join('')}
           </fieldset>
           <button type="submit" class="btn sm primary">${ic('plus')} Uitgave toevoegen</button>
         </form>
@@ -589,4 +590,33 @@
     const del = e.target.closest('[data-cost-del]');
     if (!del || !confirm('Deze uitgave verwijderen?')) return;
     try { await api(`/expenses/${del.dataset.costDel}`, 'DELETE'); await reload(); } catch (err) { toast(err.message, true); }
+  });
+
+  /* --- wie gaat er mee --- */
+
+  const RSVP = [['ja', 'Ik ga mee'], ['misschien', 'Misschien'], ['nee', 'Ik kan niet']];
+  const goingNames = (t) => (t.rsvp || []).filter((r) => r.value === 'ja').map((r) => r.name);
+
+  function rsvpHtml(t) {
+    const list = t.rsvp || [];
+    const mine = (list.find((r) => r.name === myName()) || {}).value || '';
+    const by = (v) => list.filter((r) => r.value === v).map((r) => r.name);
+    const yes = by('ja'), maybe = by('misschien'), no = by('nee');
+    const open = state.members.filter((m) => !list.some((r) => r.name === m.name)).length;
+    return `
+      <div class="rsvp" role="group" aria-label="Ga jij mee?">
+        <div class="rsvp-btns">${RSVP.map(([v, label]) => `<button type="button" class="rsvp-btn ${v}${mine === v ? ' on' : ''}" data-rsvp="${v}" data-trip-id="${t.id}" aria-pressed="${mine === v}">${label}</button>`).join('')}</div>
+        ${list.length ? `<div class="rsvp-who">
+          ${yes.length ? `<span class="rsvp-faces" title="${esc(yes.join(', '))}">${yes.slice(0, 6).map((n) => avatar(n)).join('')}</span><strong>${yes.length} ${yes.length === 1 ? 'gaat' : 'gaan'} mee</strong>` : '<strong>Nog niemand zeker</strong>'}
+          ${maybe.length ? `<span>· ${maybe.length} misschien</span>` : ''}${no.length ? `<span>· ${no.length} niet</span>` : ''}${open ? `<span>· ${open} nog niet gereageerd</span>` : ''}
+        </div>` : ''}
+      </div>`;
+  }
+
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-rsvp]');
+    if (!b) return;
+    const value = b.classList.contains('on') ? '' : b.dataset.rsvp;
+    b.disabled = true;
+    try { await api(`/trips/${b.dataset.tripId}/rsvp`, 'PUT', { value }); await reload(); } catch (err) { toast(err.message, true); b.disabled = false; }
   });

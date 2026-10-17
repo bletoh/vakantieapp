@@ -375,6 +375,17 @@ CREATE TABLE IF NOT EXISTS trip_expenses (
 CREATE INDEX IF NOT EXISTS trip_expenses_trip ON trip_expenses (trip_id, id);
 `);
 
+// Wie gaat er mee op een reis: ja / misschien / nee per lid.
+db.exec(`
+CREATE TABLE IF NOT EXISTS trip_rsvp (
+  trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  value TEXT NOT NULL CHECK (value IN ('ja', 'misschien', 'nee')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (trip_id, user_id)
+);
+`);
+
 module.exports = db;
 module.exports.UPLOAD_DIR = UPLOAD_DIR;
 module.exports.DATA_DIR = DATA_DIR;

@@ -699,6 +699,19 @@ button.chip:hover { background: var(--navy-soft); }
 .todo-add .btn svg { width: 16px; height: 16px; }
 .todo-default { margin: 0 12px 12px; font-size: .85rem; }
 .todos + .todos { margin-top: 8px; }
+/* wie gaat er mee */
+.rsvp { display: grid; gap: 8px; }
+.rsvp-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.rsvp-btn { font: inherit; font-size: .82rem; font-weight: 600; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 99px; padding: 6px 12px; cursor: pointer; }
+.rsvp-btn:hover { border-color: var(--muted); }
+.rsvp-btn.ja.on { background: var(--good); border-color: var(--good); color: var(--paper); }
+.rsvp-btn.misschien.on { background: var(--red-soft); border-color: var(--brand); color: var(--brand-dark); }
+.rsvp-btn.nee.on { background: var(--surface-2); border-color: var(--muted); color: var(--muted); }
+.rsvp-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: .82rem; color: var(--muted); }
+.rsvp-who strong { color: var(--ink); font-weight: 600; }
+.rsvp-faces { display: inline-flex; margin-right: 2px; }
+.rsvp-faces .av { width: 22px; height: 22px; font-size: .62rem; margin-left: -6px; box-shadow: 0 0 0 2px var(--surface); }
+.rsvp-faces .av:first-child { margin-left: 0; }
 .cost-ico { width: 17px; height: 17px; display: grid; place-items: center; border: 1.6px solid currentColor; border-radius: 50%; font-size: .66rem; font-weight: 700; flex: none; }
 .cost-settle { padding: 0 12px 8px; }
 .cost-head { margin: 2px 0 6px; font-size: .8rem; font-weight: 600; color: var(--muted); }

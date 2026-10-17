@@ -339,6 +339,7 @@
           <h3 class="card-title">${esc(t.title)}</h3>
           ${t.added_by ? `<div class="added-by">${avatar(t.added_by)}Voorgesteld door ${esc(t.added_by)}</div>` : ''}
           ${tripDatesHtml(t)}
+          ${tripSelect ? '' : rsvpHtml(t)}
           ${picks.length ? `<ul class="trip-picks">${picks.map(({ s, it }) => `
             <li><a class="trip-pick" href="${tripPickHref(s, it)}">
               <span class="trip-pick-icon" aria-hidden="true">${kindIcon(s.kind, s.icon)}</span>

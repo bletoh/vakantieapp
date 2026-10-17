@@ -94,6 +94,9 @@ function getContent(team, user) {
   for (const t of trips) t.todos = todos.filter((d) => d.trip_id === t.id);
   const expenses = db.prepare(`SELECT e.id, e.trip_id, e.title, e.cents, e.paid_by, e.split, e.added_by, e.created_at FROM trip_expenses e
     JOIN trips t ON t.id = e.trip_id WHERE t.team_id = ? ORDER BY e.id`).all(team.id);
+  const rsvp = db.prepare(`SELECT r.trip_id, u.name, r.value FROM trip_rsvp r JOIN trips t ON t.id = r.trip_id JOIN users u ON u.id = r.user_id
+    JOIN team_members m ON m.user_id = r.user_id AND m.team_id = t.team_id WHERE t.team_id = ? ORDER BY r.updated_at`).all(team.id);
+  for (const t of trips) t.rsvp = rsvp.filter((r) => r.trip_id === t.id).map(({ name, value }) => ({ name, value }));
   for (const t of trips) t.expenses = expenses.filter((e) => e.trip_id === t.id).map((e) => ({ ...e, split: JSON.parse(e.split) }));
   const availability = db.prepare('SELECT name, date FROM available_days WHERE team_id = ? ORDER BY name, date').all(team.id);
   const members = db.prepare(`
@@ -330,6 +333,23 @@ router.put('/todos/:id', (req, res) => {
 router.delete('/todos/:id', (req, res) => {
   const todo = todoOfTeam(req.team.id, req.params.id);
   if (todo) db.prepare('DELETE FROM trip_todos WHERE id = ?').run(todo.id);
+  res.json({ ok: true });
+});
+
+/* ---------- wie gaat er mee ---------- */
+router.put('/trips/:id/rsvp', (req, res) => {
+  const trip = tripOfTeam(req.team.id, req.params.id);
+  if (!trip) throw notFound('Reis');
+  const value = String(req.body.value || '');
+  if (!value) {
+    db.prepare('DELETE FROM trip_rsvp WHERE trip_id = ? AND user_id = ?').run(trip.id, req.user.id);
+    return res.json({ ok: true });
+  }
+  if (!['ja', 'misschien', 'nee'].includes(value)) throw fail(400, 'Kies ja, misschien of nee');
+  const before = db.prepare('SELECT value FROM trip_rsvp WHERE trip_id = ? AND user_id = ?').get(trip.id, req.user.id);
+  db.prepare(`INSERT INTO trip_rsvp (trip_id, user_id, value) VALUES (?, ?, ?)
+    ON CONFLICT (trip_id, user_id) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`).run(trip.id, req.user.id, value);
+  if (value === 'ja' && (!before || before.value !== 'ja')) db.postEvent(req.team.id, req.user.id, `gaat mee naar ${trip.title}`, 'trip', trip.id);
   res.json({ ok: true });
 });
 

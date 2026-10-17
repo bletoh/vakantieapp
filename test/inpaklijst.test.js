@@ -69,3 +69,20 @@ test('kosten delen: bedrag, wie betaalde en voor wie worden gecontroleerd; ander
   await c.req('DELETE', `/api/expenses/${e.id}`);
   assert.equal((await c.req('GET', '/api/content')).data.trips[0].expenses.length, 0);
 });
+
+test('wie gaat er mee: ja/misschien/nee, wissen, en een chatbericht bij ja', async () => {
+  const { c, trip } = await groepMetReis('Reiziger');
+  assert.equal((await c.req('PUT', `/api/trips/${trip}/rsvp`, { value: 'altijd' })).status, 400);
+  await c.req('PUT', `/api/trips/${trip}/rsvp`, { value: 'ja' });
+  await c.req('PUT', `/api/trips/${trip}/rsvp`, { value: 'ja' }); // twee keer ja = één chatbericht
+  let t = (await c.req('GET', '/api/content')).data.trips[0];
+  assert.deepEqual(t.rsvp, [{ name: 'Reiziger', value: 'ja' }]);
+  const msgs = (await c.req('GET', '/api/messages')).data;
+  const list = Array.isArray(msgs) ? msgs : msgs.messages;
+  assert.equal(list.filter((m) => /gaat mee naar Barcelona/.test(m.body)).length, 1);
+  await c.req('PUT', `/api/trips/${trip}/rsvp`, { value: '' });
+  t = (await c.req('GET', '/api/content')).data.trips[0];
+  assert.deepEqual(t.rsvp, []);
+  const other = await groepMetReis('Buitenstaander');
+  assert.equal((await other.c.req('PUT', `/api/trips/${trip}/rsvp`, { value: 'ja' })).status, 404);
+});
